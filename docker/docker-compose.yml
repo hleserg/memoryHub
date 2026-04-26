@@ -1,0 +1,144 @@
+version: "3.9"
+
+# memoryHub — Full Stack Docker Compose
+# See ARCHITECTURE.md §9 Deployment Diagram
+#
+# Services:
+#   api         — memoryHub REST API (port 3000) + MCP (3100) + Dashboard (3200)
+#   redis       — Session cache + rate limiter state (for multi-process future)
+#
+# Note: SQLite and KuzuDB are embedded — no separate containers needed.
+#       Redis is optional for development but recommended for production.
+#
+# Usage:
+#   make docker-up        — Start all services
+#   make docker-down      — Stop all services
+#   make docker-logs      — Follow logs
+#
+# Environment:
+#   Copy docker/.env.example to docker/.env and fill in secrets.
+
+services:
+  # ─────────────────────────────────────────────────────────────────────────
+  # memoryHub API Server
+  # API Hub: http://localhost:3000
+  # MCP Server: http://localhost:3100
+  # Health Dashboard: http://localhost:3200
+  # ─────────────────────────────────────────────────────────────────────────
+  api:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    image: memoryhub/api:latest
+    container_name: memoryhub-api
+    restart: unless-stopped
+
+    ports:
+      - "3000:3000"   # API Hub — REST API
+      - "3100:3100"   # MCP Server — AI agent protocol
+      - "3200:3200"   # Health Dashboard
+
+    volumes:
+      # Persistent data (SQLite + KuzuDB + backups + logs)
+      - memoryhub-data:/data/memoryhub
+      # Config (override in production)
+      - ./memoryhub.config.yaml:/etc/memoryhub/memoryhub.config.yaml:ro
+
+    environment:
+      # System
+      - MEMORYHUB_SYSTEM_ENVIRONMENT=${MEMORYHUB_ENV:-development}
+      - MEMORYHUB_SYSTEM_LOG_LEVEL=${LOG_LEVEL:-info}
+
+      # Redis (for rate limiter state sharing between processes)
+      - REDIS_URL=${REDIS_URL:-redis://redis:6379}
+
+      # Disaster Recovery cloud credentials
+      # See ARCHITECTURE.md §4.9 Disaster Recovery
+      - MEMORYHUB_DR_ACCESS_KEY=${DR_ACCESS_KEY:-}
+      - MEMORYHUB_DR_SECRET_KEY=${DR_SECRET_KEY:-}
+      - MEMORYHUB_DR_ENCRYPTION_KEY=${DR_ENCRYPTION_KEY:-}
+
+      # GitHub Snapshots
+      # See ARCHITECTURE.md §4.10 GitHub Snapshots
+      - MEMORYHUB_GITHUB_TOKEN=${GITHUB_TOKEN:-}
+
+      # Telegram alerts
+      # See ARCHITECTURE.md §4.8 Alert Router
+      - MEMORYHUB_TELEGRAM_TOKEN=${TELEGRAM_BOT_TOKEN:-}
+      - MEMORYHUB_ALERT_CHAT_ID=${ALERT_CHAT_ID:-}
+
+      # Embeddings (for semantic search)
+      # See ARCHITECTURE.md §10 storage.embeddings
+      - MEMORYHUB_EMBEDDINGS_API_KEY=${OPENAI_API_KEY:-}
+
+    depends_on:
+      redis:
+        condition: service_healthy
+
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3000/v1/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+    networks:
+      - memoryhub-network
+
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "100m"
+        max-file: "5"
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # Redis — Cache and Rate Limiter State
+  # Used for: sliding window rate limiter persistence (multi-process)
+  # Optional in single-process mode (in-memory limiter used instead)
+  # See ARCHITECTURE.md §4.1 Rate Limiter (sliding window)
+  # ─────────────────────────────────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: memoryhub-redis
+    restart: unless-stopped
+    command: redis-server --maxmemory 256mb --maxmemory-policy allkeys-lru --save ""
+    # save "" — disable Redis persistence (rate limiter state is ephemeral)
+
+    ports:
+      - "6379:6379"
+
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+    networks:
+      - memoryhub-network
+
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "3"
+
+# ─────────────────────────────────────────────────────────────────────────
+# Volumes
+# ─────────────────────────────────────────────────────────────────────────
+volumes:
+  memoryhub-data:
+    name: memoryhub-data
+    # In production: use a named volume backed by persistent storage
+    # driver: local
+    # driver_opts:
+    #   type: none
+    #   device: /data/memoryhub
+    #   o: bind
+
+# ─────────────────────────────────────────────────────────────────────────
+# Networks
+# ─────────────────────────────────────────────────────────────────────────
+networks:
+  memoryhub-network:
+    name: memoryhub-network
+    driver: bridge

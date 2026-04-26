@@ -1,0 +1,393 @@
+# /etc/memoryhub/memoryhub.config.yaml
+# memoryHub — единый конфиг системы
+# Версия: 1.0.0
+# See ARCHITECTURE.md §10 for full parameter documentation
+
+# ─────────────────────────────────────────────────────────────────────────
+# SYSTEM
+# ─────────────────────────────────────────────────────────────────────────
+system:
+  name: "memoryHub"
+  version: "1.0.0"
+  environment: "development"    # development | staging | production
+  log_level: "info"             # debug | info | warn | error
+  log_format: "text"            # text | json
+  data_dir: "./data"
+  config_dir: "./config"
+
+# ─────────────────────────────────────────────────────────────────────────
+# API HUB (port 3000)
+# See ARCHITECTURE.md §4.1
+# ─────────────────────────────────────────────────────────────────────────
+api_hub:
+  port: 3000
+  host: "0.0.0.0"
+
+  tls:
+    enabled: false
+    cert_path: ""
+    key_path: ""
+
+  keys:
+    rotation_days: 90           # Recommended key rotation period
+    min_length: 48
+    prefix: "mhub"
+    # Actual keys stored in DB, NOT here. Initial admin key created at init.
+    # Key format: mhub_<env>_<agent_id_prefix>_<random_32bytes_base58>
+
+  rate_limit:
+    window_ms: 60000            # Sliding window: 1 minute
+    strategy: "sliding"         # fixed | sliding | token_bucket
+
+    tiers:
+      anonymous:
+        write_rpm: 5
+        read_rpm: 20
+        bulk_ops_hour: 0
+      registered:
+        write_rpm: 30
+        read_rpm: 120
+        bulk_ops_hour: 10
+      verified:
+        write_rpm: 100
+        read_rpm: 500
+        bulk_ops_hour: 50
+      trusted:
+        write_rpm: 500
+        read_rpm: 2000
+        bulk_ops_hour: -1       # -1 = unlimited
+
+    headers:
+      expose: true              # Add X-RateLimit-* headers to responses
+
+  cors:
+    origins:
+      - "http://localhost:*"
+      - "http://192.168.1.*"
+    credentials: true
+
+  max_body_size_kb: 512
+
+# ─────────────────────────────────────────────────────────────────────────
+# KNOWLEDGE GRAPH (KuzuDB embedded)
+# See ARCHITECTURE.md §4.2
+# ─────────────────────────────────────────────────────────────────────────
+knowledge_graph:
+  engine: "kuzu"
+  db_path: "./data/kuzu"
+
+  buffer_pool_size_mb: 512
+  max_threads: 4
+
+  conflicts:
+    auto_detect: true
+    check_interval_seconds: 30
+    resolution_timeout_hours: 48
+
+  temporal:
+    enabled: true
+    snapshot_retention_days: 365
+
+  spatial:
+    enabled: false              # Reserved for future use
+
+# ─────────────────────────────────────────────────────────────────────────
+# TRUST PIPELINE
+# See ARCHITECTURE.md §4.3
+# State machine: pending_review → auto_verification → shared | quarantine
+# ─────────────────────────────────────────────────────────────────────────
+trust:
+  # Decision thresholds
+  auto_approve_threshold: 0.80  # score >= 0.80 → shared automatically
+  human_review_threshold: 0.60  # 0.60 <= score < 0.80 → needs_human_review
+  # score < 0.60 → quarantine
+
+  # Verification engine weights (must sum to 1.0)
+  # See ARCHITECTURE.md §4.3 Verification Engine
+  verification_weights:
+    fact_checker: 0.30
+    anomaly_detector: 0.20
+    source_credibility: 0.30
+    conflict_scanner: 0.20
+
+  queue:
+    max_size: 10000
+    processing_workers: 3
+    processing_timeout_ms: 60000
+
+  human_review:
+    escalation_hours: 48
+    notify_on_new: true
+
+  quarantine:
+    auto_expire_days: 30
+    max_size: 50000
+
+# ─────────────────────────────────────────────────────────────────────────
+# MEMORY CORRUPTION PROTECTION
+# See ARCHITECTURE.md §4.4
+# ─────────────────────────────────────────────────────────────────────────
+corruption_protection:
+  fact_checker:
+    enabled: true
+    full_scan_interval_hours: 6
+    new_records_scan_interval_minutes: 15
+    batch_size: 1000
+
+  anomaly_detector:
+    enabled: true
+    burst_write_threshold: 50           # Records per 5 min from one agent
+    burst_write_window_minutes: 5
+    confidence_inflation_threshold: 0.95
+
+  checksums:
+    enabled: true
+    algorithm: "sha256"
+    verify_on_read: false               # Set true in production (perf impact)
+    verify_on_scan: true
+
+# ─────────────────────────────────────────────────────────────────────────
+# MCP SERVER (port 3100)
+# See ARCHITECTURE.md §4.5
+# Protocol: JSON-RPC 2.0 over HTTP + Server-Sent Events
+# ─────────────────────────────────────────────────────────────────────────
+mcp_server:
+  port: 3100
+  host: "0.0.0.0"
+
+  protocol:
+    version: "2025-03-26"       # MCP Protocol version
+
+  max_connections: 50
+  session_timeout_minutes: 60
+  max_response_size_kb: 2048
+
+  tools:
+    memory_search:
+      max_limit: 50
+      default_limit: 10
+      default_min_confidence: 0.0
+    memory_recall:
+      max_limit: 100
+      default_limit: 20
+    graph_query:
+      max_results: 500
+      timeout_ms: 10000
+      read_only: true           # Agents cannot execute write Cypher
+
+# ─────────────────────────────────────────────────────────────────────────
+# AGENT METRICS TRANSPORT
+# See ARCHITECTURE.md §4.7
+# ─────────────────────────────────────────────────────────────────────────
+agent_metrics:
+  ingest:
+    enabled: true
+    batch_size: 100
+    flush_interval_seconds: 60
+
+  storage:
+    hot_retention_days: 7       # In-memory + fast SQLite
+    warm_retention_days: 90     # SQLite
+    cold_archive: "github"      # github | s3 | none
+
+  feedback:
+    enabled: true
+    compute_interval_hours: 24
+    min_records_for_feedback: 10
+
+  credibility:
+    initial_score: 0.5          # Starting credibility for new agents
+    decay_factor: 0.95          # Weekly decay of old data
+    approved_boost: 0.01        # +score per approved record
+    rejected_penalty: 0.05      # -score per rejected record
+
+# ─────────────────────────────────────────────────────────────────────────
+# HEALTH MONITORING & ALERTING
+# See ARCHITECTURE.md §4.8
+# Dashboard: http://localhost:3200
+# ─────────────────────────────────────────────────────────────────────────
+health_monitoring:
+  dashboard:
+    port: 3200
+    enabled: true
+    refresh_interval_seconds: 15
+
+  checks:
+    interval_seconds: 15
+    timeout_ms: 5000
+
+  thresholds:
+    api_hub:
+      error_rate_percent: 1.0
+      latency_p95_ms: 500
+      latency_p95_ms_critical: 2000
+    knowledge_graph:
+      query_latency_ms: 2000
+      conflicts_per_hour: 10
+    trust_pipeline:
+      queue_depth: 100
+      review_backlog_hours: 48
+    memory_store:
+      disk_usage_percent: 80
+      disk_usage_percent_critical: 95
+    dr_system:
+      last_backup_hours: 24
+
+  predictive:
+    enabled: true
+    disk_forecast_days: 7
+
+  alerts:
+    routes:
+      - levels: ["WARNING", "ALERT", "CRITICAL"]
+        channels: ["telegram"]
+      - levels: ["CRITICAL"]
+        channels: ["telegram", "log"]
+        prefix: "🚨 CRITICAL memoryHub:"
+      - levels: ["INFO"]
+        channels: ["log"]
+
+    deduplication:
+      window_minutes: 30
+
+    quiet_hours:
+      enabled: true
+      start: "00:00"
+      end: "08:00"
+      timezone: "Europe/Moscow"
+      min_level_override: "CRITICAL"
+
+# ─────────────────────────────────────────────────────────────────────────
+# DISASTER RECOVERY
+# See ARCHITECTURE.md §4.9
+# RTO: 15 min | RPO: 6 hours
+# ─────────────────────────────────────────────────────────────────────────
+disaster_recovery:
+  schedule:
+    incremental:
+      cron: "0 */6 * * *"       # Every 6 hours
+      retention_days: 7
+    daily:
+      cron: "0 3 * * *"         # Daily at 03:00
+      retention_days: 30
+    weekly:
+      cron: "0 4 * * 0"         # Sunday at 04:00
+      retention_days: 365
+    monthly:
+      cron: "0 5 1 * *"         # 1st of month at 05:00
+      retention_days: -1        # Forever
+
+  cloud:
+    provider: "backblaze_b2"    # aws_s3 | backblaze_b2 | gcs
+    bucket: "memoryhub-dr"
+    region: "eu-central-003"
+    # Credentials via ENV:
+    #   MEMORYHUB_DR_ACCESS_KEY
+    #   MEMORYHUB_DR_SECRET_KEY
+
+  encryption:
+    enabled: true
+    algorithm: "AES-256-GCM"
+    # Key via ENV: MEMORYHUB_DR_ENCRYPTION_KEY
+
+  includes:
+    - "./data/memoryhub.sqlite"
+    - "./data/kuzu/"
+    - "./config/memoryhub.config.yaml"
+    - "./data/keys/agents.json"
+
+  verification:
+    auto_verify: true
+    verify_timeout_minutes: 10
+
+  objectives:
+    rto_minutes: 15
+    rpo_hours: 6
+
+# ─────────────────────────────────────────────────────────────────────────
+# GITHUB SNAPSHOTS
+# See ARCHITECTURE.md §4.10
+# ─────────────────────────────────────────────────────────────────────────
+github_snapshots:
+  enabled: false                # Enable after repo is configured
+
+  repository:
+    owner: "your-github-username"
+    name: "memoryhub-snapshots"
+    branch: "main"
+    private: true
+    # Token via ENV: MEMORYHUB_GITHUB_TOKEN
+
+  schedule:
+    daily:
+      cron: "15 3 * * *"        # Daily at 03:15 (after DR backup)
+    weekly_tag:
+      cron: "0 4 * * 0"
+
+  exports:
+    memories:
+      format: "json"
+      include_quarantine: false
+      include_pending: false
+      min_confidence: 0.0
+    knowledge_graph:
+      format: "cypher"          # cypher | json | graphml
+    agent_stats:
+      format: "json"
+    system_config:
+      include: false            # Never export config (contains secret references)
+
+  changelog:
+    enabled: true
+    include_stats: true
+
+# ─────────────────────────────────────────────────────────────────────────
+# SKILLS SYSTEM
+# See ARCHITECTURE.md §4.6 and skills/ directory
+# ─────────────────────────────────────────────────────────────────────────
+skills:
+  base_dir: "./skills"
+
+  endpoints:
+    api_base: "http://localhost:3000/v1"
+    mcp_base: "http://localhost:3100"
+
+  default_agent:
+    id: "skills-system"
+    # API key via ENV: MEMORYHUB_SKILLS_API_KEY
+
+# ─────────────────────────────────────────────────────────────────────────
+# STORAGE
+# See ARCHITECTURE.md Component Diagram - STORAGE LAYER
+# ─────────────────────────────────────────────────────────────────────────
+storage:
+  sqlite:
+    path: "./data/memoryhub.sqlite"
+    journal_mode: "WAL"         # Write-Ahead Logging for performance
+    cache_size_mb: 256
+
+  postgresql:
+    enabled: false              # For multi-node future expansion
+    url: "postgresql://localhost:5432/memoryhub"
+    pool_size: 10
+
+  embeddings:
+    provider: "local"           # local | openai | ollama
+    model: "all-MiniLM-L6-v2"  # For local provider
+    # API key via ENV: MEMORYHUB_EMBEDDINGS_API_KEY (for openai)
+    dimensions: 384
+
+# ─────────────────────────────────────────────────────────────────────────
+# INTEGRATIONS
+# ─────────────────────────────────────────────────────────────────────────
+integrations:
+  telegram:
+    enabled: false
+    # Bot token via ENV: MEMORYHUB_TELEGRAM_TOKEN
+    alert_chat_id: ""           # Set via ENV: MEMORYHUB_ALERT_CHAT_ID
+
+  # letheClaw — existing memory system (for migration path)
+  letheclaw:
+    enabled: false
+    url: "http://192.168.1.51:51234"
+    migration_mode: false       # true = read from letheClaw, write to both

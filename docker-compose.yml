@@ -1,0 +1,128 @@
+# docker-compose.yml — memoryHub local development & single-node production stack
+# See ARCHITECTURE.md §9 Deployment Diagram
+#
+# Services:
+#   api       — Go API Hub (port 3000)
+#   dashboard — Health Dashboard (port 3200) [future]
+#   redis     — Rate limiting & caching layer
+#   kuzu      — KuzuDB is embedded in the Go process; this service is a placeholder
+#
+# Usage:
+#   make docker-up    — Start all services
+#   make docker-down  — Stop all services
+#   make docker-logs  — Tail logs
+#
+# Note: SQLite and KuzuDB are embedded in the API container (no external DB process needed).
+# Redis is used for distributed rate limiting and pub/sub alerts.
+
+version: "3.9"
+
+networks:
+  memoryhub:
+    name: memoryhub
+    driver: bridge
+
+volumes:
+  memoryhub_data:
+    name: memoryhub_data
+  redis_data:
+    name: memoryhub_redis
+
+services:
+  # ─────────────────────────────────────────────────────────────────────
+  # API — Main Go server: API Hub + MCP Server + Trust Pipeline
+  # See ARCHITECTURE.md §4.1 API Hub (port 3000), §4.5 MCP Server (port 3100)
+  # ─────────────────────────────────────────────────────────────────────
+  api:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+      target: production
+    container_name: memoryhub_api
+    restart: unless-stopped
+    env_file:
+      - docker/.env.example       # copy to docker/.env and fill in secrets
+    environment:
+      - MEMORYHUB_ENV=${MEMORYHUB_ENV:-development}
+      - MEMORYHUB_DATA_DIR=/data/memoryhub
+      - MEMORYHUB_CONFIG=/etc/memoryhub/memoryhub.config.yaml
+    ports:
+      - "${API_PORT:-3000}:3000"    # API Hub
+      - "${MCP_PORT:-3100}:3100"    # MCP Server
+      - "${DASH_PORT:-3200}:3200"   # Health Dashboard (future)
+    volumes:
+      - memoryhub_data:/data/memoryhub         # Persistent data (SQLite + KuzuDB)
+      - ./config/memoryhub.config.yaml:/etc/memoryhub/memoryhub.config.yaml:ro
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3000/v1/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    networks:
+      - memoryhub
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "5"
+
+  # ─────────────────────────────────────────────────────────────────────
+  # REDIS — Distributed rate limiting, caching, pub/sub for alerts
+  # See ARCHITECTURE.md §4.1 Rate Limiter (sliding window via Redis)
+  # Also used for Trust Pipeline work queue (future)
+  # ─────────────────────────────────────────────────────────────────────
+  redis:
+    image: redis:7.2-alpine
+    container_name: memoryhub_redis
+    restart: unless-stopped
+    command: >
+      redis-server
+      --maxmemory 256mb
+      --maxmemory-policy allkeys-lru
+      --save 60 1
+      --loglevel warning
+    volumes:
+      - redis_data:/data
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+    networks:
+      - memoryhub
+
+  # ─────────────────────────────────────────────────────────────────────
+  # API (dev) — Development variant with hot-reload and debug logging
+  # Usage: docker compose --profile dev up api-dev
+  # ─────────────────────────────────────────────────────────────────────
+  api-dev:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+      target: development
+    container_name: memoryhub_api_dev
+    profiles: ["dev"]
+    env_file:
+      - docker/.env.example
+    environment:
+      - MEMORYHUB_ENV=development
+      - MEMORYHUB_DATA_DIR=/data/memoryhub
+    ports:
+      - "3000:3000"
+      - "3100:3100"
+      - "3200:3200"
+    volumes:
+      - memoryhub_data:/data/memoryhub
+      - ./config/memoryhub.config.yaml:/etc/memoryhub/memoryhub.config.yaml:ro
+      - .:/workspace                  # Mount source for live reload (air)
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - memoryhub

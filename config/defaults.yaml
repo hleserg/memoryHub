@@ -1,0 +1,40 @@
+# config/defaults.yaml
+# Default values — overridden by memoryhub.config.yaml
+# These are the safe/conservative fallbacks used when config is missing.
+# See ARCHITECTURE.md §12 Graceful Degradation for context.
+
+system:
+  log_level: "info"
+  log_format: "text"
+  data_dir: "./data"
+
+api_hub:
+  port: 3000
+  max_body_size_kb: 512
+  rate_limit:
+    # Conservative hardcoded limits for when Rate Limiter is unavailable
+    # See ARCHITECTURE.md §4.1 Graceful Degradation
+    fallback_write_rpm: 10
+    fallback_read_rpm: 50
+
+mcp_server:
+  port: 3100
+  max_connections: 10
+  session_timeout_minutes: 30
+
+health_monitoring:
+  dashboard:
+    port: 3200
+  checks:
+    interval_seconds: 30
+    timeout_ms: 5000
+
+trust:
+  auto_approve_threshold: 0.80
+  human_review_threshold: 0.60
+  queue:
+    max_size: 1000              # Conservative default
+
+agent_metrics:
+  credibility:
+    initial_score: 0.5
