@@ -1,5 +1,6 @@
-Atman
-# <img width="200" height="200" alt="logo" src="https://github.com/user-attachments/assets/e7269c6f-f81a-4982-afa3-ed45e8fd1f84" /> 
+<img width="200" height="200" alt="logo" src="https://github.com/user-attachments/assets/e7269c6f-f81a-4982-afa3-ed45e8fd1f84" /> 
+ 
+# Atman
 > **Непрерывная личность для ваших агентов**
 
 *ātman (санскр.) — душа, истинное Я, индивидуальное сознание*
