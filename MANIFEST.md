@@ -2,6 +2,7 @@
 ## Манифест психологического слоя для AI-агента
 
 *Апрель 2026*
+                  <img width="300" height="300" alt="logo" src="https://github.com/user-attachments/assets/bbc39089-b10d-4167-a4c3-0f4490770edb" />
 
 ---
 
