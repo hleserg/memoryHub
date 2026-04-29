@@ -1,4 +1,13 @@
 ---
+name: Bug report
+about: Create a report to help us improve
+title: ''
+labels: ''
+assignees: ''
+
+---
+
+---
 name: Сообщение об ошибке
 about: Опишите баг, чтобы его можно было воспроизвести и исправить
 title: "[Баг] "
