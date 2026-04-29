@@ -1,0 +1,14 @@
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Напишите, о чём хотите поговорить. Можно в свободной форме — со ссылками и контекстом в одном тексте.
+
+  - type: textarea
+    id: message
+    attributes:
+      label: Ваше сообщение
+      placeholder: |
+        О чём речь, что уже пробовали, какой вопрос или мысль хотите вынести.
+    validations:
+      required: true
