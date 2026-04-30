@@ -17,6 +17,7 @@ dev = [
 
 [project.scripts]
 atman = "atman.cli:main"
+atman-experience = "atman.cli_experience:main"
 
 [build-system]
 requires = ["hatchling"]
