@@ -5,7 +5,13 @@ on:
     branches:
       - main
     paths:
-      - lending/**
+      - index.html
+      - document.html
+      - CNAME
+      - README.md
+      - MANIFEST.md
+      - docs/**
+      - pic/**
       - .github/workflows/pages.yml
   workflow_dispatch:
 
@@ -34,7 +40,7 @@ jobs:
       - name: Upload landing artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: lending
+          path: .
 
       - name: Deploy to GitHub Pages
         id: deployment
