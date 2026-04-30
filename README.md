@@ -94,4 +94,9 @@ If so — what does that mean for how we create them?
 
 ---
 
-*April 2026*
+## Контакты
+
+Буду рад любому общению, обратной связи или обмену идеями:
+
+- Email: [hleserg@gmail.com](mailto:hleserg@gmail.com)
+- Telegram: [@skhlebnikov](https://t.me/skhlebnikov)
