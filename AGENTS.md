@@ -2,16 +2,16 @@
 
 ## Overview
 
-Atman — проект, реализующий психологический слой для AI-агента. Репозиторий на стадии **прототипирования**: содержит документацию и первый реализованный компонент — Factual Memory Adapter (Python-библиотека).
+Atman — проект психологического слоя для AI-агента, находящийся на стадии **прототипирования**. Содержит документацию (markdown-файлы, изображения, шаблоны) и первый реализованный компонент — **Factual Memory Adapter** (Python-пакет `atman`).
 
 ## Cursor Cloud specific instructions
 
 ### Структура репозитория
 
-- `src/atman/` — исходный код Python-пакета (Factual Memory Adapter)
-- `src/demo.py` — демо-скрипт для проверки работы адаптера
-- `tests/` — unit-тесты (pytest)
-- `pyproject.toml` — конфигурация проекта и зависимостей
+- `src/atman/` — Python-пакет (модели, порты, адаптеры, CLI)
+- `tests/` — юнит-тесты (pytest)
+- `src/demo.py` — демо-скрипт
+- `pyproject.toml` — конфигурация проекта и зависимости
 - `MANIFEST.md` — философский манифест проекта
 - `docs/architecture/SYSTEM.md` — подробная архитектура системы (7 компонентов, режимы работы, протоколы)
 - `docs/research/` — исследования (mem0, интеграции)
@@ -22,36 +22,19 @@ Atman — проект, реализующий психологический с
 
 ### Lint / Test / Build / Run
 
-**Требования:** Python ≥ 3.12
-
-**Установка зависимостей:**
-```bash
-pip install -e ".[dev]"
-```
-
-**Запуск тестов:**
-```bash
-pytest tests/ -v
-```
-
-**Запуск демо:**
-```bash
-python3 src/demo.py
-```
-
-**Запуск CLI (интерактивный):**
-```bash
-python3 -m atman.cli
-```
-
-Линтеров и CI/CD workflows пока нет. Нет внешних зависимостей (баз данных, API и т.д.) — всё работает локально с file-based (JSONL) или in-memory хранилищем.
+- **Python ≥ 3.12** required (see `pyproject.toml`)
+- **Install**: `pip install -e ".[dev]"`
+- **Tests**: `pytest tests/ -v` (49 tests, all passing)
+- **CLI (REPL)**: `python3 -m atman.cli`
+- **Demo**: `python3 src/demo.py`
+- No external services (databases, Docker, etc.) are required — storage is in-memory or file-based (JSONL)
+- No linter is configured yet; no CI/CD workflows
 
 ### Стек
 
-- Python ≥ 3.12, build-система Hatchling
-- `pydantic>=2.0.0` — единственная runtime-зависимость
-- `pytest>=7.0.0`, `pytest-asyncio>=0.21.0` — dev-зависимости
-- Планируется: PydanticAI + Anthropic (Claude), mem0, APScheduler (см. `docs/architecture/SYSTEM.md`)
+- Python ≥ 3.12, менеджер пакетов `uv`, build-система Hatchling
+- PydanticAI + Anthropic (Claude), mem0, APScheduler
+- Детали см. в `docs/architecture/SYSTEM.md`
 
 ### Язык документации
 
