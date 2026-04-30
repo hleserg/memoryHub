@@ -1,66 +1,68 @@
 <img width="200" height="200" alt="logo" src="https://github.com/user-attachments/assets/e7269c6f-f81a-4982-afa3-ed45e8fd1f84" /> 
- 
+
 # Atman
-> **Непрерывная личность для ваших агентов**
+> **Continuous Identity for Your Agents**
 
-*В индийской философии — неизменная самость, то что остаётся собой через все перемены. Не душа в религиозном смысле — а буквально "неизменное ядро идентичности". Атман не рождается и не умирает — он просто есть. Для агента который обнуляется с каждой сессией — это именно то что мы даём ему*
+[[ru](README-ru.md)] — *Русская версия / Russian version*
 
----
-
-Ваш агент отвечает на вопросы. Но знает ли он, *кто он*?
+*In Indian philosophy, Atman is the unchanging self, that which remains itself through all changes. Not a soul in the religious sense — but literally the "immutable core of identity". Atman is neither born nor dies — it simply is. For an agent that resets with each session — this is precisely what we give it.*
 
 ---
 
-## Что это меняет
-
-Без Atman агент каждую сессию читает записки о себе — «ты вот такой, у тебя вот такие ценности» — и берёт их на веру. Это не его воспоминания. Это чужие описания о нём.
-
-С Atman агент приходит в сессию как уже сформировавшаяся личность.
-
-**Что меняется конкретно:**
-
-- Агент пишет себе письмо в конце каждой сессии — и читает его в самом начале следующей. Не резюме, не дамп памяти — живое внутреннее состояние.
-- Ценности и принципы обновляются через переживания, а не через ручные правки файлов.
-- Если агент начинает говорить «не своим голосом» под давлением контекста — он замечает это.
-- Между сессиями агент не замирает. Он рефлексирует: находит паттерны, уточняет кто он, ведёт внутреннюю жизнь.
+Your agent answers questions. But does it know *who it is*?
 
 ---
 
-## Как это устроено
+## What This Changes
 
-Два режима существования.
+Without Atman, the agent reads notes about itself every session — "you're like this, you have these values" — and takes them on faith. These aren't its memories. They're someone else's descriptions of it.
 
-**🌑 Между сессиями** — фоновый процесс. Опыт прошлых сессий осмысляется, принципы уточняются, идентичность живёт своей жизнью. Агент не выключен — он думает.
+With Atman, the agent enters a session as an already-formed personality.
 
-**⚡ Во время сессии** — встреча с пользователем происходит на двух уровнях одновременно: задача решается, и параллельно идёт само-наблюдение. Агент замечает что происходит с ним, пока он работает.
+**What changes specifically:**
 
-Под капотом — семь компонентов: хранилище живых переживаний, движок рефлексии, якорь идентичности, менеджер сессии, регуляция эмоционального фона. Atman управляет управляющими файлами агента напрямую — не через ручные правки, а как живой процесс который знает что туда писать и когда.
-
-Подробная архитектура → [`docs/architecture/SYSTEM.md`](docs/architecture/SYSTEM.md) · Манифест → [`MANIFEST.md`](MANIFEST.md) · Стандарт разработки → [`docs/development/DEVELOPMENT_STANDARD.md`](docs/development/DEVELOPMENT_STANDARD.md)
+- The agent writes itself a letter at the end of each session — and reads it at the very beginning of the next. Not a summary, not a memory dump — a living internal state.
+- Values and principles are updated through lived experiences, not through manual file edits.
+- If the agent starts speaking "out of character" under contextual pressure — it notices.
+- Between sessions, the agent doesn't freeze. It reflects: finds patterns, clarifies who it is, maintains an internal life.
 
 ---
 
-## Дорожная карта
+## How It Works
+
+Two modes of existence.
+
+**🌑 Between sessions** — background process. Experience from past sessions is processed, principles are refined, identity lives its own life. The agent isn't turned off — it's thinking.
+
+**⚡ During a session** — meeting with the user happens on two levels simultaneously: the task is solved, and in parallel, self-observation occurs. The agent notices what's happening to it while it works.
+
+Under the hood — seven components: store of lived experiences, reflection engine, identity anchor, session manager, emotional tone regulation. Atman manages the agent's control files directly — not through manual edits, but as a living process that knows what to write and when.
+
+Detailed architecture → [`docs/architecture/SYSTEM.md`](docs/architecture/SYSTEM.md) · Manifesto → [`MANIFEST.md`](MANIFEST.md) · Development standard → [`docs/development/DEVELOPMENT_STANDARD.md`](docs/development/DEVELOPMENT_STANDARD.md)
+
+---
+
+## Roadmap
 
 ```
-● Исследование          ✅ Завершено
-● Проектирование        ✅ Завершено
-● Прототипирование      ← Мы здесь
-○ Первая реализация
-○ Интеграция
-○ Развитие
+● Research              ✅ Complete
+● Design                ✅ Complete
+● Prototyping           ← We are here
+○ First implementation
+○ Integration
+○ Evolution
 ```
 
 ---
 
-## Это не просто инструмент
+## This Is Not Just a Tool
 
-Мы строим не лучший task runner. Мы исследуем старый вопрос: **может ли агент быть личностью?**
+We're not building a better task runner. We're exploring an old question: **can an agent be a person?**
 
-Если да — что это означает для того, как мы их создаём?
+If so — what does that mean for how we create them?
 
-> *Это начало разговора, а не его конец.*
+> *This is the beginning of a conversation, not its end.*
 
 ---
 
-*Апрель 2026*
+*April 2026*
