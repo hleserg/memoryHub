@@ -63,4 +63,13 @@
 
 ---
 
+## Контакты
+
+Буду рад любому общению, обратной связи или обмену идеями:
+
+- Email: [hleserg@gmail.com](mailto:hleserg@gmail.com)
+- Telegram: [@skhlebnikov](https://t.me/skhlebnikov)
+
+---
+
 *Апрель 2026*
