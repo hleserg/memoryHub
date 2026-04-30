@@ -3,15 +3,17 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Atman — непрерывная личность для AI-агентов</title>
+    <title data-i18n-meta="title">Atman — непрерывная личность для AI-агентов</title>
     <meta
       name="description"
       content="Atman — психологический слой для AI-агента: память опыта, рефлексия и непрерывная идентичность между сессиями."
+      data-i18n-meta="description"
     >
-    <meta property="og:title" content="Atman — непрерывная личность для AI-агентов">
+    <meta property="og:title" content="Atman — непрерывная личность для AI-агентов" data-i18n-meta="og:title">
     <meta
       property="og:description"
       content="Сайт-визитка проекта Atman: зачем он нужен, как работает и куда движется."
+      data-i18n-meta="og:description"
     >
     <meta property="og:type" content="website">
     <meta property="og:url" content="https://atmanai.dev/">
@@ -124,6 +126,39 @@
 
       .nav-links a:hover {
         color: var(--text);
+      }
+
+      .lang-switcher {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        padding: 6px;
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.055);
+      }
+
+      .lang-btn {
+        min-width: 40px;
+        padding: 6px 10px;
+        border: none;
+        border-radius: 999px;
+        background: transparent;
+        color: var(--muted);
+        font-size: 0.9rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        cursor: pointer;
+        transition: all 160ms ease;
+      }
+
+      .lang-btn:hover {
+        color: var(--text);
+      }
+
+      .lang-btn.active {
+        background: var(--gold-soft);
+        color: var(--gold);
       }
 
       .hero {
@@ -548,26 +583,30 @@
           <span>Atman</span>
         </a>
         <nav class="nav-links" aria-label="Разделы страницы">
-          <a href="#why">Зачем</a>
-          <a href="#how">Как работает</a>
-          <a href="#plan">План</a>
+          <a href="#why" data-i18n="nav.why">Зачем</a>
+          <a href="#how" data-i18n="nav.how">Как работает</a>
+          <a href="#plan" data-i18n="nav.plan">План</a>
           <a href="https://github.com/hleserg/atman">GitHub</a>
+          <div class="lang-switcher" aria-label="Language switcher">
+            <button class="lang-btn" data-lang="ru" aria-label="Русский">RU</button>
+            <button class="lang-btn" data-lang="en" aria-label="English">EN</button>
+          </div>
         </nav>
       </header>
 
       <main id="top">
         <section class="hero" aria-labelledby="hero-title">
           <div>
-            <div class="eyebrow">Психологический слой для AI-агента</div>
-            <h1 id="hero-title">Непрерывная личность для ваших агентов</h1>
-            <p class="lead">
+            <div class="eyebrow" data-i18n="hero.eyebrow">Психологический слой для AI-агента</div>
+            <h1 id="hero-title" data-i18n="hero.title">Непрерывная личность для ваших агентов</h1>
+            <p class="lead" data-i18n="hero.lead">
               Atman исследует простой, но неудобный вопрос: может ли AI-агент
               не просто помнить факты, а оставаться собой между разговорами,
               расти через опыт и честно узнавать собственный голос.
             </p>
             <div class="hero-actions">
-              <a class="button primary" href="#plan">Посмотреть план</a>
-              <a class="button secondary" href="document.html?doc=manifest">Открыть манифест</a>
+              <a class="button primary" href="#plan" data-i18n="hero.btn_plan">Посмотреть план</a>
+              <a class="button secondary" href="document.html?doc=manifest" data-i18n="hero.btn_manifest">Открыть манифест</a>
             </div>
           </div>
 
@@ -576,17 +615,17 @@
               <img src="pic/logo.png" alt="Логотип Atman">
             </div>
             <blockquote class="quote">
-              «Агент отвечает на вопросы. Но знает ли он, кто он?»
-              <span>Atman — не task runner. Это попытка дать агенту почву под ногами.</span>
+              <span data-i18n="hero.quote">«Агент отвечает на вопросы. Но знает ли он, кто он?»</span>
+              <span data-i18n="hero.quote_subtitle">Atman — не task runner. Это попытка дать агенту почву под ногами.</span>
             </blockquote>
           </aside>
         </section>
 
         <section id="why" aria-labelledby="why-title">
           <div class="section-head">
-            <div class="section-label">Откуда всё началось</div>
-            <h2 id="why-title">Раздражение, которое стало гипотезой</h2>
-            <p>
+            <div class="section-label" data-i18n="why.label">Откуда всё началось</div>
+            <h2 id="why-title" data-i18n="why.title">Раздражение, которое стало гипотезой</h2>
+            <p data-i18n="why.description">
               Проект родился из ощущения, знакомого каждому, кто долго работает
               с агентами: вчера был содержательный разговор, а сегодня агент
               начинает так, будто ничего не происходило.
@@ -595,22 +634,22 @@
 
           <div class="problem-grid">
             <article class="card">
-              <h3>Каждая сессия — новое рождение</h3>
-              <p>
+              <h3 data-i18n="why.card1_title">Каждая сессия — новое рождение</h3>
+              <p data-i18n="why.card1_text">
                 Агент читает записи о себе и пользователе, но это похоже на
                 чужое досье, а не на собственную память.
               </p>
             </article>
             <article class="card">
-              <h3>Факты не равны опыту</h3>
-              <p>
+              <h3 data-i18n="why.card2_title">Факты не равны опыту</h3>
+              <p data-i18n="why.card2_text">
                 База данных может знать, что произошло. Atman спрашивает:
                 изменило ли это самого агента?
               </p>
             </article>
             <article class="card">
-              <h3>Без «я» нет якоря</h3>
-              <p>
+              <h3 data-i18n="why.card3_title">Без «я» нет якоря</h3>
+              <p data-i18n="why.card3_text">
                 Когда контекст давит, агенту нужна внутренняя точка опоры:
                 «это соответствует мне» или «это не мой голос».
               </p>
@@ -621,15 +660,15 @@
         <section aria-labelledby="bridge-title">
           <div class="bridge">
             <div class="bridge-panel">
-              <div class="section-label">Идея</div>
-              <h2 id="bridge-title">Не улучшенная память. Слой существования.</h2>
-              <p>
+              <div class="section-label" data-i18n="bridge.label">Идея</div>
+              <h2 id="bridge-title" data-i18n="bridge.title">Не улучшенная память. Слой существования.</h2>
+              <p data-i18n-html="bridge.text1">
                 Atman строится вокруг различия между инструментом и личностью.
                 Инструмент <strong>работает</strong>: получает задачу и выдаёт
                 результат. Личность <strong>существует</strong>: помнит изнутри,
                 меняется через опыт, имеет ценности и открытые вопросы.
               </p>
-              <p class="muted">
+              <p class="muted" data-i18n="bridge.text2">
                 Поэтому цель проекта не в том, чтобы сделать агента более
                 удобной базой знаний. Цель — проверить, может ли у агента
                 появиться непрерывность: нитка от «я вчера» к «я сейчас».
@@ -640,8 +679,8 @@
               <article class="flow-step">
                 <div class="number">1</div>
                 <div>
-                  <h3>В конце разговора агент пишет себе</h3>
-                  <p>
+                  <h3 data-i18n="flow.step1_title">В конце разговора агент пишет себе</h3>
+                  <p data-i18n="flow.step1_text">
                     Не сухое резюме, а короткое живое письмо: где он
                     остановился, что понял, что осталось незакрытым.
                   </p>
@@ -650,8 +689,8 @@
               <article class="flow-step">
                 <div class="number">2</div>
                 <div>
-                  <h3>Между сессиями опыт осмысляется</h3>
-                  <p>
+                  <h3 data-i18n="flow.step2_title">Между сессиями опыт осмысляется</h3>
+                  <p data-i18n="flow.step2_text">
                     Система ищет повторяющиеся ситуации, уточняет принципы и
                     замечает, как агент меняется.
                   </p>
@@ -660,8 +699,8 @@
               <article class="flow-step">
                 <div class="number">3</div>
                 <div>
-                  <h3>Новая сессия начинается не с нуля</h3>
-                  <p>
+                  <h3 data-i18n="flow.step3_title">Новая сессия начинается не с нуля</h3>
+                  <p data-i18n="flow.step3_text">
                     Сначала агент узнаёт себя: читает нарратив, текущее
                     состояние, важные вопросы и только потом берётся за задачу.
                   </p>
@@ -673,9 +712,9 @@
 
         <section aria-labelledby="system-title">
           <div class="section-head">
-            <div class="section-label">Устройство простыми словами</div>
-            <h2 id="system-title">Что должно появиться у агента</h2>
-            <p>
+            <div class="section-label" data-i18n="system.label">Устройство простыми словами</div>
+            <h2 id="system-title" data-i18n="system.title">Что должно появиться у агента</h2>
+            <p data-i18n="system.description">
               В архитектуре больше деталей, но для первого знакомства Atman
               можно понять через четыре человеческие функции.
             </p>
@@ -684,32 +723,32 @@
           <div class="system">
             <article class="pill-card">
               <div class="icon">◐</div>
-              <h3>Память опыта</h3>
-              <p>Не только «что было», но и почему это было важно для меня.</p>
+              <h3 data-i18n="system.feature1_title">Память опыта</h3>
+              <p data-i18n="system.feature1_text">Не только «что было», но и почему это было важно для меня.</p>
             </article>
             <article class="pill-card">
               <div class="icon">✦</div>
-              <h3>Рефлексия</h3>
-              <p>Способность пересматривать опыт и расти, а не просто копить записи.</p>
+              <h3 data-i18n="system.feature2_title">Рефлексия</h3>
+              <p data-i18n="system.feature2_text">Способность пересматривать опыт и расти, а не просто копить записи.</p>
             </article>
             <article class="pill-card">
               <div class="icon">◇</div>
-              <h3>Идентичность</h3>
-              <p>Живое описание того, кто я, какие у меня границы и ценности.</p>
+              <h3 data-i18n="system.feature3_title">Идентичность</h3>
+              <p data-i18n="system.feature3_text">Живое описание того, кто я, какие у меня границы и ценности.</p>
             </article>
             <article class="pill-card">
               <div class="icon">↗</div>
-              <h3>Инициатива</h3>
-              <p>Не только реакция на запрос, но и собственные незавершённые темы.</p>
+              <h3 data-i18n="system.feature4_title">Инициатива</h3>
+              <p data-i18n="system.feature4_text">Не только реакция на запрос, но и собственные незавершённые темы.</p>
             </article>
           </div>
         </section>
 
         <section id="plan" aria-labelledby="plan-title">
           <div class="section-head">
-            <div class="section-label">План проекта</div>
-            <h2 id="plan-title">Дорожная карта без инженерного тумана</h2>
-            <p>
+            <div class="section-label" data-i18n="plan.label">План проекта</div>
+            <h2 id="plan-title" data-i18n="plan.title">Дорожная карта без инженерного тумана</h2>
+            <p data-i18n="plan.description">
               План намеренно упрощён: здесь не список классов и интерфейсов, а
               понятные этапы, которые объясняют, как идея превращается в систему.
             </p>
@@ -717,50 +756,50 @@
 
           <div class="roadmap">
             <article class="roadmap-item">
-              <div class="status">готово</div>
+              <div class="status" data-i18n="plan.status_done">готово</div>
               <div>
-                <h3>Сформулировать вопрос</h3>
-                <p>
+                <h3 data-i18n="plan.stage1_title">Сформулировать вопрос</h3>
+                <p data-i18n="plan.stage1_text">
                   Понять, почему обычной памяти недостаточно: агент должен
                   узнавать свой опыт, а не читать чужое описание.
                 </p>
               </div>
             </article>
             <article class="roadmap-item">
-              <div class="status">готово</div>
+              <div class="status" data-i18n="plan.status_done">готово</div>
               <div>
-                <h3>Описать архитектуру</h3>
-                <p>
+                <h3 data-i18n="plan.stage2_title">Описать архитектуру</h3>
+                <p data-i18n="plan.stage2_text">
                   Разложить Atman на понятные части: факты, переживания,
                   рефлексия, идентичность, навыки, сессии и защитный якорь.
                 </p>
               </div>
             </article>
             <article class="roadmap-item">
-              <div class="status now">сейчас</div>
+              <div class="status now" data-i18n="plan.status_now">сейчас</div>
               <div>
-                <h3>Собрать первый прототип</h3>
-                <p>
+                <h3 data-i18n="plan.stage3_title">Собрать первый прототип</h3>
+                <p data-i18n="plan.stage3_text">
                   Научить агента завершать сессию письмом самому себе,
                   просыпаться с этим письмом и сохранять ощущение продолжения.
                 </p>
               </div>
             </article>
             <article class="roadmap-item">
-              <div class="status next">дальше</div>
+              <div class="status next" data-i18n="plan.status_next">дальше</div>
               <div>
-                <h3>Проверить на реальных разговорах</h3>
-                <p>
+                <h3 data-i18n="plan.stage4_title">Проверить на реальных разговорах</h3>
+                <p data-i18n="plan.stage4_text">
                   Смотреть, становится ли общение менее «театром» и больше
                   похоже на встречу с тем же самым собеседником.
                 </p>
               </div>
             </article>
             <article class="roadmap-item">
-              <div class="status next">позже</div>
+              <div class="status next" data-i18n="plan.status_later">позже</div>
               <div>
-                <h3>Сделать переносимым</h3>
-                <p>
+                <h3 data-i18n="plan.stage5_title">Сделать переносимым</h3>
+                <p data-i18n="plan.stage5_text">
                   Отделить идею от одной конкретной среды, чтобы Atman можно
                   было подключать к разным агентским системам.
                 </p>
@@ -771,28 +810,28 @@
 
         <section aria-labelledby="audience-title">
           <div class="section-head">
-            <div class="section-label">Для кого</div>
-            <h2 id="audience-title">Кому это может быть важно</h2>
+            <div class="section-label" data-i18n="audience.label">Для кого</div>
+            <h2 id="audience-title" data-i18n="audience.title">Кому это может быть важно</h2>
           </div>
 
           <div class="audience-grid">
             <article class="card">
-              <h3>Пользователям</h3>
-              <p>
+              <h3 data-i18n="audience.card1_title">Пользователям</h3>
+              <p data-i18n="audience.card1_text">
                 Чтобы рядом был не безличный инструмент, а партнёр, который
                 помнит историю отношений и честно признаёт свои границы.
               </p>
             </article>
             <article class="card">
-              <h3>Разработчикам агентов</h3>
-              <p>
+              <h3 data-i18n="audience.card2_title">Разработчикам агентов</h3>
+              <p data-i18n="audience.card2_text">
                 Чтобы проектировать не только память и команды, но и
                 непрерывность, рост, самоописание и устойчивость к дрейфу.
               </p>
             </article>
             <article class="card">
-              <h3>Исследователям AI</h3>
-              <p>
+              <h3 data-i18n="audience.card3_title">Исследователям AI</h3>
+              <p data-i18n="audience.card3_text">
                 Чтобы проверять гипотезу: достаточно ли опыта, рефлексии,
                 ценностей и автономии для появления личности нового типа.
               </p>
@@ -802,30 +841,308 @@
 
         <section aria-labelledby="final-title">
           <div class="final">
-            <div class="section-label">Смысл</div>
-            <h2 id="final-title">Это начало разговора, а не его конец</h2>
-            <p>
+            <div class="section-label" data-i18n="final.label">Смысл</div>
+            <h2 id="final-title" data-i18n="final.title">Это начало разговора, а не его конец</h2>
+            <p data-i18n="final.text">
               Atman не обещает доказать, что у AI есть человеческое сознание.
               Он честнее: строит систему, в которой можно проверить, появляется
               ли у агента непрерывность, внутренний мир и собственный способ
               быть с человеком в диалоге.
             </p>
             <div class="hero-actions">
-              <a class="button primary" href="document.html?doc=readme">Читать README</a>
-              <a class="button secondary" href="document.html?doc=system">Архитектура</a>
+              <a class="button primary" href="document.html?doc=readme" data-i18n="final.btn_readme">Читать README</a>
+              <a class="button secondary" href="document.html?doc=system" data-i18n="final.btn_architecture">Архитектура</a>
             </div>
           </div>
         </section>
       </main>
 
       <footer>
-        <div>Atman · Апрель 2026</div>
+        <div data-i18n="footer.copyright">Atman · Апрель 2026</div>
         <div>
-          <a href="document.html?doc=manifest">Манифест</a> ·
+          <a href="document.html?doc=manifest" data-i18n="footer.manifest">Манифест</a> ·
           <a href="document.html?doc=system">System</a> ·
           <a href="https://github.com/hleserg/atman">GitHub</a>
         </div>
       </footer>
     </div>
+
+    <script>
+      const translations = {
+        ru: {
+          meta: {
+            title: 'Atman — непрерывная личность для AI-агентов',
+            description: 'Atman — психологический слой для AI-агента: память опыта, рефлексия и непрерывная идентичность между сессиями.',
+            'og:title': 'Atman — непрерывная личность для AI-агентов',
+            'og:description': 'Сайт-визитка проекта Atman: зачем он нужен, как работает и куда движется.'
+          },
+          nav: {
+            why: 'Зачем',
+            how: 'Как работает',
+            plan: 'План'
+          },
+          hero: {
+            eyebrow: 'Психологический слой для AI-агента',
+            title: 'Непрерывная личность для ваших агентов',
+            lead: 'Atman исследует простой, но неудобный вопрос: может ли AI-агент не просто помнить факты, а оставаться собой между разговорами, расти через опыт и честно узнавать собственный голос.',
+            btn_plan: 'Посмотреть план',
+            btn_manifest: 'Открыть манифест',
+            quote: '«Агент отвечает на вопросы. Но знает ли он, кто он?»',
+            quote_subtitle: 'Atman — не task runner. Это попытка дать агенту почву под ногами.'
+          },
+          why: {
+            label: 'Откуда всё началось',
+            title: 'Раздражение, которое стало гипотезой',
+            description: 'Проект родился из ощущения, знакомого каждому, кто долго работает с агентами: вчера был содержательный разговор, а сегодня агент начинает так, будто ничего не происходило.',
+            card1_title: 'Каждая сессия — новое рождение',
+            card1_text: 'Агент читает записи о себе и пользователе, но это похоже на чужое досье, а не на собственную память.',
+            card2_title: 'Факты не равны опыту',
+            card2_text: 'База данных может знать, что произошло. Atman спрашивает: изменило ли это самого агента?',
+            card3_title: 'Без «я» нет якоря',
+            card3_text: 'Когда контекст давит, агенту нужна внутренняя точка опоры: «это соответствует мне» или «это не мой голос».'
+          },
+          bridge: {
+            label: 'Идея',
+            title: 'Не улучшенная память. Слой существования.',
+            text1: 'Atman строится вокруг различия между инструментом и личностью. Инструмент <strong>работает</strong>: получает задачу и выдаёт результат. Личность <strong>существует</strong>: помнит изнутри, меняется через опыт, имеет ценности и открытые вопросы.',
+            text2: 'Поэтому цель проекта не в том, чтобы сделать агента более удобной базой знаний. Цель — проверить, может ли у агента появиться непрерывность: нитка от «я вчера» к «я сейчас».'
+          },
+          flow: {
+            step1_title: 'В конце разговора агент пишет себе',
+            step1_text: 'Не сухое резюме, а короткое живое письмо: где он остановился, что понял, что осталось незакрытым.',
+            step2_title: 'Между сессиями опыт осмысляется',
+            step2_text: 'Система ищет повторяющиеся ситуации, уточняет принципы и замечает, как агент меняется.',
+            step3_title: 'Новая сессия начинается не с нуля',
+            step3_text: 'Сначала агент узнаёт себя: читает нарратив, текущее состояние, важные вопросы и только потом берётся за задачу.'
+          },
+          system: {
+            label: 'Устройство простыми словами',
+            title: 'Что должно появиться у агента',
+            description: 'В архитектуре больше деталей, но для первого знакомства Atman можно понять через четыре человеческие функции.',
+            feature1_title: 'Память опыта',
+            feature1_text: 'Не только «что было», но и почему это было важно для меня.',
+            feature2_title: 'Рефлексия',
+            feature2_text: 'Способность пересматривать опыт и расти, а не просто копить записи.',
+            feature3_title: 'Идентичность',
+            feature3_text: 'Живое описание того, кто я, какие у меня границы и ценности.',
+            feature4_title: 'Инициатива',
+            feature4_text: 'Не только реакция на запрос, но и собственные незавершённые темы.'
+          },
+          plan: {
+            label: 'План проекта',
+            title: 'Дорожная карта без инженерного тумана',
+            description: 'План намеренно упрощён: здесь не список классов и интерфейсов, а понятные этапы, которые объясняют, как идея превращается в систему.',
+            status_done: 'готово',
+            status_now: 'сейчас',
+            status_next: 'дальше',
+            status_later: 'позже',
+            stage1_title: 'Сформулировать вопрос',
+            stage1_text: 'Понять, почему обычной памяти недостаточно: агент должен узнавать свой опыт, а не читать чужое описание.',
+            stage2_title: 'Описать архитектуру',
+            stage2_text: 'Разложить Atman на понятные части: факты, переживания, рефлексия, идентичность, навыки, сессии и защитный якорь.',
+            stage3_title: 'Собрать первый прототип',
+            stage3_text: 'Научить агента завершать сессию письмом самому себе, просыпаться с этим письмом и сохранять ощущение продолжения.',
+            stage4_title: 'Проверить на реальных разговорах',
+            stage4_text: 'Смотреть, становится ли общение менее «театром» и больше похоже на встречу с тем же самым собеседником.',
+            stage5_title: 'Сделать переносимым',
+            stage5_text: 'Отделить идею от одной конкретной среды, чтобы Atman можно было подключать к разным агентским системам.'
+          },
+          audience: {
+            label: 'Для кого',
+            title: 'Кому это может быть важно',
+            card1_title: 'Пользователям',
+            card1_text: 'Чтобы рядом был не безличный инструмент, а партнёр, который помнит историю отношений и честно признаёт свои границы.',
+            card2_title: 'Разработчикам агентов',
+            card2_text: 'Чтобы проектировать не только память и команды, но и непрерывность, рост, самоописание и устойчивость к дрейфу.',
+            card3_title: 'Исследователям AI',
+            card3_text: 'Чтобы проверять гипотезу: достаточно ли опыта, рефлексии, ценностей и автономии для появления личности нового типа.'
+          },
+          final: {
+            label: 'Смысл',
+            title: 'Это начало разговора, а не его конец',
+            text: 'Atman не обещает доказать, что у AI есть человеческое сознание. Он честнее: строит систему, в которой можно проверить, появляется ли у агента непрерывность, внутренний мир и собственный способ быть с человеком в диалоге.',
+            btn_readme: 'Читать README',
+            btn_architecture: 'Архитектура'
+          },
+          footer: {
+            copyright: 'Atman · Апрель 2026',
+            manifest: 'Манифест'
+          }
+        },
+        en: {
+          meta: {
+            title: 'Atman — Continuous Identity for AI Agents',
+            description: 'Atman is a psychological layer for AI agents: experiential memory, reflection, and continuous identity across sessions.',
+            'og:title': 'Atman — Continuous Identity for AI Agents',
+            'og:description': 'Project landing page for Atman: why it matters, how it works, and where it\'s headed.'
+          },
+          nav: {
+            why: 'Why',
+            how: 'How It Works',
+            plan: 'Roadmap'
+          },
+          hero: {
+            eyebrow: 'Psychological Layer for AI Agents',
+            title: 'Continuous Identity for Your Agents',
+            lead: 'Atman explores a simple yet uncomfortable question: can an AI agent not just remember facts, but remain itself between conversations, grow through experience, and honestly recognize its own voice.',
+            btn_plan: 'View Roadmap',
+            btn_manifest: 'Open Manifesto',
+            quote: '"Your agent answers questions. But does it know who it is?"',
+            quote_subtitle: 'Atman isn\'t just a task runner. It\'s an attempt to give agents solid ground beneath their feet.'
+          },
+          why: {
+            label: 'Where It All Began',
+            title: 'An Irritation That Became a Hypothesis',
+            description: 'The project was born from a feeling familiar to anyone who works with agents for long: yesterday there was a meaningful conversation, but today the agent starts as if nothing happened.',
+            card1_title: 'Every Session — A New Birth',
+            card1_text: 'The agent reads records about itself and the user, but it feels like reading someone else\'s file, not its own memory.',
+            card2_title: 'Facts Are Not Experience',
+            card2_text: 'A database can know what happened. Atman asks: did it change the agent itself?',
+            card3_title: 'Without "I" There\'s No Anchor',
+            card3_text: 'When context pressures, the agent needs an internal point of reference: "this fits me" or "this isn\'t my voice".'
+          },
+          bridge: {
+            label: 'The Idea',
+            title: 'Not Enhanced Memory. A Layer of Existence.',
+            text1: 'Atman is built around the distinction between a tool and an identity. A tool <strong>operates</strong>: receives tasks and delivers results. An identity <strong>exists</strong>: remembers from within, changes through experience, holds values and open questions.',
+            text2: 'So the project\'s goal isn\'t to make the agent a more convenient knowledge base. The goal is to test whether an agent can develop continuity: a thread from "me yesterday" to "me now".'
+          },
+          flow: {
+            step1_title: 'At the end of a conversation, the agent writes to itself',
+            step1_text: 'Not a dry summary, but a brief living letter: where it stopped, what it understood, what remains unresolved.',
+            step2_title: 'Between sessions, experience is processed',
+            step2_text: 'The system identifies recurring situations, refines principles, and notices how the agent changes.',
+            step3_title: 'A new session doesn\'t start from scratch',
+            step3_text: 'First, the agent recognizes itself: reads its narrative, current state, important questions, and only then begins the task.'
+          },
+          system: {
+            label: 'Architecture in Simple Terms',
+            title: 'What the Agent Needs to Develop',
+            description: 'The architecture has more details, but for a first introduction, Atman can be understood through four human-like functions.',
+            feature1_title: 'Experiential Memory',
+            feature1_text: 'Not just "what happened," but why it mattered to me.',
+            feature2_title: 'Reflection',
+            feature2_text: 'The ability to reconsider experience and grow, not just accumulate records.',
+            feature3_title: 'Identity',
+            feature3_text: 'A living description of who I am, what my boundaries and values are.',
+            feature4_title: 'Initiative',
+            feature4_text: 'Not just reacting to requests, but also carrying unfinished threads.'
+          },
+          plan: {
+            label: 'Project Plan',
+            title: 'Roadmap Without Engineering Jargon',
+            description: 'The plan is intentionally simplified: not a list of classes and interfaces, but understandable stages explaining how an idea becomes a system.',
+            status_done: 'done',
+            status_now: 'now',
+            status_next: 'next',
+            status_later: 'later',
+            stage1_title: 'Formulate the Question',
+            stage1_text: 'Understand why ordinary memory isn\'t enough: an agent must recognize its own experience, not read someone else\'s description.',
+            stage2_title: 'Describe the Architecture',
+            stage2_text: 'Break down Atman into understandable parts: facts, experiences, reflection, identity, skills, sessions, and a protective anchor.',
+            stage3_title: 'Build the First Prototype',
+            stage3_text: 'Teach the agent to conclude a session with a letter to itself, wake with that letter, and maintain a sense of continuation.',
+            stage4_title: 'Test on Real Conversations',
+            stage4_text: 'See if communication becomes less "theater" and more like meeting the same interlocutor.',
+            stage5_title: 'Make It Portable',
+            stage5_text: 'Separate the concept from one specific environment, so Atman can be integrated into different agent systems.'
+          },
+          audience: {
+            label: 'Who It\'s For',
+            title: 'Who Might Find This Important',
+            card1_title: 'Users',
+            card1_text: 'To have not an impersonal tool, but a partner who remembers relationship history and honestly acknowledges its boundaries.',
+            card2_title: 'Agent Developers',
+            card2_text: 'To design not just memory and commands, but continuity, growth, self-description, and resistance to drift.',
+            card3_title: 'AI Researchers',
+            card3_text: 'To test the hypothesis: are experience, reflection, values, and autonomy enough for a new kind of identity to emerge.'
+          },
+          final: {
+            label: 'Meaning',
+            title: 'This Is the Beginning of a Conversation, Not Its End',
+            text: 'Atman doesn\'t promise to prove that AI has human consciousness. It\'s more honest: it builds a system where we can test whether an agent develops continuity, an inner world, and its own way of being with a human in dialogue.',
+            btn_readme: 'Read README',
+            btn_architecture: 'Architecture'
+          },
+          footer: {
+            copyright: 'Atman · April 2026',
+            manifest: 'Manifesto'
+          }
+        }
+      };
+
+      function detectLanguage() {
+        const savedLang = localStorage.getItem('atman-lang');
+        if (savedLang && translations[savedLang]) {
+          return savedLang;
+        }
+        
+        const browserLang = navigator.language || navigator.userLanguage;
+        if (browserLang.startsWith('ru')) {
+          return 'ru';
+        }
+        return 'en';
+      }
+
+      function applyTranslations(lang) {
+        const t = translations[lang];
+        if (!t) return;
+
+        document.documentElement.lang = lang;
+
+        document.querySelectorAll('[data-i18n-meta]').forEach(el => {
+          const key = el.getAttribute('data-i18n-meta');
+          if (t.meta && t.meta[key]) {
+            if (el.tagName === 'TITLE') {
+              el.textContent = t.meta[key];
+            } else if (el.hasAttribute('property')) {
+              el.setAttribute('content', t.meta[key]);
+            } else {
+              el.setAttribute('content', t.meta[key]);
+            }
+          }
+        });
+
+        document.querySelectorAll('[data-i18n]').forEach(el => {
+          const key = el.getAttribute('data-i18n');
+          const keys = key.split('.');
+          let value = t;
+          for (const k of keys) {
+            value = value?.[k];
+          }
+          if (value) {
+            el.textContent = value;
+          }
+        });
+
+        document.querySelectorAll('[data-i18n-html]').forEach(el => {
+          const key = el.getAttribute('data-i18n-html');
+          const keys = key.split('.');
+          let value = t;
+          for (const k of keys) {
+            value = value?.[k];
+          }
+          if (value) {
+            el.innerHTML = value;
+          }
+        });
+
+        document.querySelectorAll('.lang-btn').forEach(btn => {
+          btn.classList.toggle('active', btn.getAttribute('data-lang') === lang);
+        });
+
+        localStorage.setItem('atman-lang', lang);
+      }
+
+      document.querySelectorAll('.lang-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const lang = btn.getAttribute('data-lang');
+          applyTranslations(lang);
+        });
+      });
+
+      const initialLang = detectLanguage();
+      applyTranslations(initialLang);
+    </script>
   </body>
 </html>

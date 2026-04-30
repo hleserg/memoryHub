@@ -130,6 +130,39 @@
         color: var(--text);
       }
 
+      .lang-switcher {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        padding: 6px;
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.055);
+      }
+
+      .lang-btn {
+        min-width: 40px;
+        padding: 6px 10px;
+        border: none;
+        border-radius: 999px;
+        background: transparent;
+        color: var(--muted);
+        font-size: 0.9rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        cursor: pointer;
+        transition: all 160ms ease;
+      }
+
+      .lang-btn:hover {
+        color: var(--text);
+      }
+
+      .lang-btn.active {
+        background: var(--gold-soft);
+        color: var(--gold);
+      }
+
       .hero {
         padding: 58px 0 38px;
       }
@@ -472,52 +505,56 @@
           <span>Atman</span>
         </a>
         <nav class="nav-links" aria-label="Разделы сайта">
-          <a href="index.html#why">Зачем</a>
-          <a href="index.html#how">Как работает</a>
-          <a href="index.html#plan">План</a>
+          <a href="index.html#why" data-i18n="nav.why">Зачем</a>
+          <a href="index.html#how" data-i18n="nav.how">Как работает</a>
+          <a href="index.html#plan" data-i18n="nav.plan">План</a>
           <a href="https://github.com/hleserg/atman">GitHub</a>
+          <div class="lang-switcher" aria-label="Language switcher">
+            <button class="lang-btn" data-lang="ru" aria-label="Русский">RU</button>
+            <button class="lang-btn" data-lang="en" aria-label="English">EN</button>
+          </div>
         </nav>
       </header>
 
       <main>
         <section class="hero" aria-labelledby="doc-title">
-          <div class="eyebrow">Библиотека Atman</div>
-          <h1 id="doc-title">Документы проекта</h1>
-          <p class="lead" id="doc-description">
+          <div class="eyebrow" data-i18n="doc.eyebrow">Библиотека Atman</div>
+          <h1 id="doc-title" data-i18n="doc.title">Документы проекта</h1>
+          <p class="lead" id="doc-description" data-i18n="doc.description">
             Манифест, README и архитектура открываются в той же визуальной среде,
             что и сайт: без сырого Markdown на белом фоне.
           </p>
           <nav class="doc-tabs" aria-label="Документы проекта">
             <a class="tab" data-doc-link="readme" href="document.html?doc=readme">README</a>
-            <a class="tab" data-doc-link="manifest" href="document.html?doc=manifest">Манифест</a>
-            <a class="tab" data-doc-link="system" href="document.html?doc=system">Архитектура</a>
+            <a class="tab" data-doc-link="manifest" href="document.html?doc=manifest" data-i18n="doc.tab_manifest">Манифест</a>
+            <a class="tab" data-doc-link="system" href="document.html?doc=system" data-i18n="doc.tab_system">Архитектура</a>
           </nav>
         </section>
 
         <section class="document-shell" aria-label="Содержимое документа">
           <article class="document-card">
             <div class="document-meta">
-              <span id="doc-path">Загрузка документа...</span>
-              <span class="document-source" id="doc-source">Текст загружается из Markdown</span>
+              <span id="doc-path" data-i18n="doc.loading">Загрузка документа...</span>
+              <span class="document-source" id="doc-source" data-i18n="doc.source">Текст загружается из Markdown</span>
             </div>
             <div class="markdown-body" id="markdown-content">
-              <div class="empty-state">Загружаю текст документа...</div>
+              <div class="empty-state" data-i18n="doc.loading_text">Загружаю текст документа...</div>
             </div>
           </article>
 
           <aside class="toc" aria-label="Оглавление">
-            <div class="toc-title">Содержание</div>
+            <div class="toc-title" data-i18n="doc.toc_title">Содержание</div>
             <div id="toc-links">
-              <span class="muted">Появится после загрузки документа.</span>
+              <span class="muted" data-i18n="doc.toc_wait">Появится после загрузки документа.</span>
             </div>
           </aside>
         </section>
       </main>
 
       <footer>
-        <div>Atman · Апрель 2026</div>
+        <div data-i18n="footer.copyright">Atman · Апрель 2026</div>
         <div>
-          <a href="document.html?doc=manifest">Манифест</a> ·
+          <a href="document.html?doc=manifest" data-i18n="footer.manifest">Манифест</a> ·
           <a href="document.html?doc=system">System</a> ·
           <a href="https://github.com/hleserg/atman">GitHub</a>
         </div>
@@ -525,21 +562,154 @@
     </div>
 
     <script>
+      const translations = {
+        ru: {
+          nav: {
+            why: 'Зачем',
+            how: 'Как работает',
+            plan: 'План'
+          },
+          doc: {
+            eyebrow: 'Библиотека Atman',
+            title: 'Документы проекта',
+            description: 'Манифест, README и архитектура открываются в той же визуальной среде, что и сайт: без сырого Markdown на белом фоне.',
+            tab_manifest: 'Манифест',
+            tab_system: 'Архитектура',
+            loading: 'Загрузка документа...',
+            source: 'Текст загружается из Markdown',
+            loading_text: 'Загружаю текст документа...',
+            toc_title: 'Содержание',
+            toc_wait: 'Появится после загрузки документа.'
+          },
+          footer: {
+            copyright: 'Atman · Апрель 2026',
+            manifest: 'Манифест'
+          },
+          documents: {
+            readme: {
+              title: "README",
+              description: "Короткое знакомство с Atman: что меняется, как устроена идея и куда движется проект."
+            },
+            manifest: {
+              title: "Манифест Atman",
+              description: "Развёрнутый текст о проблеме непрерывной личности AI-агента и гипотезе Atman."
+            },
+            system: {
+              title: "Архитектура системы",
+              description: "Техническое описание компонентов, интерфейсов и режимов работы психологического слоя."
+            }
+          }
+        },
+        en: {
+          nav: {
+            why: 'Why',
+            how: 'How It Works',
+            plan: 'Roadmap'
+          },
+          doc: {
+            eyebrow: 'Atman Library',
+            title: 'Project Documents',
+            description: 'Manifesto, README, and architecture are presented in the same visual environment as the site: no raw Markdown on a white background.',
+            tab_manifest: 'Manifesto',
+            tab_system: 'Architecture',
+            loading: 'Loading document...',
+            source: 'Text is loading from Markdown',
+            loading_text: 'Loading document text...',
+            toc_title: 'Contents',
+            toc_wait: 'Will appear after document loads.'
+          },
+          footer: {
+            copyright: 'Atman · April 2026',
+            manifest: 'Manifesto'
+          },
+          documents: {
+            readme: {
+              title: "README",
+              description: "A brief introduction to Atman: what changes, how the idea works, and where the project is headed."
+            },
+            manifest: {
+              title: "Atman Manifesto",
+              description: "An expanded text about the problem of continuous identity in AI agents and Atman's hypothesis."
+            },
+            system: {
+              title: "System Architecture",
+              description: "Technical description of components, interfaces, and operating modes of the psychological layer."
+            }
+          }
+        }
+      };
+
+      function detectLanguage() {
+        const savedLang = localStorage.getItem('atman-lang');
+        if (savedLang && translations[savedLang]) {
+          return savedLang;
+        }
+        
+        const browserLang = navigator.language || navigator.userLanguage;
+        if (browserLang.startsWith('ru')) {
+          return 'ru';
+        }
+        return 'en';
+      }
+
+      function applyTranslations(lang) {
+        const t = translations[lang];
+        if (!t) return;
+
+        document.documentElement.lang = lang;
+
+        document.querySelectorAll('[data-i18n]').forEach(el => {
+          const key = el.getAttribute('data-i18n');
+          const keys = key.split('.');
+          let value = t;
+          for (const k of keys) {
+            value = value?.[k];
+          }
+          if (value) {
+            el.textContent = value;
+          }
+        });
+
+        document.querySelectorAll('.lang-btn').forEach(btn => {
+          btn.classList.toggle('active', btn.getAttribute('data-lang') === lang);
+        });
+
+        localStorage.setItem('atman-lang', lang);
+        
+        return t;
+      }
+
+      document.querySelectorAll('.lang-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const lang = btn.getAttribute('data-lang');
+          const t = applyTranslations(lang);
+          const activeDocKey = new URLSearchParams(window.location.search).get("doc") || "readme";
+          if (documents[activeDocKey] && t.documents[activeDocKey]) {
+            document.title = `Atman — ${t.documents[activeDocKey].title}`;
+            document.getElementById("doc-title").textContent = t.documents[activeDocKey].title;
+            document.getElementById("doc-description").textContent = t.documents[activeDocKey].description;
+          }
+        });
+      });
+
+      const currentLang = detectLanguage();
+      const currentTranslations = applyTranslations(currentLang);
+
       const documents = {
         readme: {
-          title: "README",
+          title: currentTranslations.documents.readme.title,
           path: "README.md",
-          description: "Короткое знакомство с Atman: что меняется, как устроена идея и куда движется проект.",
+          description: currentTranslations.documents.readme.description,
         },
         manifest: {
-          title: "Манифест Atman",
+          title: currentTranslations.documents.manifest.title,
           path: "MANIFEST.md",
-          description: "Развёрнутый текст о проблеме непрерывной личности AI-агента и гипотезе Atman.",
+          description: currentTranslations.documents.manifest.description,
         },
         system: {
-          title: "Архитектура системы",
+          title: currentTranslations.documents.system.title,
           path: "docs/architecture/SYSTEM.md",
-          description: "Техническое описание компонентов, интерфейсов и режимов работы психологического слоя.",
+          description: currentTranslations.documents.system.description,
         },
       };
 
@@ -563,7 +733,8 @@
       document.getElementById("doc-title").textContent = activeDoc.title;
       document.getElementById("doc-description").textContent = activeDoc.description;
       document.getElementById("doc-path").textContent = activeDoc.path;
-      document.getElementById("doc-source").textContent = `Источник: ${activeDoc.path}`;
+      const sourcePrefix = currentLang === 'ru' ? 'Источник' : 'Source';
+      document.getElementById("doc-source").textContent = `${sourcePrefix}: ${activeDoc.path}`;
 
       document.querySelectorAll("[data-doc-link]").forEach((link) => {
         if (link.dataset.docLink === activeDocKey) {
@@ -575,7 +746,10 @@
       fetch(activeDoc.path)
         .then((response) => {
           if (!response.ok) {
-            throw new Error(`Не удалось загрузить ${activeDoc.path}`);
+            const errorMsg = currentLang === 'ru' 
+              ? `Не удалось загрузить ${activeDoc.path}`
+              : `Failed to load ${activeDoc.path}`;
+            throw new Error(errorMsg);
           }
 
           return response.text();
@@ -586,13 +760,15 @@
           toc.innerHTML = renderToc(headings);
         })
         .catch((error) => {
+          const errorTitle = currentLang === 'ru' ? 'Документ не загрузился.' : 'Document failed to load.';
+          const tocError = currentLang === 'ru' ? 'Оглавление недоступно.' : 'Contents unavailable.';
           content.innerHTML = `
             <div class="empty-state">
-              <p><strong>Документ не загрузился.</strong></p>
+              <p><strong>${errorTitle}</strong></p>
               <p>${escapeHtml(error.message)}</p>
             </div>
           `;
-          toc.innerHTML = '<span class="muted">Оглавление недоступно.</span>';
+          toc.innerHTML = `<span class="muted">${tocError}</span>`;
         });
 
       function renderMarkdown(markdown) {
@@ -717,7 +893,8 @@
         const visibleHeadings = headings.filter((heading) => heading.level === 2 || heading.level === 3);
 
         if (!visibleHeadings.length) {
-          return '<span class="muted">В документе нет разделов для оглавления.</span>';
+          const noSections = currentLang === 'ru' ? 'В документе нет разделов для оглавления.' : 'No sections available for table of contents.';
+          return `<span class="muted">${noSections}</span>`;
         }
 
         return visibleHeadings
