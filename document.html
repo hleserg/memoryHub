@@ -684,10 +684,44 @@
           const lang = btn.getAttribute('data-lang');
           const t = applyTranslations(lang);
           const activeDocKey = new URLSearchParams(window.location.search).get("doc") || "readme";
-          if (documents[activeDocKey] && t.documents[activeDocKey]) {
+          
+          const newDocuments = getDocuments(lang);
+          const activeDoc = newDocuments[activeDocKey];
+          
+          if (activeDoc && t.documents[activeDocKey]) {
             document.title = `Atman — ${t.documents[activeDocKey].title}`;
             document.getElementById("doc-title").textContent = t.documents[activeDocKey].title;
             document.getElementById("doc-description").textContent = t.documents[activeDocKey].description;
+            document.getElementById("doc-path").textContent = activeDoc.path;
+            const sourcePrefix = lang === 'ru' ? 'Источник' : 'Source';
+            document.getElementById("doc-source").textContent = `${sourcePrefix}: ${activeDoc.path}`;
+            
+            fetch(activeDoc.path)
+              .then((response) => {
+                if (!response.ok) {
+                  const errorMsg = lang === 'ru' 
+                    ? `Не удалось загрузить ${activeDoc.path}`
+                    : `Failed to load ${activeDoc.path}`;
+                  throw new Error(errorMsg);
+                }
+                return response.text();
+              })
+              .then((markdown) => {
+                const { html, headings } = renderMarkdown(markdown);
+                content.innerHTML = html;
+                toc.innerHTML = renderToc(headings, lang);
+              })
+              .catch((error) => {
+                const errorTitle = lang === 'ru' ? 'Документ не загрузился.' : 'Document failed to load.';
+                const tocError = lang === 'ru' ? 'Оглавление недоступно.' : 'Contents unavailable.';
+                content.innerHTML = `
+                  <div class="empty-state">
+                    <p><strong>${errorTitle}</strong></p>
+                    <p>${escapeHtml(error.message)}</p>
+                  </div>
+                `;
+                toc.innerHTML = `<span class="muted">${tocError}</span>`;
+              });
           }
         });
       });
@@ -695,23 +729,46 @@
       const currentLang = detectLanguage();
       const currentTranslations = applyTranslations(currentLang);
 
-      const documents = {
-        readme: {
-          title: currentTranslations.documents.readme.title,
-          path: "README.md",
-          description: currentTranslations.documents.readme.description,
-        },
-        manifest: {
-          title: currentTranslations.documents.manifest.title,
-          path: "MANIFEST.md",
-          description: currentTranslations.documents.manifest.description,
-        },
-        system: {
-          title: currentTranslations.documents.system.title,
-          path: "docs/architecture/SYSTEM.md",
-          description: currentTranslations.documents.system.description,
-        },
-      };
+      function getDocumentPath(docKey, lang) {
+        const paths = {
+          readme: {
+            ru: "README.md",
+            en: "README.en.md"
+          },
+          manifest: {
+            ru: "MANIFEST.md",
+            en: "MANIFEST.en.md"
+          },
+          system: {
+            ru: "docs/architecture/SYSTEM.md",
+            en: "docs/architecture/SYSTEM.en.md"
+          }
+        };
+        return paths[docKey]?.[lang] || paths[docKey]?.ru || "README.md";
+      }
+
+      function getDocuments(lang) {
+        const t = translations[lang];
+        return {
+          readme: {
+            title: t.documents.readme.title,
+            path: getDocumentPath('readme', lang),
+            description: t.documents.readme.description,
+          },
+          manifest: {
+            title: t.documents.manifest.title,
+            path: getDocumentPath('manifest', lang),
+            description: t.documents.manifest.description,
+          },
+          system: {
+            title: t.documents.system.title,
+            path: getDocumentPath('system', lang),
+            description: t.documents.system.description,
+          },
+        };
+      }
+
+      const documents = getDocuments(currentLang);
 
       const docAliases = {
         "README.md": "readme",
@@ -757,7 +814,7 @@
         .then((markdown) => {
           const { html, headings } = renderMarkdown(markdown);
           content.innerHTML = html;
-          toc.innerHTML = renderToc(headings);
+          toc.innerHTML = renderToc(headings, currentLang);
         })
         .catch((error) => {
           const errorTitle = currentLang === 'ru' ? 'Документ не загрузился.' : 'Document failed to load.';
@@ -889,11 +946,12 @@
           .join("");
       }
 
-      function renderToc(headings) {
+      function renderToc(headings, lang) {
+        const useLang = lang || currentLang;
         const visibleHeadings = headings.filter((heading) => heading.level === 2 || heading.level === 3);
 
         if (!visibleHeadings.length) {
-          const noSections = currentLang === 'ru' ? 'В документе нет разделов для оглавления.' : 'No sections available for table of contents.';
+          const noSections = useLang === 'ru' ? 'В документе нет разделов для оглавления.' : 'No sections available for table of contents.';
           return `<span class="muted">${noSections}</span>`;
         }
 
