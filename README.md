@@ -45,12 +45,41 @@ Detailed architecture → [`docs/architecture/SYSTEM.md`](docs/architecture/SYST
 ## Roadmap
 
 ```
+● Исследование          ✅ Завершено
+● Проектирование        ✅ Завершено
+● Прототипирование      ← Мы здесь
+  ├─ Factual Memory     ✅ Реализовано (v0.1.0)
+  ├─ Experience Store   ⏳ В очереди
+  ├─ Identity Store     ⏳ В очереди
+  ├─ Reflection Engine  ⏳ В очереди
+  └─ Session Manager    ⏳ В очереди
+○ Первая реализация
+○ Интеграция
+○ Развитие
 ● Research              ✅ Complete
 ● Design                ✅ Complete
 ● Prototyping           ← We are here
 ○ First implementation
 ○ Integration
 ○ Evolution
+```
+
+### Готовые компоненты
+
+**✅ Factual Memory Adapter** ([PR #73](https://github.com/hleserg/atman/pull/73))  
+Минимальный слой для хранения проверяемых фактов без интерпретаций.
+
+- 📦 Модели: `FactRecord`, `Relation`
+- 🔌 Порт: `FactualMemory` с единым API
+- 💾 Адаптеры: InMemory + File (JSONL)
+- ✅ 41 unit-тест (все проходят)
+- 📚 [Документация](README_FACTUAL_MEMORY.md)
+
+```bash
+# Быстрый старт
+pip install -e .
+python3 -m atman.cli  # интерактивный режим
+pytest tests/ -v      # запуск тестов
 ```
 
 ---

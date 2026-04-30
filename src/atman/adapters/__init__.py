@@ -1,0 +1,3 @@
+"""
+Adapters для Atman.
+"""
