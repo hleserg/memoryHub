@@ -32,6 +32,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - name: Resolve issue context
         id: issue
@@ -201,6 +203,8 @@ jobs:
         id: push
         if: steps.cursor.outputs.exit_code == '0' && steps.result.outputs.needs_input == 'false' && steps.result.outputs.has_changes == 'true'
         env:
+          GH_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
           ISSUE_NUMBER: ${{ steps.issue.outputs.number }}
           RUN_ID: ${{ github.run_id }}
         run: |
@@ -213,6 +217,7 @@ jobs:
           git checkout -b "$branch_name"
           git add -A
           git commit -m "Implement issue #${ISSUE_NUMBER} with Cursor Agent"
+          git remote set-url origin "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
           git push -u origin "$branch_name"
 
           echo "branch_name=$branch_name" >> "$GITHUB_OUTPUT"
