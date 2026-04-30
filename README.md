@@ -36,7 +36,7 @@
 
 Под капотом — семь компонентов: хранилище живых переживаний, движок рефлексии, якорь идентичности, менеджер сессии, регуляция эмоционального фона. Atman управляет управляющими файлами агента напрямую — не через ручные правки, а как живой процесс который знает что туда писать и когда.
 
-Подробная архитектура → [`docs/architecture/SYSTEM.md`](docs/architecture/SYSTEM.md) · Манифест → [`MANIFEST.md`](MANIFEST.md)
+Подробная архитектура → [`docs/architecture/SYSTEM.md`](docs/architecture/SYSTEM.md) · Манифест → [`MANIFEST.md`](MANIFEST.md) · Стандарт разработки → [`docs/development/DEVELOPMENT_STANDARD.md`](docs/development/DEVELOPMENT_STANDARD.md)
 
 ---
 
