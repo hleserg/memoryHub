@@ -11,11 +11,6 @@ on:
         required: true
         type: number
 
-permissions:
-  contents: write
-  issues: write
-  pull-requests: write
-
 concurrency:
   group: cursor-issue-${{ github.event.issue.number || inputs.issue_number }}
   cancel-in-progress: false
@@ -28,6 +23,14 @@ jobs:
     name: Run Cursor Agent for issue
     if: github.event_name == 'workflow_dispatch' || github.event.label.name == 'cursor-ready'
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+    outputs:
+      issue_number: ${{ steps.issue.outputs.number }}
+      cursor_exit_code: ${{ steps.cursor.outputs.exit_code }}
+      needs_input: ${{ steps.result.outputs.needs_input }}
+      has_changes: ${{ steps.result.outputs.has_changes }}
 
     steps:
       - name: Checkout repository
@@ -142,11 +145,45 @@ jobs:
             echo "has_changes=false" >> "$GITHUB_OUTPUT"
           fi
 
+      - name: Prepare agent result artifact
+        run: |
+          set -euo pipefail
+
+          git add -A
+          git diff --cached --binary > /tmp/cursor_agent.patch
+          git reset
+
+      - name: Upload agent result artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: cursor-agent-result
+          path: |
+            /tmp/cursor_issue.json
+            /tmp/cursor_agent_output.txt
+            /tmp/cursor_agent.patch
+
+  finalize:
+    name: Finalize Cursor Agent result
+    needs: cursor-agent
+    if: always() && needs.cursor-agent.outputs.issue_number != ''
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      issues: write
+      pull-requests: write
+
+    steps:
+      - name: Download agent result artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: cursor-agent-result
+          path: /tmp/cursor-agent-result
+
       - name: Comment failure
-        if: steps.cursor.outputs.exit_code != '0'
+        if: needs.cursor-agent.outputs.cursor_exit_code != '0'
         env:
           GH_TOKEN: ${{ github.token }}
-          ISSUE_NUMBER: ${{ steps.issue.outputs.number }}
+          ISSUE_NUMBER: ${{ needs.cursor-agent.outputs.issue_number }}
           RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           set -euo pipefail
@@ -156,7 +193,7 @@ jobs:
           python3 - <<'PY' > /tmp/cursor_failure_comment.md
           from pathlib import Path
 
-          output = Path("/tmp/cursor_agent_output.txt").read_text(errors="replace")[-4000:]
+          output = Path("/tmp/cursor-agent-result/cursor_agent_output.txt").read_text(errors="replace")[-4000:]
           print("Cursor Agent завершился с ошибкой.")
           print()
           print(f"Run: {Path('/tmp/run_url').read_text().strip()}")
@@ -172,10 +209,10 @@ jobs:
           exit 1
 
       - name: Comment needs input
-        if: steps.cursor.outputs.exit_code == '0' && (steps.result.outputs.needs_input == 'true' || steps.result.outputs.has_changes == 'false')
+        if: needs.cursor-agent.outputs.cursor_exit_code == '0' && (needs.cursor-agent.outputs.needs_input == 'true' || needs.cursor-agent.outputs.has_changes == 'false')
         env:
           GH_TOKEN: ${{ github.token }}
-          ISSUE_NUMBER: ${{ steps.issue.outputs.number }}
+          ISSUE_NUMBER: ${{ needs.cursor-agent.outputs.issue_number }}
           RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           set -euo pipefail
@@ -185,7 +222,7 @@ jobs:
           python3 - <<'PY' > /tmp/cursor_needs_input_comment.md
           from pathlib import Path
 
-          output = Path("/tmp/cursor_agent_output.txt").read_text(errors="replace")[-4000:]
+          output = Path("/tmp/cursor-agent-result/cursor_agent_output.txt").read_text(errors="replace")[-4000:]
           print("Cursor Agent не внёс изменений и ждёт уточнений.")
           print()
           print(f"Run: {Path('/tmp/run_url').read_text().strip()}")
@@ -199,23 +236,29 @@ jobs:
 
           gh issue comment "$ISSUE_NUMBER" --body-file /tmp/cursor_needs_input_comment.md
 
+      - name: Checkout repository for trusted finalization
+        if: needs.cursor-agent.outputs.cursor_exit_code == '0' && needs.cursor-agent.outputs.needs_input == 'false' && needs.cursor-agent.outputs.has_changes == 'true'
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
       - name: Commit and push changes
         id: push
-        if: steps.cursor.outputs.exit_code == '0' && steps.result.outputs.needs_input == 'false' && steps.result.outputs.has_changes == 'true'
+        if: needs.cursor-agent.outputs.cursor_exit_code == '0' && needs.cursor-agent.outputs.needs_input == 'false' && needs.cursor-agent.outputs.has_changes == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
           GITHUB_REPOSITORY: ${{ github.repository }}
-          ISSUE_NUMBER: ${{ steps.issue.outputs.number }}
+          ISSUE_NUMBER: ${{ needs.cursor-agent.outputs.issue_number }}
           RUN_ID: ${{ github.run_id }}
         run: |
           set -euo pipefail
 
           branch_name="cursor/issue-${ISSUE_NUMBER}-${RUN_ID}"
 
+          git apply --index /tmp/cursor-agent-result/cursor_agent.patch
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git checkout -b "$branch_name"
-          git add -A
           git commit -m "Implement issue #${ISSUE_NUMBER} with Cursor Agent"
           git remote set-url origin "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
           git push -u origin "$branch_name"
@@ -226,20 +269,20 @@ jobs:
         if: steps.push.outputs.branch_name != ''
         env:
           GH_TOKEN: ${{ github.token }}
-          ISSUE_NUMBER: ${{ steps.issue.outputs.number }}
+          ISSUE_NUMBER: ${{ needs.cursor-agent.outputs.issue_number }}
           BRANCH_NAME: ${{ steps.push.outputs.branch_name }}
           RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           set -euo pipefail
 
-          title="$(jq -r '.title' /tmp/cursor_issue.json)"
+          title="$(jq -r '.title' /tmp/cursor-agent-result/cursor_issue.json)"
 
           python3 - <<'PY' > /tmp/cursor_pr_body.md
           from pathlib import Path
           import json
 
-          issue = json.loads(Path("/tmp/cursor_issue.json").read_text())
-          output = Path("/tmp/cursor_agent_output.txt").read_text(errors="replace")[-4000:]
+          issue = json.loads(Path("/tmp/cursor-agent-result/cursor_issue.json").read_text())
+          output = Path("/tmp/cursor-agent-result/cursor_agent_output.txt").read_text(errors="replace")[-4000:]
 
           print("## Что сделано")
           print()
