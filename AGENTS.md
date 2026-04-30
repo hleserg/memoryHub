@@ -2,14 +2,16 @@
 
 ## Overview
 
-Atman — документационный проект, описывающий архитектуру психологического слоя для AI-агента. Репозиторий находится на стадии **прототипирования** и содержит только документацию (markdown-файлы, изображения, шаблоны).
-
-Исполняемого кода, зависимостей, тестов и сборочных конфигураций пока нет.
+Atman — проект психологического слоя для AI-агента, находящийся на стадии **прототипирования**. Содержит документацию (markdown-файлы, изображения, шаблоны) и первый реализованный компонент — **Factual Memory Adapter** (Python-пакет `atman`).
 
 ## Cursor Cloud specific instructions
 
 ### Структура репозитория
 
+- `src/atman/` — Python-пакет (модели, порты, адаптеры, CLI)
+- `tests/` — юнит-тесты (pytest)
+- `src/demo.py` — демо-скрипт
+- `pyproject.toml` — конфигурация проекта и зависимости
 - `MANIFEST.md` — философский манифест проекта
 - `docs/architecture/SYSTEM.md` — подробная архитектура системы (7 компонентов, режимы работы, протоколы)
 - `docs/research/` — исследования (mem0, интеграции)
@@ -19,17 +21,16 @@ Atman — документационный проект, описывающий 
 
 ### Lint / Test / Build / Run
 
-На текущем этапе в репозитории нет:
-- исполняемого кода (Python, JS, и т.д.)
-- файлов зависимостей (`pyproject.toml`, `package.json`, `requirements.txt`)
-- тестов или линтеров
-- CI/CD workflows
-
-Работа с репозиторием ограничена редактированием markdown-документации.
+- **Python ≥ 3.12** required (see `pyproject.toml`)
+- **Install**: `pip install -e ".[dev]"`
+- **Tests**: `pytest tests/ -v` (49 tests, all passing)
+- **CLI (REPL)**: `python3 -m atman.cli`
+- **Demo**: `python3 src/demo.py`
+- No external services (databases, Docker, etc.) are required — storage is in-memory or file-based (JSONL)
+- No linter is configured yet; no CI/CD workflows
 
 ### Планируемый стек (из архитектурных документов)
 
-Когда код появится, проект будет использовать:
 - Python ≥ 3.12, менеджер пакетов `uv`, build-система Hatchling
 - PydanticAI + Anthropic (Claude), mem0, APScheduler
 - Детали см. в `docs/architecture/SYSTEM.md`
