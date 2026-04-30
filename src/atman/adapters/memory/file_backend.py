@@ -8,8 +8,11 @@ File-based адаптер для Factual Memory.
 import json
 import os
 import tempfile
+from contextlib import contextmanager
 from pathlib import Path
 from uuid import UUID
+
+import fcntl
 
 from atman.core.models import FactRecord, Relation
 from atman.core.ports import FactualMemory
@@ -31,21 +34,41 @@ class FileBackend(FactualMemory):
             filepath: Путь к JSONL файлу для хранения фактов
         """
         self.filepath = Path(filepath)
+        self._lockpath = self.filepath.with_name(f".{self.filepath.name}.lock")
         self._facts: dict[UUID, FactRecord] = {}
         self._load_facts()
     
     def _load_facts(self):
         """Загружает факты из файла в память."""
+        self._facts = self._read_facts_from_disk()
+    
+    def _read_facts_from_disk(self) -> dict[UUID, FactRecord]:
+        """Читает актуальные факты с диска без изменения состояния backend."""
         if not self.filepath.exists():
             self.filepath.parent.mkdir(parents=True, exist_ok=True)
-            return
+            return {}
         
+        facts: dict[UUID, FactRecord] = {}
         with open(self.filepath, 'r', encoding='utf-8') as f:
             for line in f:
                 if line.strip():
                     data = json.loads(line)
                     fact = FactRecord.model_validate(data)
-                    self._facts[fact.id] = fact
+                    facts[fact.id] = fact
+        
+        return facts
+    
+    @contextmanager
+    def _storage_lock(self):
+        """Сериализует операции read-modify-write между экземплярами FileBackend."""
+        self.filepath.parent.mkdir(parents=True, exist_ok=True)
+        with open(self._lockpath, 'a', encoding='utf-8') as lock_file:
+            self._lockpath.chmod(0o600)
+            fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
+            try:
+                yield
+            finally:
+                fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
     
     def _save_facts(self, facts: dict[UUID, FactRecord] | None = None):
         """Сохраняет все факты в файл атомарной заменой."""
@@ -79,10 +102,11 @@ class FileBackend(FactualMemory):
     def add_fact(self, record: FactRecord) -> FactRecord:
         """Добавляет факт и сохраняет в файл."""
         fact_copy = record.model_copy(deep=True)
-        updated_facts = dict(self._facts)
-        updated_facts[fact_copy.id] = fact_copy
-        self._save_facts(updated_facts)
-        self._facts = updated_facts
+        with self._storage_lock():
+            updated_facts = self._read_facts_from_disk()
+            updated_facts[fact_copy.id] = fact_copy
+            self._save_facts(updated_facts)
+            self._facts = updated_facts
         return fact_copy.model_copy(deep=True)
     
     def get_fact(self, fact_id: UUID) -> FactRecord | None:
@@ -120,24 +144,26 @@ class FileBackend(FactualMemory):
     
     def link(self, source_id: UUID, target_id: UUID, relation_type: str) -> bool:
         """Создает связь между фактами и сохраняет в файл."""
-        source_fact = self._facts.get(source_id)
-        target_fact = self._facts.get(target_id)
-        
-        if not source_fact or not target_fact:
-            return False
-        
-        relation = Relation(
-            target_id=target_id,
-            relation_type=relation_type.strip().lower()
-        )
-        
-        updated_source = source_fact.model_copy(deep=True)
-        updated_source.relations.append(relation)
-        updated_facts = dict(self._facts)
-        updated_facts[source_id] = updated_source
-        
-        self._save_facts(updated_facts)
-        self._facts = updated_facts
+        with self._storage_lock():
+            updated_facts = self._read_facts_from_disk()
+            source_fact = updated_facts.get(source_id)
+            target_fact = updated_facts.get(target_id)
+            
+            if not source_fact or not target_fact:
+                self._facts = updated_facts
+                return False
+            
+            relation = Relation(
+                target_id=target_id,
+                relation_type=relation_type.strip().lower()
+            )
+            
+            updated_source = source_fact.model_copy(deep=True)
+            updated_source.relations.append(relation)
+            updated_facts[source_id] = updated_source
+            
+            self._save_facts(updated_facts)
+            self._facts = updated_facts
         return True
     
     def list_recent(self, limit: int = 10) -> list[FactRecord]:

@@ -15,11 +15,14 @@ def temp_file():
     """Фикстура с временным файлом."""
     with NamedTemporaryFile(mode='w', suffix='.jsonl', delete=False) as f:
         filepath = Path(f.name)
+    lockpath = filepath.with_name(f".{filepath.name}.lock")
     
     yield filepath
     
     if filepath.exists():
         filepath.unlink()
+    if lockpath.exists():
+        lockpath.unlink()
 
 
 @pytest.fixture
@@ -188,3 +191,36 @@ def test_save_creates_new_file_with_private_permissions(temp_file):
     backend.add_fact(FactRecord(content="Новый приватный факт", source="test"))
 
     assert (temp_file.stat().st_mode & 0o777) == 0o600
+
+
+def test_multiple_instances_do_not_lose_added_facts(temp_file):
+    """Два экземпляра не должны перетирать факты друг друга при сохранении."""
+    backend1 = FileBackend(temp_file)
+    backend2 = FileBackend(temp_file)
+
+    fact1 = backend1.add_fact(FactRecord(content="Факт из первого backend", source="test"))
+    fact2 = backend2.add_fact(FactRecord(content="Факт из второго backend", source="test"))
+
+    reloaded = FileBackend(temp_file)
+    assert reloaded.count() == 2
+    assert reloaded.get_fact(fact1.id).content == fact1.content
+    assert reloaded.get_fact(fact2.id).content == fact2.content
+
+
+def test_multiple_instances_do_not_lose_links(temp_file):
+    """Связь из одного экземпляра не должна удалять факт из другого экземпляра."""
+    backend1 = FileBackend(temp_file)
+    backend2 = FileBackend(temp_file)
+
+    fact1 = backend1.add_fact(FactRecord(content="Исходный факт", source="test"))
+    fact2 = backend2.add_fact(FactRecord(content="Целевой факт", source="test"))
+
+    assert backend1.link(fact1.id, fact2.id, "related")
+
+    reloaded = FileBackend(temp_file)
+    assert reloaded.count() == 2
+    assert reloaded.get_fact(fact2.id).content == fact2.content
+
+    linked_fact = reloaded.get_fact(fact1.id)
+    assert len(linked_fact.relations) == 1
+    assert linked_fact.relations[0].target_id == fact2.id
