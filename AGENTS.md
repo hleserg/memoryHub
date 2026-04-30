@@ -54,3 +54,27 @@ Atman — документационный проект, описывающий 
 
 - PR-шаблон находится в `.github/pull_request_template.md` — используйте его при создании PR.
 - Нет pre-commit хуков, lint-staged, или CI workflows.
+
+## Local Agent Instructions
+
+**For local Cursor agents** (not cloud agents), read the master prompt before starting any work:
+
+📋 **Master Prompt**: [`.cursor/local-agent-master-prompt.md`](.cursor/local-agent-master-prompt.md)
+
+The master prompt provides:
+- Complete workflow and standards
+- Links to all essential documentation
+- Terminology discipline rules
+- Architecture boundaries (Core vs Adapters)
+- Definition of Done checklist
+- Forbidden actions and common pitfalls
+
+**Why separate from cloud instructions?**
+- Cloud agents get `AGENTS.md` injected automatically
+- Local agents need explicit guidance to follow the same standards
+- Master prompt ensures local agents don't "go rogue" and follow project rules
+
+**Before starting work, always**:
+1. Read `.cursor/local-agent-master-prompt.md`
+2. Review `docs/development/DEVELOPMENT_STANDARD.md`
+3. Check relevant sections in `docs/architecture/SYSTEM.md`
