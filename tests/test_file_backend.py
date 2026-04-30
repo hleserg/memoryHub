@@ -168,3 +168,23 @@ def test_failed_save_keeps_existing_file_and_memory_state(temp_file):
 
     reloaded = FileBackend(temp_file)
     assert reloaded.get_fact(original.id).content == "Безопасный факт"
+
+
+def test_save_preserves_existing_file_permissions(temp_file):
+    """Атомарная замена не должна раскрывать приватный файл."""
+    temp_file.chmod(0o600)
+    backend = FileBackend(temp_file)
+
+    backend.add_fact(FactRecord(content="Приватный факт", source="test"))
+
+    assert (temp_file.stat().st_mode & 0o777) == 0o600
+
+
+def test_save_creates_new_file_with_private_permissions(temp_file):
+    """Новый файл хранилища должен создаваться закрытым по умолчанию."""
+    temp_file.unlink()
+    backend = FileBackend(temp_file)
+
+    backend.add_fact(FactRecord(content="Новый приватный факт", source="test"))
+
+    assert (temp_file.stat().st_mode & 0o777) == 0o600

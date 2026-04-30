@@ -7,6 +7,7 @@ File-based адаптер для Factual Memory.
 
 import json
 import os
+import tempfile
 from pathlib import Path
 from uuid import UUID
 
@@ -50,16 +51,26 @@ class FileBackend(FactualMemory):
         """Сохраняет все факты в файл атомарной заменой."""
         facts_to_save = facts if facts is not None else self._facts
         self.filepath.parent.mkdir(parents=True, exist_ok=True)
-        temp_path = self.filepath.with_name(f".{self.filepath.name}.tmp")
+        file_mode = self.filepath.stat().st_mode & 0o777 if self.filepath.exists() else 0o600
+        temp_file = tempfile.NamedTemporaryFile(
+            mode='w',
+            encoding='utf-8',
+            dir=self.filepath.parent,
+            prefix=f".{self.filepath.name}.",
+            suffix=".tmp",
+            delete=False,
+        )
+        temp_path = Path(temp_file.name)
         
         try:
-            with open(temp_path, 'w', encoding='utf-8') as f:
+            with temp_file as f:
                 for fact in facts_to_save.values():
                     json_line = fact.model_dump_json()
                     f.write(json_line + '\n')
                 f.flush()
                 os.fsync(f.fileno())
             
+            temp_path.chmod(file_mode)
             temp_path.replace(self.filepath)
         finally:
             if temp_path.exists():
