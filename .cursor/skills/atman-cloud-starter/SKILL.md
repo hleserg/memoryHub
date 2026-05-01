@@ -9,8 +9,8 @@ Use this skill when a Cloud agent needs to run, test, or extend this repository.
 
 ## 1. Reality check first
 
-- Read `AGENTS.md` for the current truth: Python package, tests, and quality gates (`make check`). For **CLI and demo** work, follow **`AGENTS.md` → *Пользовательский вывод в терминале (Rich)***: use **Rich** via **`atman.term`**, not ad-hoc `print()` for user-visible console output.
-- Runnable code: `pyproject.toml`, `src/atman/`, `tests/`, `src/demo.py`, `src/demo_experience_store.py`, plus optional shell helpers if present in `src/`.
+- Read `AGENTS.md` for the current truth: Python package, tests, and quality gates (`make check`). For **CLI and demo** work, follow **`AGENTS.md` → *Пользовательский вывод в терминале (Rich)***: use **Rich** via **`atman.term`** (`src/atman/term.py`), not ad-hoc `print()` for user-visible console output. Extend **`demo_pace()`** in new demos when steps should breathe; **`make demo-factual`** / **`make demo-experience`** set **`ATMAN_DEMO_PACE=1`** by default; use **`make demo-factual-fast`** / **`make demo-experience-fast`** (or `ATMAN_DEMO_PACE=off`) for instant output. Direct `python3 src/demo*.py` has no pacing unless that env var is set.
+- Runnable code: `pyproject.toml`, `src/atman/` (including `term.py`), `tests/`, `src/demo.py`, `src/demo_experience_store.py`, plus optional shell helpers if present in `src/`.
 - Project goal: Atman is a psychological layer for AI agents, not a task runner. It is meant to preserve identity, lived experience, reflection, skills, and narrative continuity across sessions.
 - Implemented areas today: Factual Memory Adapter; Experience Store (WP02) with JSONL/in-memory adapters, service, tests, and guides in `docs/features/experience-store/README.md` (+ `README-ru.md`).
 - Primary documentation language is English. Keep paired Russian docs in sync only for paired files listed in `AGENTS.md`: `README.md` / `README-ru.md`, `docs/architecture/SYSTEM.md` / `docs/architecture/SYSTEM-ru.md`, `MANIFEST.md` / `MANIFEST-ru.md`.
@@ -111,11 +111,13 @@ exit
 Non-interactive smoke checks:
 
 ```bash
-make demo-factual
+make demo-factual          # short pauses between steps (default)
 make demo-experience
+make demo-factual-fast     # no pauses — better for CI or logs
+make demo-experience-fast
 ```
 
-Factual Memory: `docs/features/factual-memory/README.md` (Russian: `README-ru.md`); use `make demo-factual` or `python3 src/demo.py`.
+Factual Memory: `docs/features/factual-memory/README.md` (Russian: `README-ru.md`); use `make demo-factual` or `python3 src/demo.py` (latter has no pace unless `ATMAN_DEMO_PACE` is set).
 
 Experience Store: `docs/features/experience-store/README.md` (Russian: `README-ru.md`); interactive CLI persists to `~/.atman/experiences.jsonl` by default. Prefer `make demo-experience` or `python3 src/demo_experience_store.py` for a clean, reproducible demo.
 

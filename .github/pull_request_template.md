@@ -6,7 +6,7 @@
 
 Заполните, если PR меняет поведение для пользователя, CLI или добавляет существенную фичу (см. *Definition of Demo* в `docs/development/DEVELOPMENT_STANDARD.md`). Иначе: **N/A** и одна фраза почему.
 
-- **Команда(ы):** (например `make demo-experience`, `python3 src/demo.py`, `pytest tests/test_….py -q`)
+- **Команда(ы):** (например `make demo-experience`, `make demo-experience-fast` без пауз, `python3 src/demo.py`, `pytest tests/test_….py -q`)
 - **Ожидаемый результат:** что должно появиться в выводе / в файлах (кратко)
 - **Фикстуры / данные:** пути к `fixtures/` или шаги подготовки
 - **Интерактивный CLI:** если демо только через REPL (`atman-experience`), укажите 2–5 строк для копипаста

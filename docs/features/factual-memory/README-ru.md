@@ -14,6 +14,8 @@ make demo-factual
 
 Эквивалент: `python3 src/demo.py` — демонстрация InMemory и FileBackend на файле `/tmp/atman_demo_facts.jsonl` (файл удаляется в конце).
 
+`make demo-factual` по умолчанию делает короткие паузы между шагами (`ATMAN_DEMO_PACE=1`). Мгновенный вывод: `make demo-factual-fast` или `ATMAN_DEMO_PACE=off python3 src/demo.py`. Вывод в консоль — **Rich** через `atman.term` (см. **`AGENTS.md`**).
+
 Интерактивный CLI (по умолчанию `~/.atman/facts.jsonl`): `python3 -m atman.cli` или установленная команда `atman`.
 
 ## Обзор

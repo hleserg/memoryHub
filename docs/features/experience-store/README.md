@@ -14,6 +14,8 @@ make demo-experience
 
 Equivalent: `python3 src/demo_experience_store.py` or `uv run python src/demo_experience_store.py`. Uses a **temporary** JSONL file and [`fixtures/experience1_competence_challenge.json`](../../../fixtures/experience1_competence_challenge.json); does not modify `~/.atman`.
 
+`make demo-experience` sets short pauses between steps by default. For instant output: `make demo-experience-fast` or `ATMAN_DEMO_PACE=off python3 src/demo_experience_store.py`. Console UX uses **Rich** via `atman.term` (see **`AGENTS.md`**).
+
 For interactive CLI (persists to `~/.atman/experiences.jsonl` by default): `atman-experience`.
 
 ## Overview
