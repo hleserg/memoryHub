@@ -13,7 +13,7 @@
 |--------|-------|
 | **Total Files** | 20 files |
 | **Markdown Files** | 19 documents |
-| **Total Lines** | ~5,100 lines |
+| **Total Lines** | ~4,050 lines |
 | **Patterns** | 5 core patterns |
 | **Guides** | 2 supporting guides |
 | **Templates** | 7 ready-to-use |
@@ -34,29 +34,29 @@
 - ✅ `STATS.md` — This file
 
 ### Patterns (5 files)
-- ✅ `patterns/01-agent-rules-structure.md` (342 lines)
-- ✅ `patterns/02-issue-to-pr-workflow.md` (437 lines)
-- ✅ `patterns/03-strategic-review.md` (525 lines)
-- ✅ `patterns/04-environment-isolation.md` (564 lines)
-- ✅ `patterns/05-context-handoff.md` (592 lines)
+- ✅ `patterns/01-agent-rules-structure.md` (254 lines)
+- ✅ `patterns/02-issue-to-pr-workflow.md` (300 lines)
+- ✅ `patterns/03-strategic-review.md` (354 lines)
+- ✅ `patterns/04-environment-isolation.md` (463 lines)
+- ✅ `patterns/05-context-handoff.md` (482 lines)
 
-**Total Pattern Lines**: 2,460 lines
+**Total Pattern Lines**: 1,853 lines
 
 ### Guides (2 files)
-- ✅ `guides/definition-of-done.md` (620 lines)
-- ✅ `guides/failure-modes.md` (559 lines)
+- ✅ `guides/definition-of-done.md` (375 lines)
+- ✅ `guides/failure-modes.md` (571 lines)
 
-**Total Guide Lines**: 1,179 lines
+**Total Guide Lines**: 946 lines
 
 ### Templates (7 files)
-- ✅ `templates/AGENTS.md` (173 lines)
-- ✅ `templates/DEVELOPMENT_STANDARD.md` (569 lines)
-- ✅ `templates/pr-template.md` (151 lines)
-- ✅ `templates/issue-templates/feature_request.md` (142 lines)
-- ✅ `templates/issue-templates/bug_report.md` (131 lines)
-- ✅ `templates/issue-templates/work_package.md` (246 lines)
+- ✅ `templates/AGENTS.md` (179 lines)
+- ✅ `templates/DEVELOPMENT_STANDARD.md` (453 lines)
+- ✅ `templates/pr-template.md` (146 lines)
+- ✅ `templates/issue-templates/feature_request.md` (118 lines)
+- ✅ `templates/issue-templates/bug_report.md` (133 lines)
+- ✅ `templates/issue-templates/work_package.md` (221 lines)
 
-**Total Template Lines**: 1,412 lines
+**Total Template Lines**: 1,250 lines
 
 ---
 
