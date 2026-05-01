@@ -27,6 +27,8 @@ dev = [
 [project.scripts]
 atman = "atman.cli:main"
 atman-experience = "atman.cli_experience:main"
+atman-dev = "atman.tui.app:main"
+devui = "atman.tui.app:main"
 
 [build-system]
 requires = ["hatchling"]
@@ -43,7 +45,15 @@ asyncio_mode = "auto"
 [tool.coverage.run]
 source = ["atman"]
 branch = true
-omit = ["src/atman/cli.py", "src/atman/cli_experience.py"]
+omit = [
+    "src/atman/cli.py",
+    "src/atman/cli_experience.py",
+    "src/atman/tui/app.py",
+    "src/atman/tui/tests_tab.py",
+    "src/atman/tui/features_tab.py",
+    "src/atman/tui/docs_tab.py",
+    "src/atman/tui/runner.py",
+]
 
 [tool.coverage.report]
 fail_under = 90
