@@ -2,7 +2,6 @@
 Core models для Atman Factual Memory Adapter.
 """
 
-from atman.core.models.fact import FactRecord, Relation
 from atman.core.models.experience import (
     ContextHalo,
     EmotionalDepth,
@@ -12,15 +11,16 @@ from atman.core.models.experience import (
     ReframingNote,
     SessionExperience,
 )
+from atman.core.models.fact import FactRecord, Relation
 
 __all__ = [
-    "FactRecord",
-    "Relation",
     "ContextHalo",
     "EmotionalDepth",
     "ExperienceRecord",
+    "FactRecord",
     "FeltSense",
     "KeyMoment",
     "ReframingNote",
+    "Relation",
     "SessionExperience",
 ]

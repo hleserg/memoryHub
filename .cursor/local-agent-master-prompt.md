@@ -46,7 +46,11 @@ These documents define the single source of truth for:
 - Commit messages: English only
 - Internal discussions: any language, but deliverables in English
 
-### 2. Terminology Discipline
+### 2. Terminal UX (Rich)
+
+**User-facing console output** (interactive CLIs, `src/demo*.py`, `make demo-*`, any new labeled/stepped terminal UX) must use **Rich**, reusing and extending **`src/atman/term.py`** (`print_banner`, status helpers, tables, `print_help_text` with markup disabled for help strings). Do not add raw `print()`-based demo chrome when `atman.term` already covers the pattern. For demos, call **`demo_pace()`** between major output blocks when optional pacing helps; enable with env **`ATMAN_DEMO_PACE`** (see `AGENTS.md`). Keep **Core and storage adapters** free of Rich; presentation stays at CLI/demo boundary. See **`AGENTS.md` → *Пользовательский вывод в терминале (Rich)***.
+
+### 3. Terminology Discipline
 
 **Use canonical terms** from `DEVELOPMENT_STANDARD.md`:
 - Fact, Experience, Reflection, Identity, Narrative, Eigenstate, Uncertainty, Skill, Session, PersonalitySnapshot
@@ -63,7 +67,7 @@ These documents define the single source of truth for:
 - Narrative ≠ Summary
 - Adapter ≠ Core
 
-### 3. Architecture Boundaries
+### 4. Architecture Boundaries
 
 **Core** = Domain logic independent of external systems (mem0, LLM providers, file formats)
 
@@ -75,7 +79,7 @@ Before modifying any component, identify:
 - What persistent structures are affected?
 - Is there a schema version?
 
-### 4. Current Repository State
+### 5. Current Repository State
 
 **What exists**:
 - Markdown documentation (architecture, research, ideas)
@@ -90,7 +94,7 @@ Before modifying any component, identify:
 - GitHub-hosted CI (checks run locally: `make check`, pre-commit)
 - Comprehensive test coverage (target remains high; see `AGENTS.md`)
 
-### 5. Development Workflow
+### 6. Development Workflow
 
 When adding/modifying code:
 
@@ -102,7 +106,7 @@ When adding/modifying code:
 6. **Local-first**: Must run locally without external services
 7. **Degradation**: Document what happens when dependencies are unavailable
 
-### 6. Definition of Done
+### 7. Definition of Done
 
 Before considering work complete, verify:
 
@@ -117,18 +121,18 @@ Before considering work complete, verify:
 - [ ] Does not add mandatory runtime services without ADR
 - [ ] Core is not directly coupled to mem0/OpenClaw/specific LLM
 
-### 6.1 Definition of Demo (substantive features)
+### 7.1 Definition of Demo (substantive features)
 
 If the change adds **user-visible behavior**, a **new CLI command**, or a **work-package-sized feature**, also verify (see `DEVELOPMENT_STANDARD.md`, *Definition of Demo*):
 
 - [ ] Feature narrative updated (`docs/development/work-packages/` and/or `docs/features/<slug>/README.md` + `README-ru.md`, e.g. `docs/features/experience-store/`)
-- [ ] Reproducible demo: `make demo-*` or `python3 src/demo_*.py` (or documented non-interactive commands)
+- [ ] Reproducible demo: `make demo-*` or `python3 src/demo_*.py` (or documented non-interactive commands); demo/CLI console output uses **Rich** / **`atman.term`**
 - [ ] Fixtures under `fixtures/` when sample data is required
 - [ ] PR template section **Как воспроизвести** filled in (or N/A with reason)
 
 Cloud agents read `AGENTS.md` and the PR template — keep demo instructions there, not only in this file.
 
-### 7. Documentation Rules
+### 8. Documentation Rules
 
 **When editing documentation**:
 - Keep structure consistent with existing docs
@@ -143,7 +147,7 @@ Cloud agents read `AGENTS.md` and the PR template — keep demo instructions the
 - Explain relationships to existing concepts
 - Provide examples
 
-### 8. Git & PR Workflow
+### 9. Git & PR Workflow
 
 **Branches**:
 - Work on feature branches, not `main`
@@ -160,7 +164,7 @@ Cloud agents read `AGENTS.md` and the PR template — keep demo instructions the
 - Reference related issues
 - Self-review before requesting review
 
-### 9. Forbidden Actions
+### 10. Forbidden Actions
 
 **Do NOT**:
 - ❌ Create new domain terms without adding them to `DEVELOPMENT_STANDARD.md`
@@ -172,7 +176,7 @@ Cloud agents read `AGENTS.md` and the PR template — keep demo instructions the
 - ❌ Store identity/principles in `.env` (use proper StateStore)
 - ❌ Hide degraded mode as successful result
 
-### 10. Priority Order
+### 11. Priority Order
 
 Follow the implementation order from `DEVELOPMENT_STANDARD.md` section 23:
 

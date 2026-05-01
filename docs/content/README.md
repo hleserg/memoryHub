@@ -70,7 +70,7 @@ Minimal layer for storing verifiable facts without interpretations.
 - 💾 Adapters: InMemory + File (JSONL)
 - ✅ Unit tests (see `pytest tests/`)
 - 📚 [Guide (EN)](docs/features/factual-memory/README.md) · [RU](docs/features/factual-memory/README-ru.md)
-- ▶️ Demo: `make demo-factual` or `python3 src/demo.py`
+- ▶️ Demo: `make demo-factual` or `python3 src/demo.py` (`make demo-factual-fast` for instant output; `make` sets pacing by default)
 
 **✅ Experience Store** (work package 02)  
 First-hand lived experience: `SessionExperience`, `KeyMoment`, salience decay, reframing notes — no retroactive emotional “guessing”.
@@ -78,7 +78,7 @@ First-hand lived experience: `SessionExperience`, `KeyMoment`, salience decay, r
 - 📦 Domain models + `ExperienceService` + JSONL / in-memory adapters
 - 💻 CLI: `atman-experience`
 - 📚 [Guide (EN)](docs/features/experience-store/README.md) · [RU](docs/features/experience-store/README-ru.md)
-- ▶️ Demo: `make demo-experience` or `python3 src/demo_experience_store.py`
+- ▶️ Demo: `make demo-experience` or `python3 src/demo_experience_store.py` (`make demo-experience-fast` for instant output)
 
 ```bash
 # Quick start (install + interactive factual CLI)

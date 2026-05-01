@@ -14,6 +14,8 @@ make demo-factual
 
 Equivalent: `python3 src/demo.py`. Runs in-memory and file-backed (`/tmp/atman_demo_facts.jsonl`) demos; the temp file is removed at the end. Does not use `~/.atman` for the file demo.
 
+`make demo-factual` sets short pauses between steps by default (`ATMAN_DEMO_PACE=1`). For instant output: `make demo-factual-fast` or `ATMAN_DEMO_PACE=off python3 src/demo.py`. Console UX uses **Rich** via `atman.term` (see **`AGENTS.md`**).
+
 Interactive CLI (default facts file `~/.atman/facts.jsonl`): `python3 -m atman.cli` or console script `atman` if installed.
 
 ## Overview

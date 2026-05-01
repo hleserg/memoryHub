@@ -70,7 +70,7 @@
 - 💾 Адаптеры: InMemory + File (JSONL)
 - ✅ Юнит-тесты (`pytest tests/`)
 - 📚 [Руководство (RU)](docs/features/factual-memory/README-ru.md) · [EN](docs/features/factual-memory/README.md)
-- ▶️ Демо: `make demo-factual` или `python3 src/demo.py`
+- ▶️ Демо: `make demo-factual` или `python3 src/demo.py` (мгновенно: `make demo-factual-fast`; у `make` по умолчанию короткие паузы между шагами)
 
 **✅ Experience Store** (рабочий пакет 02)  
 Пережитый опыт от первого лица: `SessionExperience`, `KeyMoment`, затухание salience, reframing — без ретроспективного «угадывания» эмоций.
@@ -78,7 +78,7 @@
 - 📦 Модели, `ExperienceService`, адаптеры JSONL и in-memory
 - 💻 CLI: `atman-experience`
 - 📚 [Руководство (RU)](docs/features/experience-store/README-ru.md) · [EN](docs/features/experience-store/README.md)
-- ▶️ Демо: `make demo-experience` или `python3 src/demo_experience_store.py`
+- ▶️ Демо: `make demo-experience` или `python3 src/demo_experience_store.py` (мгновенно: `make demo-experience-fast`)
 
 ```bash
 # Быстрый старт (установка + интерактивный CLI фактов)
