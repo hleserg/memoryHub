@@ -1,7 +1,11 @@
 """
-StateStore port - interface for experience storage.
+StateStore port - interface for state storage.
 
-Defines the contract for all implementations of experience storage.
+Defines the contract for all implementations of state storage:
+- Experience storage
+- Identity storage
+- Narrative storage
+
 Core only sees this interface, not the implementation details.
 """
 
@@ -9,7 +13,14 @@ from abc import ABC, abstractmethod
 from datetime import datetime
 from uuid import UUID
 
-from atman.core.models import ExperienceRecord, ReframingNote
+from atman.core.models import (
+    Eigenstate,
+    ExperienceRecord,
+    Identity,
+    IdentitySnapshot,
+    NarrativeDocument,
+    ReframingNote,
+)
 
 
 class ExperienceQuery:
@@ -157,5 +168,153 @@ class StateStore(ABC):
 
         Returns:
             list[ExperienceRecord]: List of recent experiences, newest first
+        """
+        pass
+
+    # Identity Store operations
+
+    @abstractmethod
+    def load_identity(self, agent_id: UUID) -> Identity | None:
+        """
+        Load the current identity for an agent.
+
+        Args:
+            agent_id: UUID of the agent
+
+        Returns:
+            Identity | None: Current identity if exists, None otherwise
+        """
+        pass
+
+    @abstractmethod
+    def save_identity(self, identity: Identity, expected_version: str | None = None) -> Identity:
+        """
+        Save identity state.
+
+        Args:
+            identity: Identity to save
+            expected_version: Expected schema version for optimistic locking
+
+        Returns:
+            Identity: Saved identity
+
+        Raises:
+            ValueError: If version mismatch (lost update)
+        """
+        pass
+
+    @abstractmethod
+    def create_identity_snapshot(self, snapshot: IdentitySnapshot) -> IdentitySnapshot:
+        """
+        Create a snapshot of identity at a point in time.
+
+        Args:
+            snapshot: Snapshot to store
+
+        Returns:
+            IdentitySnapshot: Stored snapshot
+        """
+        pass
+
+    @abstractmethod
+    def list_identity_snapshots(self, identity_id: UUID, limit: int = 10) -> list[IdentitySnapshot]:
+        """
+        List identity snapshots.
+
+        Args:
+            identity_id: UUID of the identity
+            limit: Maximum number of snapshots to return
+
+        Returns:
+            list[IdentitySnapshot]: List of snapshots, newest first
+        """
+        pass
+
+    # Narrative Store operations
+
+    @abstractmethod
+    def load_narrative(self, identity_id: UUID) -> NarrativeDocument | None:
+        """
+        Load the current narrative for an identity.
+
+        Args:
+            identity_id: UUID of the identity
+
+        Returns:
+            NarrativeDocument | None: Current narrative if exists, None otherwise
+        """
+        pass
+
+    @abstractmethod
+    def save_narrative(
+        self, narrative: NarrativeDocument, expected_version: str | None = None
+    ) -> NarrativeDocument:
+        """
+        Save narrative document.
+
+        Args:
+            narrative: Narrative to save
+            expected_version: Expected schema version for optimistic locking
+
+        Returns:
+            NarrativeDocument: Saved narrative
+
+        Raises:
+            ValueError: If version mismatch (lost update)
+        """
+        pass
+
+    @abstractmethod
+    def archive_narrative(self, narrative_id: UUID, reason: str) -> None:
+        """
+        Archive an old narrative before replacing it.
+
+        Args:
+            narrative_id: UUID of the narrative to archive
+            reason: Reason for archiving
+        """
+        pass
+
+    @abstractmethod
+    def list_archived_narratives(
+        self, identity_id: UUID, limit: int = 10
+    ) -> list[tuple[NarrativeDocument, str, datetime]]:
+        """
+        List archived narratives.
+
+        Args:
+            identity_id: UUID of the identity
+            limit: Maximum number to return
+
+        Returns:
+            list[tuple[NarrativeDocument, reason, archived_at]]: Archived narratives with metadata
+        """
+        pass
+
+    # Eigenstate operations
+
+    @abstractmethod
+    def save_eigenstate(self, eigenstate: Eigenstate) -> Eigenstate:
+        """
+        Save eigenstate from session end.
+
+        Args:
+            eigenstate: Eigenstate to save
+
+        Returns:
+            Eigenstate: Saved eigenstate
+        """
+        pass
+
+    @abstractmethod
+    def load_latest_eigenstate(self, session_id: UUID | None = None) -> Eigenstate | None:
+        """
+        Load the most recent eigenstate.
+
+        Args:
+            session_id: Optional session ID to load eigenstate for specific session
+
+        Returns:
+            Eigenstate | None: Latest eigenstate if exists, None otherwise
         """
         pass

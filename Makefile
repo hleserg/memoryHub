@@ -1,4 +1,4 @@
-.PHONY: lint format typecheck security test test-fast audit check all sync-site-content docs-preview demo-experience demo-factual demo-experience-fast demo-factual-fast demo-experience-paced demo-factual-paced
+.PHONY: lint format typecheck security test test-fast audit check all sync-site-content docs-preview demo-experience demo-factual demo-identity demo-experience-fast demo-factual-fast demo-identity-fast demo-experience-paced demo-factual-paced demo-identity-paced
 
 lint:
 	ruff check src/ tests/
@@ -60,3 +60,10 @@ demo-factual demo-factual-paced:
 
 demo-factual-fast:
 	ATMAN_DEMO_PACE=off python3 src/demo.py
+
+# Identity Store walkthrough (file-based; see docs/features/identity-store/README.md).
+demo-identity demo-identity-paced:
+	ATMAN_DEMO_PACE=1 python3 src/demo_identity.py
+
+demo-identity-fast:
+	ATMAN_DEMO_PACE=off python3 src/demo_identity.py
