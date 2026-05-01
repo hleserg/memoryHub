@@ -34,7 +34,7 @@
   - найти факт по тексту/тегу;
   - создать связь;
   - вывести последние факты.
-- README/документация запуска.
+- Пара руководств запуска: `docs/features/factual-memory/README.md` и `docs/features/factual-memory/README-ru.md`.
 
 ## Границы
 

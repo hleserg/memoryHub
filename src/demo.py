@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 """
-Демо-скрипт для проверки работы Factual Memory Adapter.
+Non-interactive demo for the Factual Memory adapter.
+
+See docs/features/factual-memory/README.md (Russian: docs/features/factual-memory/README-ru.md).
+Run: ``python3 src/demo.py`` or ``make demo-factual``.
 """
 
 import sys

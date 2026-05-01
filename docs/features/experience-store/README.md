@@ -1,5 +1,7 @@
 # Experience Store - Work Package 02
 
+> **Russian:** [README-ru.md](README-ru.md)
+
 Experience Store is the archive of first-hand lived experiences for the Atman agent. It stores not facts and not analysis, but *what the agent actually experienced*.
 
 ## One-command demo
@@ -10,7 +12,7 @@ After `pip install -e ".[dev]"` from the repository root:
 make demo-experience
 ```
 
-Equivalent: `python3 src/demo_experience_store.py`. Uses a **temporary** JSONL file and [`fixtures/experience1_competence_challenge.json`](fixtures/experience1_competence_challenge.json); does not modify `~/.atman`.
+Equivalent: `python3 src/demo_experience_store.py`. Uses a **temporary** JSONL file and [`fixtures/experience1_competence_challenge.json`](../../../fixtures/experience1_competence_challenge.json); does not modify `~/.atman`.
 
 For interactive CLI (persists to `~/.atman/experiences.jsonl` by default): `atman-experience`.
 
@@ -264,13 +266,13 @@ The `StateStore` port defines the contract:
 class StateStore(ABC):
     @abstractmethod
     def create_experience(self, record: ExperienceRecord) -> ExperienceRecord: ...
-    
+
     @abstractmethod
     def get_experience(self, experience_id: UUID) -> ExperienceRecord | None: ...
-    
+
     @abstractmethod
     def add_reframing_note(self, experience_id: UUID, note: ReframingNote) -> ExperienceRecord | None: ...
-    
+
     # ... more methods
 ```
 
@@ -343,7 +345,7 @@ def migrate_1_0_to_2_0(storage_path):
     """Migrate from schema 1.0.0 to 2.0.0."""
     old_records = read_jsonl(storage_path)
     new_records = []
-    
+
     for record in old_records:
         if record.schema_version == "1.0.0":
             # Transform record
@@ -352,7 +354,7 @@ def migrate_1_0_to_2_0(storage_path):
             new_records.append(new_record)
         else:
             new_records.append(record)
-    
+
     write_jsonl(storage_path, new_records)
 ```
 
@@ -379,9 +381,9 @@ These components belong to other work packages.
 
 ## Related Documentation
 
-- Work Package: `docs/development/work-packages/02-experience-store.md`
-- Architecture: `docs/architecture/SYSTEM.md` (sections on Experience Store)
-- Development Standard: `docs/development/DEVELOPMENT_STANDARD.md`
+- Work package: [`../../development/work-packages/02-experience-store.md`](../../development/work-packages/02-experience-store.md)
+- Architecture: [`../../architecture/SYSTEM.md`](../../architecture/SYSTEM.md) (sections on Experience Store)
+- Development standard: [`../../development/DEVELOPMENT_STANDARD.md`](../../development/DEVELOPMENT_STANDARD.md)
 
 ## License
 

@@ -121,7 +121,7 @@ Before considering work complete, verify:
 
 If the change adds **user-visible behavior**, a **new CLI command**, or a **work-package-sized feature**, also verify (see `DEVELOPMENT_STANDARD.md`, *Definition of Demo*):
 
-- [ ] Feature narrative updated (`docs/development/work-packages/` and/or feature README such as `README_EXPERIENCE_STORE.md`)
+- [ ] Feature narrative updated (`docs/development/work-packages/` and/or `docs/features/<slug>/README.md` + `README-ru.md`, e.g. `docs/features/experience-store/`)
 - [ ] Reproducible demo: `make demo-*` or `python3 src/demo_*.py` (or documented non-interactive commands)
 - [ ] Fixtures under `fixtures/` when sample data is required
 - [ ] PR template section **Как воспроизвести** filled in (or N/A with reason)
@@ -235,7 +235,7 @@ pytest tests/ -v
 python3 -m atman.cli
 
 # Non-interactive demos
-python3 src/demo.py
+make demo-factual
 make demo-experience
 
 # Check structure

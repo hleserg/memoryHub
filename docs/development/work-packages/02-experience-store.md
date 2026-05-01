@@ -108,7 +108,7 @@ Experience Store может работать поверх локального f
 
 ## Acceptance criteria
 
-- Есть README с командами запуска.
+- Есть пара инструкций с командами запуска: `docs/features/experience-store/README.md` и `docs/features/experience-store/README-ru.md`.
 - Есть фикстуры для минимум двух опытов.
 - CLI работает без внешних сервисов.
 - Тесты проходят локально.

@@ -21,5 +21,6 @@
 
 ## Связанные документы
 
+- [`../features/`](../features/) — инструкции по реализованным фичам (`README.md` + `README-ru.md` в подпапках).
 - [`../architecture/SYSTEM.md`](../architecture/SYSTEM.md) - архитектурная база.
 - [`../ideas/project-blocks-after-manifest-and-system.md`](../ideas/project-blocks-after-manifest-and-system.md) - идеи следующих продуктовых и эксплуатационных блоков.

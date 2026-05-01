@@ -51,7 +51,7 @@
 ● Проектирование        ✅ Завершено
 ● Прототипирование      ← Мы здесь
   ├─ Factual Memory     ✅ Реализовано (v0.1.0)
-  ├─ Experience Store   ⏳ В очереди
+  ├─ Experience Store   ✅ Реализовано (WP02)
   ├─ Identity Store     ⏳ В очереди
   ├─ Reflection Engine  ⏳ В очереди
   └─ Session Manager    ⏳ В очереди
@@ -68,14 +68,23 @@
 - 📦 Модели: `FactRecord`, `Relation`
 - 🔌 Порт: `FactualMemory` с единым API
 - 💾 Адаптеры: InMemory + File (JSONL)
-- ✅ 41 unit-тест (все проходят)
-- 📚 [Документация](README_FACTUAL_MEMORY.md)
+- ✅ Юнит-тесты (`pytest tests/`)
+- 📚 [Руководство (RU)](docs/features/factual-memory/README-ru.md) · [EN](docs/features/factual-memory/README.md)
+- ▶️ Демо: `make demo-factual` или `python3 src/demo.py`
+
+**✅ Experience Store** (рабочий пакет 02)  
+Пережитый опыт от первого лица: `SessionExperience`, `KeyMoment`, затухание salience, reframing — без ретроспективного «угадывания» эмоций.
+
+- 📦 Модели, `ExperienceService`, адаптеры JSONL и in-memory
+- 💻 CLI: `atman-experience`
+- 📚 [Руководство (RU)](docs/features/experience-store/README-ru.md) · [EN](docs/features/experience-store/README.md)
+- ▶️ Демо: `make demo-experience` или `python3 src/demo_experience_store.py`
 
 ```bash
-# Быстрый старт
-pip install -e .
-python3 -m atman.cli  # интерактивный режим
-pytest tests/ -v      # запуск тестов
+# Быстрый старт (установка + интерактивный CLI фактов)
+pip install -e ".[dev]"
+python3 -m atman.cli   # REPL factual memory
+pytest tests/ -v       # все тесты
 ```
 
 ---

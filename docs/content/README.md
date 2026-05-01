@@ -51,7 +51,7 @@ Under the hood — seven components: store of lived experiences, reflection engi
 ● Design                ✅ Complete
 ● Prototyping           ← We are here
   ├─ Factual Memory     ✅ Implemented (v0.1.0)
-  ├─ Experience Store   ⏳ In queue
+  ├─ Experience Store   ✅ Implemented (WP02)
   ├─ Identity Store     ⏳ In queue
   ├─ Reflection Engine  ⏳ In queue
   └─ Session Manager    ⏳ In queue
@@ -60,7 +60,7 @@ Under the hood — seven components: store of lived experiences, reflection engi
 ○ Evolution
 ```
 
-### Ready Components
+### Ready components
 
 **✅ Factual Memory Adapter** ([PR #73](https://github.com/hleserg/atman/pull/73))  
 Minimal layer for storing verifiable facts without interpretations.
@@ -68,14 +68,23 @@ Minimal layer for storing verifiable facts without interpretations.
 - 📦 Models: `FactRecord`, `Relation`
 - 🔌 Port: `FactualMemory` with unified API
 - 💾 Adapters: InMemory + File (JSONL)
-- ✅ 41 unit tests (all passing)
-- 📚 [Documentation](README_FACTUAL_MEMORY.md)
+- ✅ Unit tests (see `pytest tests/`)
+- 📚 [Guide (EN)](docs/features/factual-memory/README.md) · [RU](docs/features/factual-memory/README-ru.md)
+- ▶️ Demo: `make demo-factual` or `python3 src/demo.py`
+
+**✅ Experience Store** (work package 02)  
+First-hand lived experience: `SessionExperience`, `KeyMoment`, salience decay, reframing notes — no retroactive emotional “guessing”.
+
+- 📦 Domain models + `ExperienceService` + JSONL / in-memory adapters
+- 💻 CLI: `atman-experience`
+- 📚 [Guide (EN)](docs/features/experience-store/README.md) · [RU](docs/features/experience-store/README-ru.md)
+- ▶️ Demo: `make demo-experience` or `python3 src/demo_experience_store.py`
 
 ```bash
-# Quick start
-pip install -e .
-python3 -m atman.cli  # interactive mode
-pytest tests/ -v      # run tests
+# Quick start (install + interactive factual CLI)
+pip install -e ".[dev]"
+python3 -m atman.cli   # factual memory REPL
+pytest tests/ -v       # full test suite
 ```
 
 ---

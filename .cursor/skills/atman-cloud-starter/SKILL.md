@@ -12,7 +12,7 @@ Use this skill when a Cloud agent needs to run, test, or extend this repository.
 - Read `AGENTS.md` for the current truth: Python package, tests, and quality gates (`make check`).
 - Runnable code: `pyproject.toml`, `src/atman/`, `tests/`, `src/demo.py`, `src/demo_experience_store.py`, plus optional shell helpers if present in `src/`.
 - Project goal: Atman is a psychological layer for AI agents, not a task runner. It is meant to preserve identity, lived experience, reflection, skills, and narrative continuity across sessions.
-- Implemented areas today: Factual Memory Adapter; Experience Store (WP02) with JSONL/in-memory adapters, service, tests, and `README_EXPERIENCE_STORE.md`.
+- Implemented areas today: Factual Memory Adapter; Experience Store (WP02) with JSONL/in-memory adapters, service, tests, and guides in `docs/features/experience-store/README.md` (+ `README-ru.md`).
 - Primary documentation language is English. Keep paired Russian docs in sync only for paired files listed in `AGENTS.md`: `README.md` / `README-ru.md`, `docs/architecture/SYSTEM.md` / `docs/architecture/SYSTEM-ru.md`, `MANIFEST.md` / `MANIFEST-ru.md`.
 - **There is no GitHub Actions CI** in this repository. Validation is local (`make check`, pre-commit). The public site is static files under `docs/` (GitHub Pages from a branch). After editing root `README*` / `MANIFEST*` or `docs/architecture/SYSTEM.md` / `SYSTEM-ru.md`, run `make sync-site-content` so `docs/content/` stays in sync for `document.html` (English uses canonical `README.md`, `MANIFEST.md`, `SYSTEM.md`; Russian uses `*-ru.md` copies).
 
@@ -101,11 +101,13 @@ exit
 Non-interactive smoke checks:
 
 ```bash
-PYTHONPATH=src python3 src/demo.py
+make demo-factual
 make demo-experience
 ```
 
-Experience Store: see `README_EXPERIENCE_STORE.md`; interactive CLI persists to `~/.atman/experiences.jsonl` by default. Prefer `make demo-experience` or `python3 src/demo_experience_store.py` for a clean, reproducible demo.
+Factual Memory: `docs/features/factual-memory/README.md` (Russian: `README-ru.md`); use `make demo-factual` or `python3 src/demo.py`.
+
+Experience Store: `docs/features/experience-store/README.md` (Russian: `README-ru.md`); interactive CLI persists to `~/.atman/experiences.jsonl` by default. Prefer `make demo-experience` or `python3 src/demo_experience_store.py` for a clean, reproducible demo.
 
 Use a temporary file or `/tmp` path when testing `FileBackend`. The factual CLI default is `~/.atman/facts.jsonl`; avoid committing or relying on that local state.
 

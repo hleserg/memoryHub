@@ -26,6 +26,8 @@ A **surface** experience of routine technical assistance.
 
 ## Usage
 
+Full guide: [`docs/features/experience-store/README.md`](../docs/features/experience-store/README.md).
+
 These fixtures can be used with the CLI:
 
 ```bash

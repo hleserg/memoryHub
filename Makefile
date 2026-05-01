@@ -1,4 +1,4 @@
-.PHONY: lint format typecheck security test test-fast audit check all sync-site-content docs-preview demo-experience
+.PHONY: lint format typecheck security test test-fast audit check all sync-site-content docs-preview demo-experience demo-factual
 
 lint:
 	ruff check src/ tests/
@@ -44,6 +44,10 @@ docs-preview: sync-site-content
 	@echo "Serving from docs/ — open http://127.0.0.1:8765/"
 	cd docs && python3 -m http.server 8765
 
-# Reproducible Experience Store walkthrough (temp JSONL; see README_EXPERIENCE_STORE.md).
+# Reproducible Experience Store walkthrough (temp JSONL; see docs/features/experience-store/README.md).
 demo-experience:
 	python3 src/demo_experience_store.py
+
+# Factual Memory walkthrough (in-memory + /tmp JSONL; see docs/features/factual-memory/README.md).
+demo-factual:
+	python3 src/demo.py

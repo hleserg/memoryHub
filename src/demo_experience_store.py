@@ -2,7 +2,7 @@
 """
 Reproducible walkthrough of Experience Store using a temporary JSONL file.
 
-Does not write to ~/.atman. See README_EXPERIENCE_STORE.md and `make demo-experience`.
+Does not write to ~/.atman. See docs/features/experience-store/README.md and `make demo-experience`.
 """
 
 from __future__ import annotations
