@@ -24,7 +24,7 @@ class AtmanDevApp(App[None]):
 
     def compose(self) -> ComposeResult:
         yield Header(show_clock=True)
-        with TabbedContent():
+        with TabbedContent(initial="tab-features"):
             with TabPane("Tests", id="tab-tests"):
                 yield TestsTab(self._root)
             with TabPane("Features", id="tab-features"):
