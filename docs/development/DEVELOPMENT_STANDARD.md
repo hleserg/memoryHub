@@ -787,7 +787,7 @@ docs/
   CNAME                        — домен GitHub Pages (atmanai.dev)
   index.html, document.html    — лендинг и просмотр документов
   pic/                         — ассеты сайта (логотип и т.д.)
-  content/                     — копии для `document.html`: с корня `README.md` / `README-ru.md` / `MANIFEST.md` / `MANIFEST-ru.md`, из `docs/architecture/` — `SYSTEM.md` / `SYSTEM-ru.md`; после правок: `make sync-site-content`
+  content/                     — копии для `document.html`: с корня `README.md` / `README-ru.md` / `MANIFEST.md` / `MANIFEST-ru.md`, из `docs/architecture/` — `SYSTEM.md` / `SYSTEM-ru.md`; копирование всегда **с перезаписью** существующих файлов в `docs/content/` (см. правило для `README.md` ниже); удобно: `make sync-site-content`
   architecture/                — SYSTEM.md, ADR, архитектурные решения
   development/                 — DEVELOPMENT_STANDARD.md, work packages
   research/                    — исследования, эксперименты, GPT-диалоги
@@ -828,7 +828,8 @@ docs/
 - Отчёт о реализации (`IMPLEMENTATION_REPORT.md`) — в `reports/`
 - Скрипты-демо (`demo.py`, `full_demo.sh`) — в `src/` или удалить после завершения работы
 - Файлы сайта — в `docs/` (`index.html`, `document.html`, `pic/`, `CNAME`), не в корне репозитория
-- Правили `README*` / `MANIFEST*` в корне или `docs/architecture/SYSTEM.md` / `SYSTEM-ru.md` — выполни `make sync-site-content`, чтобы обновить `docs/content/` для сайта
+- **`README.md`**: любое изменение английского README обязывает **сначала** обновить **`README-ru.md`** (русская версия по смыслу). **Затем** скопировать **`README.md`** и **`README-ru.md`** в **`docs/content/`**, **заменив** лежащие там одноимённые файлы (не оставлять устаревших копий). Практически: после правок пары выполни `make sync-site-content` — она перезаписывает копии в `docs/content/`.
+- Правили **`MANIFEST.md`** / **`MANIFEST-ru.md`** или **`docs/architecture/SYSTEM.md`** / **`SYSTEM-ru.md`** — синхронизируй пару языков, затем **`make sync-site-content`** (копии в `docs/content/` перезаписываются).
 - Не создавать новые папки в корне без явного решения в PR
 
 ## 25. Checklist перед началом новой задачи
