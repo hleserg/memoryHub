@@ -88,7 +88,8 @@ python3 -m atman.cli   # REPL factual memory (или: uv run python -m atman.cli
 pytest tests/ -v       # все тесты (или: uv run pytest tests/ -v)
 ```
 
-См. **`AGENTS.md`** (раздел *uv — рекомендуемый workflow*).
+См. **`AGENTS.md`** (раздел *uv — рекомендуемый workflow*).  
+Вклад в проект: [`CONTRIBUTING.md`](CONTRIBUTING.md) · правила общения: [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md).
 
 ---
 
