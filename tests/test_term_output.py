@@ -126,3 +126,25 @@ def test_print_salience_table(term_console: io.StringIO) -> None:
     print_salience_table([(0, 1.0), (7, 0.5)], title="Decay")
     assert "Decay" in term_console.getvalue()
     assert "0.5000" in term_console.getvalue()
+
+
+def test_demo_pace_respects_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    import atman.term as term_mod
+
+    slept: list[float] = []
+    monkeypatch.setattr(term_mod.time, "sleep", lambda s: slept.append(s))
+    monkeypatch.delenv("ATMAN_DEMO_PACE", raising=False)
+    term_mod.demo_pace()
+    assert slept == []
+
+    monkeypatch.setenv("ATMAN_DEMO_PACE", "1")
+    term_mod.demo_pace()
+    assert len(slept) == 1 and 0 < slept[0] <= 3.0
+
+    monkeypatch.setenv("ATMAN_DEMO_PACE", "99")
+    term_mod.demo_pace()
+    assert slept[-1] == 3.0
+
+    monkeypatch.setenv("ATMAN_DEMO_PACE", "off")
+    term_mod.demo_pace()
+    assert len(slept) == 2

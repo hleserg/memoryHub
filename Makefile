@@ -1,4 +1,4 @@
-.PHONY: lint format typecheck security test test-fast audit check all sync-site-content docs-preview demo-experience demo-factual
+.PHONY: lint format typecheck security test test-fast audit check all sync-site-content docs-preview demo-experience demo-factual demo-experience-fast demo-factual-fast demo-experience-paced demo-factual-paced
 
 lint:
 	ruff check src/ tests/
@@ -44,10 +44,19 @@ docs-preview: sync-site-content
 	@echo "Serving from docs/ — open http://127.0.0.1:8765/"
 	cd docs && python3 -m http.server 8765
 
-# Reproducible Experience Store walkthrough (temp JSONL; see docs/features/experience-store/README.md).
-demo-experience:
-	python3 src/demo_experience_store.py
+# Reproducible demos: default = short pauses between beats (ATMAN_DEMO_PACE=1).
+# For instant output (CI, scripting): make demo-experience-fast / demo-factual-fast.
+
+# Experience Store walkthrough (temp JSONL; see docs/features/experience-store/README.md).
+demo-experience demo-experience-paced:
+	ATMAN_DEMO_PACE=1 python3 src/demo_experience_store.py
+
+demo-experience-fast:
+	ATMAN_DEMO_PACE=off python3 src/demo_experience_store.py
 
 # Factual Memory walkthrough (in-memory + /tmp JSONL; see docs/features/factual-memory/README.md).
-demo-factual:
-	python3 src/demo.py
+demo-factual demo-factual-paced:
+	ATMAN_DEMO_PACE=1 python3 src/demo.py
+
+demo-factual-fast:
+	ATMAN_DEMO_PACE=off python3 src/demo.py

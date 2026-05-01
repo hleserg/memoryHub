@@ -9,7 +9,7 @@ Use this skill when a Cloud agent needs to run, test, or extend this repository.
 
 ## 1. Reality check first
 
-- Read `AGENTS.md` for the current truth: Python package, tests, and quality gates (`make check`).
+- Read `AGENTS.md` for the current truth: Python package, tests, and quality gates (`make check`). For **CLI and demo** work, follow **`AGENTS.md` → *Пользовательский вывод в терминале (Rich)***: use **Rich** via **`atman.term`**, not ad-hoc `print()` for user-visible console output.
 - Runnable code: `pyproject.toml`, `src/atman/`, `tests/`, `src/demo.py`, `src/demo_experience_store.py`, plus optional shell helpers if present in `src/`.
 - Project goal: Atman is a psychological layer for AI agents, not a task runner. It is meant to preserve identity, lived experience, reflection, skills, and narrative continuity across sessions.
 - Implemented areas today: Factual Memory Adapter; Experience Store (WP02) with JSONL/in-memory adapters, service, tests, and guides in `docs/features/experience-store/README.md` (+ `README-ru.md`).

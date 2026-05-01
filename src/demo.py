@@ -4,6 +4,9 @@ Non-interactive demo for the Factual Memory adapter.
 
 See docs/features/factual-memory/README.md (Russian: docs/features/factual-memory/README-ru.md).
 Run: ``python3 src/demo.py`` or ``make demo-factual``.
+
+Paced output (optional): ``ATMAN_DEMO_PACE=1`` or ``ATMAN_DEMO_PACE=0.6`` — short pauses
+between sections; see ``atman.term.demo_pace``.
 """
 
 from __future__ import annotations
@@ -26,6 +29,7 @@ def main() -> int:
     from atman.adapters.memory import FileBackend, InMemoryBackend
     from atman.core.models import FactRecord
     from atman.term import (
+        demo_pace,
         print_banner,
         print_err,
         print_info,
@@ -37,9 +41,11 @@ def main() -> int:
         "Atman Factual Memory Adapter",
         "Демонстрация InMemoryBackend и FileBackend",
     )
+    demo_pace()
 
     try:
         print_section("ДЕМОНСТРАЦИЯ: InMemoryBackend")
+        demo_pace()
         memory = InMemoryBackend()
 
         print_info("\n[bold]1.[/bold] Добавление фактов...")
@@ -92,8 +98,10 @@ def main() -> int:
             print_info(f"  • [{r.created_at.strftime('%H:%M:%S')}] {r.content}")
 
         print_ok(f"Всего фактов в памяти: {memory.count()}")
+        demo_pace()
 
         print_section("ДЕМОНСТРАЦИЯ: FileBackend (персистентное хранилище)")
+        demo_pace()
         filepath = Path("/tmp/atman_demo_facts.jsonl")
 
         print_info("\n[bold]1.[/bold] Первая сессия: добавление фактов...")
@@ -125,6 +133,7 @@ def main() -> int:
             print_ok("Файл удален")
 
         print_section("Готово")
+        demo_pace()
         print_ok("Все демонстрации успешно выполнены!")
         print_info("\nДля интерактивной работы запустите: python3 -m atman.cli\n")
 

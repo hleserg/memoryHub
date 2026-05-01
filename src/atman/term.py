@@ -6,6 +6,9 @@ Keeps markup-safe printing for help text and user-provided strings.
 
 from __future__ import annotations
 
+import os
+import time
+
 from rich import box
 from rich.console import Console, Group
 from rich.padding import Padding
@@ -30,6 +33,32 @@ _THEME = Theme(
 
 console = Console(theme=_THEME)
 console_err = Console(theme=_THEME, stderr=True)
+
+# Seconds; clamped so a typo cannot hang the terminal.
+_DEMO_PACE_DEFAULT = 0.45
+_DEMO_PACE_MAX = 3.0
+
+
+def demo_pace() -> None:
+    """
+    Optional pause between demo beats for a clearer step-by-step reveal.
+
+    Enable with env ``ATMAN_DEMO_PACE``: ``1`` / ``yes`` / ``on`` uses a default
+    delay (~0.45s), or set a positive float (e.g. ``0.7``). ``0`` / ``off`` / unset = no pause.
+    """
+    raw = (os.environ.get("ATMAN_DEMO_PACE") or "").strip().lower()
+    if not raw or raw in ("0", "no", "false", "off"):
+        return
+    if raw in ("1", "yes", "true", "on"):
+        delay = _DEMO_PACE_DEFAULT
+    else:
+        try:
+            delay = float(raw)
+        except ValueError:
+            return
+    if delay <= 0:
+        return
+    time.sleep(min(delay, _DEMO_PACE_MAX))
 
 
 def print_ok(message: str) -> None:

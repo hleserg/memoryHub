@@ -3,6 +3,8 @@
 Reproducible walkthrough of Experience Store using a temporary JSONL file.
 
 Does not write to ~/.atman. See docs/features/experience-store/README.md and `make demo-experience`.
+
+Paced output (optional): ``ATMAN_DEMO_PACE=1`` — pauses between steps; see ``atman.term.demo_pace``.
 """
 
 from __future__ import annotations
@@ -33,6 +35,7 @@ def main() -> None:
     from atman.core.models import SessionExperience
     from atman.core.services import ExperienceService
     from atman.term import (
+        demo_pace,
         print_banner,
         print_err,
         print_experience_record,
@@ -51,6 +54,7 @@ def main() -> None:
         "Atman Experience Store",
         "Runnable demo · temporary JSONL (your ~/.atman is not modified)",
     )
+    demo_pace()
 
     with NamedTemporaryFile(mode="w", encoding="utf-8", suffix=".jsonl", delete=False) as tmp:
         tmp_path = Path(tmp.name)
@@ -60,14 +64,17 @@ def main() -> None:
         service = ExperienceService(store)
 
         print_section("Step 1: Load fixture and create experience")
+        demo_pace()
         with open(fixture, encoding="utf-8") as f:
             raw = json.load(f)
         experience = SessionExperience.model_validate(raw)
         record = service.create_experience(experience)
         print_experience_record(record)
+        demo_pace()
         eid = record.experience.id
 
         print_section("Step 2: Add reframing note (append-only)")
+        demo_pace()
         updated = service.add_reframing_note(
             experience_id=eid,
             reflection="In retrospect, admitting uncertainty was appropriate for the task.",
@@ -77,12 +84,16 @@ def main() -> None:
             print_err("Expected experience after reframing")
             sys.exit(1)
         print_info(f"Reframing notes: {len(updated.experience.reframing_notes)}")
+        demo_pace()
 
         print_section("Step 3: Search by values touched (competence, honesty)")
+        demo_pace()
         matches = service.search_by_values(["competence", "honesty"], limit=5)
         print_ok(f"Matches: {len(matches)}")
+        demo_pace()
 
         print_section("Step 4: Salience decay preview (does not mutate stored salience)")
+        demo_pace()
         current_time = datetime.now(UTC)
         exp = updated.experience
         rows: list[tuple[int, float]] = []
@@ -91,6 +102,7 @@ def main() -> None:
             sal = exp.calculate_current_salience(current_time=t)
             rows.append((days, sal))
         print_salience_table(rows, title="Days vs salience")
+        demo_pace()
 
         print_ok("Demo completed successfully.")
     finally:
