@@ -247,6 +247,7 @@ def test_multiple_instances_preserve_links_added_to_same_fact(temp_file):
 
     reloaded = FileBackend(temp_file)
     linked_fact = reloaded.get_fact(source.id)
+    assert linked_fact is not None
     relation_targets = {relation.target_id for relation in linked_fact.relations}
 
     assert len(linked_fact.relations) == 2

@@ -14,28 +14,20 @@ from uuid import UUID
 from atman.adapters.memory import FileBackend
 from atman.core.models import FactRecord
 from atman.core.ports import FactualMemory
-
-
-def print_fact(fact: FactRecord, prefix: str = "") -> None:
-    """Выводит информацию о факте."""
-    print(f"{prefix}ID: {fact.id}")
-    print(f"{prefix}Содержание: {fact.content}")
-    print(f"{prefix}Источник: {fact.source}")
-    print(f"{prefix}Теги: {', '.join(fact.tags) if fact.tags else 'нет'}")
-    print(f"{prefix}Создан: {fact.created_at.strftime('%Y-%m-%d %H:%M:%S')}")
-    if fact.relations:
-        print(f"{prefix}Связи:")
-        for rel in fact.relations:
-            print(f"{prefix}  - {rel.relation_type} -> {rel.target_id}")
-    if fact.metadata:
-        print(f"{prefix}Метаданные: {fact.metadata}")
-    print()
+from atman.term import (
+    print_banner,
+    print_err,
+    print_fact,
+    print_help_text,
+    print_info,
+    print_ok,
+)
 
 
 def cmd_add(backend: FactualMemory, args: list[str]) -> None:
     """Добавляет новый факт."""
     if len(args) < 2:
-        print("Использование: add <content> <source> [tags...]")
+        print_info("Использование: add <content> <source> [tags...]")
         return
 
     content = args[0]
@@ -45,34 +37,34 @@ def cmd_add(backend: FactualMemory, args: list[str]) -> None:
     fact = FactRecord(content=content, source=source, tags=tags)
     added = backend.add_fact(fact)
 
-    print("✓ Факт добавлен:")
+    print_ok("Факт добавлен:")
     print_fact(added)
 
 
 def cmd_get(backend: FactualMemory, args: list[str]) -> None:
     """Получает факт по ID."""
     if len(args) < 1:
-        print("Использование: get <fact_id>")
+        print_info("Использование: get <fact_id>")
         return
 
     try:
         fact_id = UUID(args[0])
     except ValueError:
-        print("✗ Ошибка: неверный формат UUID")
+        print_err("Ошибка: неверный формат UUID")
         return
 
     fact = backend.get_fact(fact_id)
     if fact:
-        print("✓ Факт найден:")
+        print_ok("Факт найден:")
         print_fact(fact)
     else:
-        print("✗ Факт не найден")
+        print_err("Факт не найден")
 
 
 def cmd_search(backend: FactualMemory, args: list[str]) -> None:
     """Ищет факты по запросу и/или тегам."""
     if len(args) < 1:
-        print("Использование: search <query> [--tags tag1,tag2]")
+        print_info("Использование: search <query> [--tags tag1,tag2]")
         return
 
     query = None
@@ -94,33 +86,33 @@ def cmd_search(backend: FactualMemory, args: list[str]) -> None:
     results = backend.search(query=query, tags=tags, limit=limit)
 
     if results:
-        print(f"✓ Найдено фактов: {len(results)}\n")
+        print_ok(f"Найдено фактов: {len(results)}")
         for fact in results:
             print_fact(fact, prefix="  ")
     else:
-        print("✗ Факты не найдены")
+        print_err("Факты не найдены")
 
 
 def cmd_link(backend: FactualMemory, args: list[str]) -> None:
     """Создает связь между фактами."""
     if len(args) < 3:
-        print("Использование: link <source_id> <target_id> <relation_type>")
+        print_info("Использование: link <source_id> <target_id> <relation_type>")
         return
 
     try:
         source_id = UUID(args[0])
         target_id = UUID(args[1])
     except ValueError:
-        print("✗ Ошибка: неверный формат UUID")
+        print_err("Ошибка: неверный формат UUID")
         return
 
     relation_type = args[2]
 
     success = backend.link(source_id, target_id, relation_type)
     if success:
-        print("✓ Связь создана")
+        print_ok("Связь создана")
     else:
-        print("✗ Ошибка: один или оба факта не найдены")
+        print_err("Ошибка: один или оба факта не найдены")
 
 
 def cmd_recent(backend: FactualMemory, args: list[str]) -> None:
@@ -130,16 +122,16 @@ def cmd_recent(backend: FactualMemory, args: list[str]) -> None:
     facts = backend.list_recent(limit=limit)
 
     if facts:
-        print(f"✓ Последние {len(facts)} фактов:\n")
+        print_ok(f"Последние {len(facts)} фактов:")
         for fact in facts:
             print_fact(fact, prefix="  ")
     else:
-        print("✗ Фактов нет")
+        print_err("Фактов нет")
 
 
 def cmd_help(_backend: FactualMemory, _args: list[str]) -> None:
     """Выводит справку."""
-    print("""
+    print_help_text("""
 Atman Factual Memory CLI
 
 Команды:
@@ -171,15 +163,12 @@ COMMANDS = {
 
 def main() -> None:
     """Точка входа CLI."""
-    print("Atman Factual Memory CLI")
-    print("Введите 'help' для справки\n")
+    print_banner("Atman Factual Memory CLI", "Введите 'help' для справки")
 
-    # Определяем storage
     storage_path = Path.home() / ".atman" / "facts.jsonl"
-    print(f"Используется file storage: {storage_path}\n")
+    print_info(f"Используется file storage: {storage_path}\n")
     backend = FileBackend(storage_path)
 
-    # REPL
     while True:
         try:
             line = input("atman> ").strip()
@@ -196,14 +185,14 @@ def main() -> None:
             if cmd in COMMANDS:
                 COMMANDS[cmd](backend, args)
             else:
-                print(f"✗ Неизвестная команда: {cmd}")
-                print("Введите 'help' для справки")
+                print_err(f"Неизвестная команда: {cmd}")
+                print_info("Введите 'help' для справки")
 
         except KeyboardInterrupt:
-            print("\nДо свидания!")
+            print_info("\nДо свидания!")
             break
         except Exception as e:
-            print(f"✗ Ошибка: {e}")
+            print_err(str(e))
 
 
 if __name__ == "__main__":
