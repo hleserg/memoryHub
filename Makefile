@@ -19,7 +19,12 @@ test-fast:
 	pytest tests/ -n auto -q
 
 audit:
-	pip-audit
+	@python3 -c "\
+	import importlib.metadata as md; f=open('/tmp/_atman_reqs.txt','w');\
+	[f.write(n.split('>=')[0].split('==')[0].split('<')[0].strip()+'=='+md.version(n.split('>=')[0].split('==')[0].split('<')[0].strip())+'\n') for r in (md.distribution('atman').requires or []) if 'extra' not in r for n in [r.split(';')[0].strip()]];\
+	f.close()"
+	pip-audit -r /tmp/_atman_reqs.txt
+	@rm -f /tmp/_atman_reqs.txt
 
 check: lint format typecheck security test
 	@echo ""

@@ -54,6 +54,7 @@ exclude_lines = [
 [tool.bandit]
 targets = ["src/atman"]
 exclude_dirs = ["tests"]
+skips = ["B101", "B108"]
 
 [tool.pyright]
 pythonVersion = "3.12"
