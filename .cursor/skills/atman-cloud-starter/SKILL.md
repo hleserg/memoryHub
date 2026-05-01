@@ -225,7 +225,7 @@ For faster test runs during development, use parallel execution:
 pytest tests/ -n auto
 ```
 
-CI runs all checks automatically on every PR to `main` (see `.github/workflows/ci.yml`).
+All checks can be run at once with `make check`. For a full run including dependency audit: `make all`.
 
 Additional validation:
 
