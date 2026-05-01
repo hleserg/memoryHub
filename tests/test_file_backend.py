@@ -224,3 +224,22 @@ def test_multiple_instances_do_not_lose_links(temp_file):
     linked_fact = reloaded.get_fact(fact1.id)
     assert len(linked_fact.relations) == 1
     assert linked_fact.relations[0].target_id == fact2.id
+
+
+def test_multiple_instances_preserve_links_added_to_same_fact(temp_file):
+    """Последовательные связи из разных экземпляров не должны перетирать друг друга."""
+    backend1 = FileBackend(temp_file)
+    source = backend1.add_fact(FactRecord(content="Исходный факт", source="test"))
+    target1 = backend1.add_fact(FactRecord(content="Первый целевой факт", source="test"))
+    target2 = backend1.add_fact(FactRecord(content="Второй целевой факт", source="test"))
+    backend2 = FileBackend(temp_file)
+
+    assert backend1.link(source.id, target1.id, "related")
+    assert backend2.link(source.id, target2.id, "caused")
+
+    reloaded = FileBackend(temp_file)
+    linked_fact = reloaded.get_fact(source.id)
+    relation_targets = {relation.target_id for relation in linked_fact.relations}
+
+    assert len(linked_fact.relations) == 2
+    assert relation_targets == {target1.id, target2.id}
