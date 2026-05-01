@@ -242,13 +242,17 @@ class FeaturesTab(Vertical):
     def demo_slow(self) -> None:
         if not self._current or not self._current.demos:
             return
-        self.run_feature_demo(self._current.demos[0].argv, self._current.demos[0].env, "Демо (paced)")
+        self.run_feature_demo(
+            self._current.demos[0].argv, self._current.demos[0].env, "Демо (paced)"
+        )
 
     @on(Button.Pressed, "#feat-demo-fast")
     def demo_fast(self) -> None:
         if not self._current or len(self._current.demos) < 2:
             return
-        self.run_feature_demo(self._current.demos[1].argv, self._current.demos[1].env, "Демо (fast)")
+        self.run_feature_demo(
+            self._current.demos[1].argv, self._current.demos[1].env, "Демо (fast)"
+        )
 
     @work(group="features", exclusive=True, exit_on_error=False)
     async def run_feature_demo(

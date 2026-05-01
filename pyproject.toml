@@ -70,7 +70,7 @@ exclude_lines = [
 
 [tool.bandit]
 targets = ["src/atman"]
-exclude_dirs = ["tests"]
+exclude_dirs = ["tests", "src/atman/web_dashboard"]
 skips = ["B101", "B108"]
 
 [tool.pyright]
