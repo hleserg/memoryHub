@@ -82,10 +82,13 @@ First-hand lived experience: `SessionExperience`, `KeyMoment`, salience decay, r
 
 ```bash
 # Quick start (install + interactive factual CLI)
+# Prefer uv: uv venv && source .venv/bin/activate && uv pip install -e ".[dev]"
 pip install -e ".[dev]"
-python3 -m atman.cli   # factual memory REPL
-pytest tests/ -v       # full test suite
+python3 -m atman.cli   # factual memory REPL (or: uv run python -m atman.cli)
+pytest tests/ -v       # full test suite (or: uv run pytest tests/ -v)
 ```
+
+See **`AGENTS.md`** (*uv — рекомендуемый workflow*) for `uv run` and venv tips.
 
 ---
 

@@ -224,15 +224,20 @@ If starting work out of order, explicitly explain how it integrates with the min
 
 ### Essential Commands
 
+Prefer **[uv](https://github.com/astral-sh/uv)** when available (`uv venv`, `uv pip install -e ".[dev]"`, `uv run pytest …`, `uv run python …`) — see `AGENTS.md` (*uv — рекомендуемый workflow*) and `DEVELOPMENT_STANDARD.md` (локальная разработка: uv).
+
 ```bash
-# Install dependencies
-pip install -e .
+# Install (uv + venv)
+uv venv && source .venv/bin/activate && uv pip install -e ".[dev]"
+# or: pip install -e ".[dev]"
 
 # Run tests
-pytest tests/ -v
+uv run pytest tests/ -v
+# or: pytest tests/ -v
 
 # Interactive CLI (Factual Memory)
-python3 -m atman.cli
+uv run python -m atman.cli
+# or: python3 -m atman.cli
 
 # Non-interactive demos
 make demo-factual

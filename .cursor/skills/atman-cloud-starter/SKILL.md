@@ -23,17 +23,27 @@ Use this skill when a Cloud agent needs to run, test, or extend this repository.
 - Do not require mem0, OpenClaw, real LLM providers, API keys, internet, or external services for tests.
 - Python requirement: `>=3.12`.
 
-Setup commands:
+Setup commands (prefer **uv** when installed — use it for venv, installs, and `uv run` for scripts and tools; see `AGENTS.md` *uv — рекомендуемый workflow*):
 
 ```bash
 python3 --version
+uv venv
+source .venv/bin/activate   # Windows: .venv\Scripts\activate
+uv pip install -e ".[dev]"
+```
+
+Fallback without uv:
+
+```bash
 python3 -m pip install -e ".[dev]"
 ```
 
-If `uv` is available, this is also valid:
+Run checks or demos without activating the venv:
 
 ```bash
-uv pip install -e ".[dev]"
+uv run pytest tests/ -v
+uv run python src/demo.py
+uv run ruff check src/ tests/
 ```
 
 ## 3. Environment, feature flags, and mocks

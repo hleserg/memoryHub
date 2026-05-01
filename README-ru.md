@@ -82,10 +82,13 @@
 
 ```bash
 # Быстрый старт (установка + интерактивный CLI фактов)
+# Удобнее uv: uv venv && source .venv/bin/activate && uv pip install -e ".[dev]"
 pip install -e ".[dev]"
-python3 -m atman.cli   # REPL factual memory
-pytest tests/ -v       # все тесты
+python3 -m atman.cli   # REPL factual memory (или: uv run python -m atman.cli)
+pytest tests/ -v       # все тесты (или: uv run pytest tests/ -v)
 ```
+
+См. **`AGENTS.md`** (раздел *uv — рекомендуемый workflow*).
 
 ---
 

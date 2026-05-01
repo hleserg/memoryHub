@@ -34,9 +34,13 @@ Python ≥ 3.12
 ```bash
 git clone https://github.com/hleserg/atman.git
 cd atman
+uv venv && source .venv/bin/activate   # Windows: .venv\Scripts\activate
 uv pip install -e ".[dev]"
+# Run tools without activating: uv run pytest tests/ -v
 # or: pip install -e ".[dev]"
 ```
+
+Project docs recommend **[uv](https://github.com/astral-sh/uv)** for venv, installs, and `uv run` — see root **`AGENTS.md`** (*uv — рекомендуемый workflow*).
 
 ## Quick start
 

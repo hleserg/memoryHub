@@ -34,15 +34,16 @@ Factual Memory Adapter - это фундамент системы памяти A
 git clone https://github.com/hleserg/atman.git
 cd atman
 
-# Установить зависимости через uv (рекомендуется)
-uv pip install -e .
-
-# Или через pip
-pip install -e .
-
-# Для разработки (с тестами)
+# Рекомендуется uv: окружение и установка
+uv venv
+source .venv/bin/activate   # Windows: .venv\Scripts\activate
 uv pip install -e ".[dev]"
+
+# Запуск без активации venv: uv run pytest tests/ -v, uv run python src/demo.py
+# Fallback: pip install -e ".[dev]"
 ```
+
+Подробнее про **uv** (`uv run`, `uv pip` и т.д.) — в корневом **`AGENTS.md`**, раздел *uv — рекомендуемый workflow*.
 
 ## Быстрый старт
 

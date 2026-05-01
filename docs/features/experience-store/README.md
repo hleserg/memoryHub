@@ -6,13 +6,13 @@ Experience Store is the archive of first-hand lived experiences for the Atman ag
 
 ## One-command demo
 
-After `pip install -e ".[dev]"` from the repository root:
+After `pip install -e ".[dev]"` or `uv pip install -e ".[dev]"` (see **`AGENTS.md`** — *uv — рекомендуемый workflow*) from the repository root:
 
 ```bash
 make demo-experience
 ```
 
-Equivalent: `python3 src/demo_experience_store.py`. Uses a **temporary** JSONL file and [`fixtures/experience1_competence_challenge.json`](../../../fixtures/experience1_competence_challenge.json); does not modify `~/.atman`.
+Equivalent: `python3 src/demo_experience_store.py` or `uv run python src/demo_experience_store.py`. Uses a **temporary** JSONL file and [`fixtures/experience1_competence_challenge.json`](../../../fixtures/experience1_competence_challenge.json); does not modify `~/.atman`.
 
 For interactive CLI (persists to `~/.atman/experiences.jsonl` by default): `atman-experience`.
 
