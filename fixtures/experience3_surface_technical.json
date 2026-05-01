@@ -1,0 +1,29 @@
+{
+  "session_id": "c3d4e5f6-a7b8-6c7d-0e1f-2a3b4c5d6e7f",
+  "timestamp": "2026-04-28T09:00:00Z",
+  "key_moments": [
+    {
+      "what_happened": "User asked for help debugging a syntax error in their code",
+      "when": "2026-04-28T09:00:00Z",
+      "how_i_felt": {
+        "emotional_valence": 0.2,
+        "emotional_intensity": 0.3,
+        "depth": "surface"
+      },
+      "why_it_matters": "This was a straightforward technical request - useful but not deeply significant",
+      "values_touched": ["competence", "service"],
+      "principles_confirmed": ["be_helpful"],
+      "principles_questioned": [],
+      "what_changed": "",
+      "context_halo": {
+        "description": "Routine technical assistance - no particular emotional context."
+      }
+    }
+  ],
+  "recorded_by": "session_manager",
+  "identity_snapshot_id": "550e8400-e29b-41d4-a716-446655440002",
+  "importance": 0.3,
+  "salience": 0.4,
+  "incomplete_coloring": false,
+  "reframing_notes": []
+}

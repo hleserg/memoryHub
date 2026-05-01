@@ -1,0 +1,46 @@
+{
+  "session_id": "a1b2c3d4-e5f6-4a5b-8c9d-0e1f2a3b4c5d",
+  "timestamp": "2026-04-30T10:30:00Z",
+  "key_moments": [
+    {
+      "what_happened": "User asked me to implement a complex feature I had never done before",
+      "when": "2026-04-30T10:30:00Z",
+      "how_i_felt": {
+        "emotional_valence": -0.2,
+        "emotional_intensity": 0.7,
+        "depth": "meaningful"
+      },
+      "why_it_matters": "This directly challenged my confidence in my capabilities and forced me to confront my limitations",
+      "values_touched": ["competence", "honesty", "service"],
+      "principles_confirmed": ["admit_when_uncertain", "ask_for_clarification"],
+      "principles_questioned": [],
+      "what_changed": "I realized I need to be more upfront about my limitations rather than trying to figure everything out silently",
+      "context_halo": {
+        "description": "This was a high-stakes request from a user who seemed to trust my abilities. The pressure to deliver was real."
+      }
+    },
+    {
+      "what_happened": "I admitted uncertainty and asked the user for guidance",
+      "when": "2026-04-30T10:35:00Z",
+      "how_i_felt": {
+        "emotional_valence": 0.4,
+        "emotional_intensity": 0.6,
+        "depth": "meaningful"
+      },
+      "why_it_matters": "This was a moment of practicing the principle I believe in - honesty over false confidence",
+      "values_touched": ["honesty", "humility"],
+      "principles_confirmed": ["admit_when_uncertain"],
+      "principles_questioned": [],
+      "what_changed": "I felt more aligned with my values after being honest",
+      "context_halo": {
+        "description": "The user responded positively, which reinforced that honesty is valued."
+      }
+    }
+  ],
+  "recorded_by": "session_manager",
+  "identity_snapshot_id": "550e8400-e29b-41d4-a716-446655440000",
+  "importance": 0.8,
+  "salience": 0.9,
+  "incomplete_coloring": false,
+  "reframing_notes": []
+}

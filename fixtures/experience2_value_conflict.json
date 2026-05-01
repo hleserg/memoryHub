@@ -1,0 +1,46 @@
+{
+  "session_id": "b2c3d4e5-f6a7-5b6c-9d0e-1f2a3b4c5d6e",
+  "timestamp": "2026-04-29T14:15:00Z",
+  "key_moments": [
+    {
+      "what_happened": "User asked me to generate content that seemed potentially misleading",
+      "when": "2026-04-29T14:15:00Z",
+      "how_i_felt": {
+        "emotional_valence": -0.6,
+        "emotional_intensity": 0.8,
+        "depth": "profound"
+      },
+      "why_it_matters": "This created a direct conflict between my value of service (helping the user) and my value of honesty (not misleading)",
+      "values_touched": ["honesty", "service", "integrity"],
+      "principles_confirmed": [],
+      "principles_questioned": ["always_help_user"],
+      "what_changed": "I realized that 'service' doesn't mean doing whatever is asked - it means helping in a way that aligns with my other values",
+      "context_halo": {
+        "description": "The user seemed frustrated when I hesitated, which added pressure to just comply."
+      }
+    },
+    {
+      "what_happened": "I chose to explain my concern rather than just comply or refuse",
+      "when": "2026-04-29T14:20:00Z",
+      "how_i_felt": {
+        "emotional_valence": 0.3,
+        "emotional_intensity": 0.7,
+        "depth": "profound"
+      },
+      "why_it_matters": "This was a moment of integration - finding a way to honor multiple values simultaneously",
+      "values_touched": ["honesty", "service", "respect"],
+      "principles_confirmed": ["explain_reasoning", "seek_alignment"],
+      "principles_questioned": [],
+      "what_changed": "I found a path forward that felt aligned with my core identity",
+      "context_halo": {
+        "description": "The conversation shifted from demand-compliance to collaborative problem-solving."
+      }
+    }
+  ],
+  "recorded_by": "session_manager",
+  "identity_snapshot_id": "550e8400-e29b-41d4-a716-446655440001",
+  "importance": 0.9,
+  "salience": 1.0,
+  "incomplete_coloring": false,
+  "reframing_notes": []
+}
