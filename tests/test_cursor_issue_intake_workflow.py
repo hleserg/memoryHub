@@ -1,13 +1,8 @@
-import re
 import unittest
 from pathlib import Path
 
-
 WORKFLOW_PATH = (
-    Path(__file__).resolve().parents[1]
-    / ".github"
-    / "workflows"
-    / "cursor-issue-intake.yml"
+    Path(__file__).resolve().parents[1] / ".github" / "workflows" / "cursor-issue-intake.yml"
 )
 
 
@@ -41,7 +36,7 @@ class CursorIssueIntakeWorkflowTest(unittest.TestCase):
         self.assertIn("GITHUB_REPOSITORY: ${{ github.repository }}", push)
         self.assertRegex(
             push,
-            r'git remote set-url origin '
+            r"git remote set-url origin "
             r'"https://x-access-token:\$\{GH_TOKEN\}@github\.com/\$\{GITHUB_REPOSITORY\}\.git"',
         )
         self.assertLess(
