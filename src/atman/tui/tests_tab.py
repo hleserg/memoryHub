@@ -107,7 +107,8 @@ class TestsTab(Vertical):
         self._repo = repo_root
         self._nodeids: list[str] = []
         self._last_full_log: str = ""
-        self._running = False
+        # Must not use ``_running`` — Textual's MessagePump reserves it for the message loop.
+        self._pytest_busy = False
         self._junit_path = repo_root / ".atman" / "tui-cache" / "junit.xml"
 
     def compose(self) -> ComposeResult:
@@ -183,10 +184,10 @@ class TestsTab(Vertical):
 
     @work(group="tests", exclusive=False, exit_on_error=False)
     async def run_pytest_suite(self) -> None:
-        if self._running:
+        if self._pytest_busy:
             self.app.notify("Тесты уже выполняются.", severity="warning")
             return
-        self._running = True
+        self._pytest_busy = True
         self._last_full_log = ""
         self._reset_log_chrome()
 
@@ -353,7 +354,7 @@ class TestsTab(Vertical):
                 timeout=15,
             )
         finally:
-            self._running = False
+            self._pytest_busy = False
             run_btn.disabled = False
 
     @on(Button.Pressed, "#btn-tests-errors")

@@ -200,3 +200,18 @@ def test_uv_or_python_argv_pytest_python_paths_without_uv(monkeypatch: pytest.Mo
     monkeypatch.setattr("atman.tui.cmd.shutil.which", lambda _name: None)
     assert uv_or_python_argv("pytest", "-q") == [sys.executable, "-m", "pytest", "-q"]
     assert uv_or_python_argv("python", "demo.py") == [sys.executable, "demo.py"]
+
+
+def test_tests_tab_does_not_use_message_pump_running_for_pytest_guard() -> None:
+    """Textual sets MessagePump._running=True while the widget processes messages.
+
+    Using the same name for a pytest in-flight flag makes ``run_pytest_suite`` exit
+    immediately on every click.
+    """
+    import inspect
+
+    from atman.tui.tests_tab import TestsTab
+
+    src = inspect.getsource(TestsTab.run_pytest_suite)
+    assert "_pytest_busy" in src
+    assert "self._running" not in src
