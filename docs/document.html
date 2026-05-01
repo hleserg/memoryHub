@@ -735,19 +735,19 @@
       function getDocumentPath(docKey, lang) {
         const paths = {
           readme: {
-            ru: "README.md",
-            en: "README.en.md"
+            ru: "content/README-ru.md",
+            en: "content/README.md"
           },
           manifest: {
-            ru: "MANIFEST.md",
-            en: "MANIFEST.en.md"
+            ru: "content/MANIFEST-ru.md",
+            en: "content/MANIFEST.md"
           },
           system: {
-            ru: "docs/architecture/SYSTEM.md",
-            en: "docs/architecture/SYSTEM.en.md"
+            ru: "content/SYSTEM-ru.md",
+            en: "content/SYSTEM.md"
           }
         };
-        return paths[docKey]?.[lang] || paths[docKey]?.ru || "README.md";
+        return paths[docKey]?.[lang] || paths[docKey]?.ru || "content/README-ru.md";
       }
 
       function getDocuments(lang) {
@@ -776,10 +776,32 @@
       const docAliases = {
         "README.md": "readme",
         "/README.md": "readme",
+        "README-ru.md": "readme",
+        "/README-ru.md": "readme",
+        "content/README.md": "readme",
+        "/content/README.md": "readme",
+        "content/README-ru.md": "readme",
+        "/content/README-ru.md": "readme",
         "MANIFEST.md": "manifest",
         "/MANIFEST.md": "manifest",
+        "MANIFEST-ru.md": "manifest",
+        "/MANIFEST-ru.md": "manifest",
+        "content/MANIFEST.md": "manifest",
+        "/content/MANIFEST.md": "manifest",
+        "content/MANIFEST-ru.md": "manifest",
+        "/content/MANIFEST-ru.md": "manifest",
         "docs/architecture/SYSTEM.md": "system",
         "/docs/architecture/SYSTEM.md": "system",
+        "docs/architecture/SYSTEM-ru.md": "system",
+        "/docs/architecture/SYSTEM-ru.md": "system",
+        "architecture/SYSTEM.md": "system",
+        "/architecture/SYSTEM.md": "system",
+        "architecture/SYSTEM-ru.md": "system",
+        "/architecture/SYSTEM-ru.md": "system",
+        "content/SYSTEM-ru.md": "system",
+        "/content/SYSTEM-ru.md": "system",
+        "content/SYSTEM.md": "system",
+        "/content/SYSTEM.md": "system",
       };
 
       const params = new URLSearchParams(window.location.search);

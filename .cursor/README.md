@@ -39,6 +39,20 @@ Describes:
 - Agent instructions accessible but non-intrusive
 - Sync documentation discoverable
 
+### GitHub CLI and Git auth (typical WSL setup)
+
+The repo uses an `https://github.com/...` remote. For `git push` and `gh pr create` to work from this environment:
+
+1. **Install `gh`** (if missing): e.g. unpack the official Linux build into `~/.local/bin` and add that directory to your `PATH`, or use your distro package manager.
+2. **Log in once (interactive terminal)**:
+   - `gh auth login` — choose GitHub.com → HTTPS → authenticate Git → log in via browser or paste a token.
+   - `gh auth setup-git` — wires Git to use `gh` as the credential helper so `git push` over HTTPS works.
+3. **Optional — non-interactive / agents**: set `GH_TOKEN` (fine-grained or classic PAT with **Contents** and **Pull requests** access to this repo), then:
+   - `printf '%s\n' "$GH_TOKEN" | gh auth login --with-token`  
+   - `gh auth setup-git`
+
+`~/.ssh/known_hosts` should include `github.com` (host key) if you switch the remote to SSH (`git@github.com:hleserg/atman.git`) and use a deploy key or personal SSH key.
+
 ## Related Files
 
 - [`/workspace/AGENTS.md`](../AGENTS.md) — Cloud agent instructions (auto-injected)

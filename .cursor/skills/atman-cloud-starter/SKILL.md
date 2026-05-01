@@ -5,7 +5,7 @@ description: Practical setup, run, and testing guide for Cursor Cloud agents wor
 
 # Atman Cloud agent starter
 
-Use this skill when a Cloud agent needs to run, test, or extend this repository. It consolidates `AGENTS.md`, `README.md`, `MANIFEST.md`, `docs/architecture/SYSTEM.md`, `docs/development/DEVELOPMENT_STANDARD.md`, the current Python package config, implementation docs, and the Cursor issue workflow.
+Use this skill when a Cloud agent needs to run, test, or extend this repository. It consolidates `AGENTS.md`, `README.md`, `MANIFEST.md`, `docs/architecture/SYSTEM.md`, `docs/development/DEVELOPMENT_STANDARD.md`, the current Python package config, and implementation docs.
 
 ## 1. Reality check first
 
@@ -14,13 +14,13 @@ Use this skill when a Cloud agent needs to run, test, or extend this repository.
 - Project goal: Atman is a psychological layer for AI agents, not a task runner. It is meant to preserve identity, lived experience, reflection, skills, and narrative continuity across sessions.
 - Main implemented area today: Factual Memory Adapter v0.1.0.
 - Primary documentation language is English. Keep paired Russian docs in sync only for paired files listed in `AGENTS.md`: `README.md` / `README-ru.md`, `docs/architecture/SYSTEM.md` / `docs/architecture/SYSTEM-ru.md`, `MANIFEST.md` / `MANIFEST-ru.md`.
+- **There is no GitHub Actions CI** in this repository. Validation is local (`make check`, pre-commit). The public site is static files under `docs/` (GitHub Pages from a branch). After editing root `README*` / `MANIFEST*` or `docs/architecture/SYSTEM.md` / `SYSTEM-ru.md`, run `make sync-site-content` so `docs/content/` stays in sync for `document.html` (English uses canonical `README.md`, `MANIFEST.md`, `SYSTEM.md`; Russian uses `*-ru.md` copies).
 
 ## 2. Cloud setup and login
 
 - No application login is needed for local runs.
-- In Cursor Cloud, `gh` is usually already authenticated for read-only inspection. Use it for viewing PRs, issues, and workflow logs only.
+- In Cursor Cloud, `gh` is usually already authenticated for read-only inspection. Use it for viewing PRs and issues.
 - Do not require mem0, OpenClaw, real LLM providers, API keys, internet, or external services for tests.
-- For GitHub Actions Cursor issue intake, the workflow expects `CURSOR_API_KEY` in repository secrets and installs Cursor CLI inside Actions. Local Cloud agents should not try to create or rotate that secret.
 - Python requirement: `>=3.12`.
 
 Setup commands:
@@ -107,33 +107,11 @@ bash src/test_cli.sh
 
 Use a temporary file or `/tmp` path when testing `FileBackend`. The CLI default is `~/.atman/facts.jsonl`; avoid committing or relying on that local state.
 
-### GitHub Actions Cursor issue intake
-
-Area:
-
-- `.github/workflows/cursor-issue-intake.yml`
-- `tests/test_cursor_issue_intake_workflow.py`
-
-What it does:
-
-- Runs when an issue is labeled `cursor-ready` or via `workflow_dispatch`.
-- Resolves issue context, builds a Cursor prompt, installs Cursor CLI, runs `agent -p --trust --force`, uploads the patch, then finalizes in a trusted job.
-- The trusted finalization creates branch `cursor/issue-${ISSUE_NUMBER}-${RUN_ID}`, commits, pushes, opens a PR, and comments on the issue.
-- Tests assert checkout credential handling, tokenized origin setup before push, and `CURSOR_API_KEY` scoping.
-
-Test workflow:
-
-```bash
-python3 -m pytest tests/test_cursor_issue_intake_workflow.py -v
-```
-
-Use this workflow after editing the workflow YAML or issue-intake automation.
-
 ### Architecture and development docs
 
 Area:
 
-- `MANIFEST.md`, `MANIFEST-ru.md`, `MANIFEST.en.md`
+- `MANIFEST.md`, `MANIFEST-ru.md`
 - `docs/architecture/SYSTEM.md`, `docs/architecture/SYSTEM-ru.md`, related drafts
 - `docs/development/DEVELOPMENT_STANDARD.md`
 - `docs/development/work-packages/`
@@ -179,10 +157,7 @@ Test workflow:
 
 ```bash
 git diff --check -- .github
-python3 -m pytest tests/test_cursor_issue_intake_workflow.py -v
 ```
-
-Use the pytest command only when workflow automation behavior changes.
 
 ### Reports and session notes
 

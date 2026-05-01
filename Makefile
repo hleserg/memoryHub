@@ -1,4 +1,4 @@
-.PHONY: lint format typecheck security test test-fast audit check all
+.PHONY: lint format typecheck security test test-fast audit check all sync-site-content docs-preview
 
 lint:
 	ruff check src/ tests/
@@ -31,3 +31,15 @@ check: lint format typecheck security test
 	@echo "All checks passed."
 
 all: check audit
+
+# Copies canonical EN + RU sources into docs/content/ for GitHub Pages (document.html).
+# English: README.md, MANIFEST.md, docs/architecture/SYSTEM.md — Russian: *-ru.md counterparts.
+sync-site-content:
+	mkdir -p docs/content
+	cp README.md README-ru.md MANIFEST.md MANIFEST-ru.md docs/content/
+	cp docs/architecture/SYSTEM.md docs/content/SYSTEM.md
+	cp docs/architecture/SYSTEM-ru.md docs/content/SYSTEM-ru.md
+
+docs-preview: sync-site-content
+	@echo "Serving from docs/ — open http://127.0.0.1:8765/"
+	cd docs && python3 -m http.server 8765
