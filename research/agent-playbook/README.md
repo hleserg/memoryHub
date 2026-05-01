@@ -2,6 +2,8 @@
 
 **Universal patterns and practices for AI agent-driven software development**
 
+> **Note**: This playbook is maintained in the `research/agent-playbook/` directory as a standalone resource. It documents universal patterns derived from real project experience but is not project-specific. For project-specific development standards, refer to the main project documentation.
+
 ## What is this?
 
 This repository contains battle-tested patterns, workflows, and governance structures for managing software projects where AI agents are primary contributors. These patterns emerged from real-world experience managing multiple autonomous agents working in parallel on complex architectural projects.

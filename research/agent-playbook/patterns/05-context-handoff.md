@@ -153,27 +153,29 @@ Prototype — documentation only, no code yet
 
 **Example**:
 ```markdown
-# Component: Experience Store
+# Component: Order Service
 
 ## Responsibility
-Store and retrieve agent experiences with emotional coloring.
+Process and manage customer orders through their lifecycle.
 
 ## Public Interface
-- `add_experience(experience: Experience) -> ExperienceRecord`
-- `query_experiences(query: Query) -> List[Experience]`
+- `create_order(order_data: OrderData) -> Order`
+- `query_orders(query: OrderQuery) -> List[Order]`
+- `update_order_status(order_id: str, status: OrderStatus) -> Order`
 
 ## Dependencies
-- Core: `models.Experience`
-- Adapter: `MemoryBackend` (for storage)
+- Core: `models.Order`, `models.OrderStatus`
+- Adapter: `PaymentGateway` (for payment processing)
+- Adapter: `InventoryBackend` (for stock management)
 
 ## Key Constraints
-- Experiences are immutable once recorded
-- Emotional coloring can be incomplete
-- Must preserve original timestamps
+- Orders are immutable once confirmed
+- Status transitions must follow defined workflow
+- Must preserve complete audit trail
 
 ## Testing
-- Unit tests: `tests/experience_store_test.py`
-- Integration: Uses `InMemoryBackend` for tests
+- Unit tests: `tests/order_service_test.py`
+- Integration: Uses `MockPaymentGateway` for tests
 ```
 
 ### Layer 4: Current State
@@ -224,7 +226,7 @@ Store and retrieve agent experiences with emotional coloring.
 
 **Handoff Document**:
 ```markdown
-# Handoff: Experience Store Component
+# Handoff: Order Service Component
 
 ## What's Complete
 - [x] Core data models
@@ -232,26 +234,26 @@ Store and retrieve agent experiences with emotional coloring.
 - [x] Unit tests for models
 
 ## What's Incomplete
-- [ ] File-based storage backend
+- [ ] Database persistence layer
 - [ ] Query optimization
 - [ ] Integration tests
 
 ## Key Decisions Made
-- Experiences are immutable (see ADR-007)
+- Orders are immutable after confirmation (see ADR-007)
 - Using schema_version for all records
-- Emotional coloring is optional field
+- Status transitions follow state machine pattern
 
 ## Known Issues
-- Performance degrades with >10k records (optimization planned)
-- File backend needs atomic write guarantees
+- Performance degrades with >10k orders (optimization planned)
+- Database backend needs transaction support
 
 ## Next Steps
-1. Implement FileBackend (see `storage/file_backend.py` stub)
+1. Implement DatabaseBackend (see `storage/db_backend.py` stub)
 2. Add integration tests with both backends
-3. Performance test with 100k records
+3. Performance test with 100k orders
 
 ## Context Documents
-- Architecture: `docs/ARCHITECTURE.md § Experience Store`
+- Architecture: `docs/ARCHITECTURE.md § Order Service`
 - Standards: `DEVELOPMENT_STANDARD.md § Storage Boundaries`
 - Related PR: #123
 ```
@@ -262,40 +264,40 @@ Store and retrieve agent experiences with emotional coloring.
 
 **Coordination Document**:
 ```markdown
-# Integration: Memory Adapter ↔ Experience Store
+# Integration: Payment Gateway ↔ Order Service
 
 ## Shared Interface
 ```python
-class MemoryBackend(ABC):
+class PaymentGateway(ABC):
     @abstractmethod
-    def add_record(self, record: Record) -> Record:
+    def process_payment(self, payment: PaymentRequest) -> PaymentResult:
         pass
     
     @abstractmethod
-    def query(self, query: Query) -> List[Record]:
+    def refund_payment(self, transaction_id: str) -> RefundResult:
         pass
 ```
 
 ## Contract
-- Memory Adapter (Agent 1) provides implementation
-- Experience Store (Agent 2) uses interface
-- Integration point: `core/ports/memory_backend.py`
+- Payment Gateway (Agent 1) provides implementation
+- Order Service (Agent 2) uses interface
+- Integration point: `core/ports/payment_gateway.py`
 
 ## Assumptions
 - Both agents use the canonical data models in `core/models/`
-- Queries follow the Query DSL in `core/query.py`
-- Error handling: raises `MemoryBackendError` subclasses
+- Payments follow the Payment API spec in `core/payment_api.py`
+- Error handling: raises `PaymentGatewayError` subclasses
 
 ## Integration Test Plan
-1. Memory Adapter completes first
-2. Experience Store tests against in-memory mock
-3. Integration test uses real Memory Adapter
-4. See: `tests/integration/memory_experience_test.py`
+1. Payment Gateway completes first
+2. Order Service tests against mock gateway
+3. Integration test uses real Payment Gateway
+4. See: `tests/integration/payment_order_test.py`
 
 ## Status
-- [ ] Interface defined (blocked on terminology clarification)
-- [ ] Memory Adapter implementation (Agent 1, in progress)
-- [ ] Experience Store implementation (Agent 2, in progress)
+- [ ] Interface defined (blocked on API specification)
+- [ ] Payment Gateway implementation (Agent 1, in progress)
+- [ ] Order Service implementation (Agent 2, in progress)
 - [ ] Integration test (after both complete)
 ```
 
@@ -308,30 +310,30 @@ class MemoryBackend(ABC):
 # Session Summary: 2026-04-30
 
 ## Completed This Session
-- Implemented FileBackend class
-- Added basic write operations
+- Implemented DatabaseBackend class
+- Added basic CRUD operations
 - Started test suite
 
 ## Current State
-- Code: `storage/file_backend.py` (85% complete)
-- Tests: `tests/storage/file_backend_test.py` (40% complete)
-- Branch: `agent/file-backend`
+- Code: `storage/db_backend.py` (85% complete)
+- Tests: `tests/storage/db_backend_test.py` (40% complete)
+- Branch: `agent/db-backend`
 
 ## Next Session TODO
 1. Finish test coverage (especially error cases)
-2. Implement atomic write with temp file + rename
-3. Add compression for large records
+2. Implement transaction support with rollback
+3. Add connection pooling for performance
 4. Performance test
 
 ## Open Questions
-- Should we use JSON or MessagePack for serialization?
-  (Leaning toward JSON for debuggability)
-- File rotation strategy for append-only log?
-  (Maybe size-based rotation at 100MB?)
+- Should we use SQLAlchemy ORM or raw SQL?
+  (Leaning toward ORM for maintainability)
+- Connection pool size configuration?
+  (Maybe start with 10, make configurable?)
 
 ## Context to Reload
 - Storage boundaries: DEVELOPMENT_STANDARD.md § 11
-- Atomic write patterns: ADR-009
+- Transaction patterns: ADR-009
 - Similar implementation: `storage/in_memory_backend.py`
 ```
 

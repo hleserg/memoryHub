@@ -11,7 +11,7 @@ This guide will help you set up your project for AI agent collaboration using th
 Create `AGENTS.md` in your repository root using [this template](templates/AGENTS.md).
 
 **Minimum viable content**:
-```markdown
+````markdown
 # AGENTS.md
 
 ## Overview
@@ -32,7 +32,7 @@ npm test     # or your test command
 
 ## Key Documents
 - Standards: DEVELOPMENT_STANDARD.md
-```
+````
 
 **Time check**: You should have a basic AGENTS.md now.
 

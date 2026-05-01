@@ -447,7 +447,7 @@ Each stage validates that combined work functions correctly.
 
 - [Issue-to-PR Workflow](02-issue-to-pr-workflow.md) — Agent gets isolated environment for PR work
 - [Context Handoff](05-context-handoff.md) — Share environment setup in handoff docs
-- [Work Packages](../guides/work-packages.md) — Structure work for parallel execution
+- [Work Package Template](../templates/issue-templates/work_package.md) — Structure work for parallel execution
 
 ## Tools
 

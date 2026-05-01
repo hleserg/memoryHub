@@ -490,7 +490,7 @@ Module D: Raw SQL
 
 **Prevention**:
 ✅ **Document canonical patterns**
-```markdown
+````markdown
 ## Data Access Pattern
 Always use repository pattern:
 
@@ -501,7 +501,7 @@ class UserRepository:
 ```
 
 See: `repositories/user_repository.py` as example
-```
+````
 
 ✅ **Point to examples in issues**
 ```markdown

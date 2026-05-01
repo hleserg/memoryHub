@@ -39,7 +39,7 @@ Create a hierarchical system of machine-readable documentation with clear separa
 - Special considerations (e.g., "no code yet, docs only")
 
 **Example Structure**:
-```markdown
+````markdown
 # AGENTS.md
 
 ## Overview
@@ -65,7 +65,7 @@ npm run build
 ## Special Notes
 - Always run tests before committing
 - Use conventional commits
-```
+````
 
 ### 2. DEVELOPMENT_STANDARD.md — Domain Standards
 
@@ -81,7 +81,7 @@ npm run build
 - Definition of done criteria
 
 **Example Structure**:
-```markdown
+````markdown
 # Development Standard
 
 ## Core Terminology
@@ -112,7 +112,7 @@ Avoid: `uid`, `data`, `state` (too generic)
 - [ ] Has unit tests
 - [ ] Runs locally without external services
 - [ ] Documentation updated
-```
+````
 
 ### 3. Cursor Rules (.cursorrules, .mdc files)
 
