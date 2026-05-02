@@ -7,6 +7,7 @@ These services implement the three levels of reflection:
 - DeepReflectionService: Scheduled deep reflection with health assessment
 """
 
+import contextlib
 from datetime import datetime
 from typing import Literal
 from uuid import UUID
@@ -193,7 +194,9 @@ class DailyReflectionService:
 
         identity = self.identity_repo.get_current()
         if not identity:
-            return self._create_empty_event(date)
+            return self._create_skipped_daily_no_identity(
+                date, [exp.id for exp in experiences]
+            )
 
         patterns_detected = self._detect_patterns(experiences, identity)
         reframing_count = self._add_reframing_notes(experiences, patterns_detected)
@@ -271,6 +274,24 @@ class DailyReflectionService:
             reflection_level=ReflectionLevel.DAILY,
             experiences_analyzed=[],
             key_insight=f"No experiences on {date.strftime('%Y-%m-%d')}",
+            notes="outcome=daily_empty reason=no_experiences",
+        )
+        self.event_store.save(event)
+        return event
+
+    def _create_skipped_daily_no_identity(
+        self, date: datetime, experience_ids: list[UUID]
+    ) -> ReflectionEvent:
+        """Experiences exist but identity is missing — distinct from an empty day."""
+        n = len(experience_ids)
+        event = ReflectionEvent(
+            reflection_level=ReflectionLevel.DAILY,
+            experiences_analyzed=list(experience_ids),
+            key_insight=(
+                f"Daily reflection skipped: no current identity loaded "
+                f"({n} experience(s) on {date.strftime('%Y-%m-%d')})."
+            ),
+            notes="outcome=daily_skipped reason=no_identity",
         )
         self.event_store.save(event)
         return event
@@ -330,10 +351,11 @@ class DeepReflectionService:
 
         identity = self.identity_repo.get_current()
         if not identity:
-            return self._create_empty_event(since, until)
+            return self._create_skipped_deep_no_identity(
+                since, until, [exp.id for exp in experiences]
+            )
 
         health_assessment = self._perform_health_assessment(identity, experiences)
-        self.health_store.save(health_assessment)
 
         patterns_detected = self._detect_deep_patterns(experiences, identity)
         reframing_count = self._add_strategic_reframing(experiences, patterns_detected)
@@ -357,7 +379,29 @@ class DeepReflectionService:
             key_insight=f"Deep reflection: {len(patterns_detected)} patterns, health score {health_assessment.overall_score:.2f}",
         )
 
-        self.event_store.save(event)
+        health_persisted = False
+        try:
+            self.health_store.save(health_assessment)
+            health_persisted = True
+            self.event_store.save(event)
+        except Exception as exc:
+            failed = ReflectionEvent(
+                reflection_level=ReflectionLevel.DEEP,
+                experiences_analyzed=[exp.id for exp in experiences],
+                patterns_detected=[p.id for p in patterns_detected],
+                reframing_notes_added=reframing_count,
+                narrative_changes_proposed=narrative_changes,
+                identity_changes_proposed=identity_changes,
+                health_assessment_id=health_assessment.id if health_persisted else None,
+                key_insight=(
+                    "Deep reflection did not complete a durable success record "
+                    f"({type(exc).__name__})."
+                ),
+                notes=f"outcome=deep_failed reason=persist err={type(exc).__name__}",
+            )
+            with contextlib.suppress(Exception):
+                self.event_store.save(failed)
+            raise
         return event
 
     def _perform_health_assessment(
@@ -368,7 +412,7 @@ class DeepReflectionService:
 
         for criterion in JahodaCriterion:
             score, evidence, concerns = self.reflection_model.assess_health_criterion(
-                identity=identity, experiences=experiences, criterion=criterion.value
+                identity=identity, experiences=experiences, criterion=criterion
             )
 
             criteria[criterion] = CriterionAssessment(
@@ -490,6 +534,24 @@ class DeepReflectionService:
             reflection_level=ReflectionLevel.DEEP,
             experiences_analyzed=[],
             key_insight=f"No experiences from {since.strftime('%Y-%m-%d')} to {until.strftime('%Y-%m-%d')}",
+            notes="outcome=deep_empty reason=no_experiences",
+        )
+        self.event_store.save(event)
+        return event
+
+    def _create_skipped_deep_no_identity(
+        self, since: datetime, until: datetime, experience_ids: list[UUID]
+    ) -> ReflectionEvent:
+        """Experiences in range but identity missing — distinct from an empty period."""
+        n = len(experience_ids)
+        event = ReflectionEvent(
+            reflection_level=ReflectionLevel.DEEP,
+            experiences_analyzed=list(experience_ids),
+            key_insight=(
+                "Deep reflection skipped: no current identity loaded "
+                f"({n} experience(s) from {since.strftime('%Y-%m-%d')} to {until.strftime('%Y-%m-%d')})."
+            ),
+            notes="outcome=deep_skipped reason=no_identity",
         )
         self.event_store.save(event)
         return event

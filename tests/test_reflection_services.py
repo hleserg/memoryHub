@@ -5,6 +5,8 @@ Tests for reflection services.
 from datetime import UTC, datetime
 from uuid import UUID, uuid4
 
+import pytest
+
 from atman.adapters.reflection.fixture_loader import (
     anchor_session_experiences_to_utc_day_window,
     load_reflection_identity,
@@ -26,7 +28,7 @@ from atman.core.models.experience import (
 )
 from atman.core.models.identity import Identity, IdentitySnapshot
 from atman.core.models.narrative import LayerType, NarrativeDocument, NarrativeLayer
-from atman.core.models.reflection import ReflectionLevel
+from atman.core.models.reflection import ReflectionEvent, ReflectionLevel
 from atman.core.services.reflection_service import (
     DailyReflectionService,
     DeepReflectionService,
@@ -148,6 +150,47 @@ class ConflictNarrativeRepo(MockNarrativeRepo):
         self, narrative: NarrativeDocument, *, expected_updated_at: datetime | None = None
     ) -> None:
         raise NarrativePersistenceConflictError("simulated concurrent narrative write")
+
+
+class NullIdentityRepo:
+    """Identity repository with no current identity (audit / degraded path)."""
+
+    def get_current(self) -> Identity | None:
+        return None
+
+    def get_snapshot(self, snapshot_id: UUID) -> IdentitySnapshot | None:
+        return None
+
+    def get_history(self) -> list[IdentitySnapshot]:
+        return []
+
+    def update(self, identity: Identity) -> None:
+        return None
+
+    def create_snapshot(
+        self, identity: Identity, description: str, change_summary: str
+    ) -> IdentitySnapshot:
+        return IdentitySnapshot(
+            identity_id=identity.id,
+            identity_snapshot=identity,
+            description=description,
+            change_summary=change_summary,
+        )
+
+
+class FlakyReflectionEventStore(InMemoryReflectionEventStore):
+    """Fails the first save of a non-failure deep reflection event."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self._fail_eligible_once = True
+
+    def save(self, event: ReflectionEvent) -> None:
+        notes = event.notes or ""
+        if self._fail_eligible_once and "outcome=deep_failed" not in notes:
+            self._fail_eligible_once = False
+            raise RuntimeError("simulated reflection event persist failure")
+        super().save(event)
 
 
 class RejectingReframeMockRepo(MockExperienceRepo):
@@ -515,3 +558,118 @@ def test_deep_reflection_fixture_json_adds_reframing() -> None:
     assert len(event.patterns_detected) >= 1
     assert event.reframing_notes_added >= 1
     assert any(len(exp.reframing_notes) > 0 for exp in experiences)
+
+
+def test_daily_reflection_skipped_no_identity_preserves_experience_ids() -> None:
+    """Experiences exist but identity is missing — not an empty day."""
+    exp1 = create_test_experience()
+    exp2 = create_test_experience()
+
+    exp_repo = MockExperienceRepo([exp1, exp2])
+    identity_repo = NullIdentityRepo()
+    pattern_store = InMemoryPatternStore()
+    reflection_model = MockReflectionModel()
+    event_store = InMemoryReflectionEventStore()
+
+    service = DailyReflectionService(
+        experience_repo=exp_repo,
+        identity_repo=identity_repo,
+        pattern_store=pattern_store,
+        reflection_model=reflection_model,
+        event_store=event_store,
+    )
+
+    event = service.reflect(datetime.now(UTC))
+
+    assert event.reflection_level == ReflectionLevel.DAILY
+    assert set(event.experiences_analyzed) == {exp1.id, exp2.id}
+    assert "no_identity" in event.notes
+    assert "daily_skipped" in event.notes
+    assert "no experiences" not in event.key_insight.lower()
+
+
+def test_deep_reflection_skipped_no_identity_preserves_experience_ids() -> None:
+    exp1 = create_test_experience()
+    exp2 = create_test_experience()
+    exp3 = create_test_experience()
+
+    identity = Identity()
+    narrative = NarrativeDocument(
+        identity_id=identity.id,
+        core_layer=NarrativeLayer(layer_type=LayerType.CORE, content="Core"),
+        recent_layer=NarrativeLayer(layer_type=LayerType.RECENT, content="Recent"),
+    )
+
+    exp_repo = MockExperienceRepo([exp1, exp2, exp3])
+    identity_repo = NullIdentityRepo()
+    narrative_repo = MockNarrativeRepo(narrative)
+    pattern_store = InMemoryPatternStore()
+    health_store = InMemoryHealthAssessmentStore()
+    reflection_model = MockReflectionModel()
+    event_store = InMemoryReflectionEventStore()
+
+    service = DeepReflectionService(
+        experience_repo=exp_repo,
+        identity_repo=identity_repo,
+        narrative_repo=narrative_repo,
+        pattern_store=pattern_store,
+        health_store=health_store,
+        reflection_model=reflection_model,
+        event_store=event_store,
+    )
+
+    since = datetime.now(UTC).replace(hour=0, minute=0)
+    until = datetime.now(UTC)
+    event = service.reflect(since, until)
+
+    assert event.reflection_level == ReflectionLevel.DEEP
+    assert set(event.experiences_analyzed) == {exp1.id, exp2.id, exp3.id}
+    assert "no_identity" in event.notes
+    assert "deep_skipped" in event.notes
+    assert health_store.get_all() == []
+
+
+def test_deep_reflection_persist_failure_links_health_assessment() -> None:
+    """If success event persistence fails after health is stored, emit a failed run event."""
+    exp1 = create_test_experience()
+    exp2 = create_test_experience()
+    exp3 = create_test_experience()
+
+    identity = Identity()
+    narrative = NarrativeDocument(
+        identity_id=identity.id,
+        core_layer=NarrativeLayer(layer_type=LayerType.CORE, content="Core"),
+        recent_layer=NarrativeLayer(layer_type=LayerType.RECENT, content="Recent"),
+    )
+
+    exp_repo = MockExperienceRepo([exp1, exp2, exp3])
+    identity_repo = MockIdentityRepo(identity)
+    narrative_repo = MockNarrativeRepo(narrative)
+    pattern_store = InMemoryPatternStore()
+    health_store = InMemoryHealthAssessmentStore()
+    reflection_model = MockReflectionModel()
+    event_store = FlakyReflectionEventStore()
+
+    service = DeepReflectionService(
+        experience_repo=exp_repo,
+        identity_repo=identity_repo,
+        narrative_repo=narrative_repo,
+        pattern_store=pattern_store,
+        health_store=health_store,
+        reflection_model=reflection_model,
+        event_store=event_store,
+    )
+
+    since = datetime.now(UTC).replace(hour=0, minute=0)
+    until = datetime.now(UTC)
+
+    with pytest.raises(RuntimeError, match="persist failure"):
+        service.reflect(since, until)
+
+    assert len(health_store.get_all()) == 1
+    stored_events = event_store.get_all()
+    assert len(stored_events) == 1
+    failed = stored_events[0]
+    assert "deep_failed" in failed.notes
+    assert failed.health_assessment_id is not None
+    assert failed.health_assessment_id == health_store.get_all()[0].id

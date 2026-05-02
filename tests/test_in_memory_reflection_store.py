@@ -78,12 +78,12 @@ def test_reflection_event_store_queries() -> None:
     assert len(recent) == 1
 
 
-def _full_criteria() -> dict[JahodaCriterion, CriterionAssessment]:
+def _criteria_uniform(score: float) -> dict[JahodaCriterion, CriterionAssessment]:
     criteria: dict[JahodaCriterion, CriterionAssessment] = {}
     for criterion in JahodaCriterion:
         criteria[criterion] = CriterionAssessment(
             criterion=criterion,
-            score=0.6,
+            score=score,
             evidence=["e"],
             concerns=["c"],
         )
@@ -95,12 +95,12 @@ def test_health_assessment_store_get_latest() -> None:
     assert store.get_latest() is None
 
     a1 = HealthAssessment(
-        criteria=_full_criteria(),
+        criteria=_criteria_uniform(0.5),
         overall_score=0.5,
         timestamp=datetime(2025, 1, 1, tzinfo=UTC),
     )
     a2 = HealthAssessment(
-        criteria=_full_criteria(),
+        criteria=_criteria_uniform(0.8),
         overall_score=0.8,
         timestamp=datetime(2026, 1, 1, tzinfo=UTC),
     )

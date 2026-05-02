@@ -11,9 +11,10 @@ These models represent reflection processes and outputs:
 
 from datetime import UTC, datetime
 from enum import StrEnum
+from typing import Self
 from uuid import UUID, uuid4
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 class ReflectionLevel(StrEnum):
@@ -261,6 +262,18 @@ class HealthAssessment(BaseModel):
     def validate_recommendations(cls, v: list[str]) -> list[str]:
         """Normalize recommendations."""
         return [rec.strip() for rec in v if rec.strip()]
+
+    @model_validator(mode="after")
+    def overall_score_matches_criteria_mean(self) -> Self:
+        """``overall_score`` must match the arithmetic mean of the six criterion scores."""
+        if not self.criteria:
+            return self
+        expected = sum(c.score for c in self.criteria.values()) / len(self.criteria)
+        if abs(self.overall_score - expected) > 1e-5:
+            raise ValueError(
+                f"overall_score ({self.overall_score}) must equal the mean of criterion scores ({expected})"
+            )
+        return self
 
     model_config = ConfigDict(
         validate_assignment=True,

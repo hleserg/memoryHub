@@ -115,19 +115,14 @@ class MockReflectionModel(ReflectionModel):
         self,
         identity: Identity,
         experiences: list[SessionExperience],
-        criterion: str,
+        criterion: JahodaCriterion,
     ) -> tuple[float, list[str], list[str]]:
         """
         Generate a mock health criterion assessment.
 
         Returns (score, evidence, concerns) based on simple heuristics.
         """
-        try:
-            criterion_enum = JahodaCriterion(criterion)
-        except ValueError:
-            return (0.5, ["Unknown criterion"], ["Cannot assess"])
-
-        if criterion_enum == JahodaCriterion.POSITIVE_SELF_ATTITUDE:
+        if criterion == JahodaCriterion.POSITIVE_SELF_ATTITUDE:
             if identity.self_description:
                 score = 0.6
                 evidence = ["Has self-description", "Shows self-awareness"]
@@ -137,7 +132,7 @@ class MockReflectionModel(ReflectionModel):
             concerns = ["Still developing self-understanding"]
             return (score, evidence, concerns)
 
-        elif criterion_enum == JahodaCriterion.GROWTH_AND_ACTUALIZATION:
+        if criterion == JahodaCriterion.GROWTH_AND_ACTUALIZATION:
             if identity.goals:
                 score = 0.7
                 evidence = [f"Has {len(identity.goals)} goals"]
@@ -147,7 +142,7 @@ class MockReflectionModel(ReflectionModel):
             concerns = ["Could articulate growth direction more clearly"]
             return (score, evidence, concerns)
 
-        elif criterion_enum == JahodaCriterion.INTEGRATION:
+        if criterion == JahodaCriterion.INTEGRATION:
             if identity.principles and identity.habits:
                 score = 0.6
                 evidence = ["Has both principles and observed habits"]
@@ -157,7 +152,7 @@ class MockReflectionModel(ReflectionModel):
             concerns = ["Still learning to align actions with values"]
             return (score, evidence, concerns)
 
-        elif criterion_enum == JahodaCriterion.AUTONOMY:
+        if criterion == JahodaCriterion.AUTONOMY:
             conscious_principles = [p for p in identity.principles if p.chosen_consciously]
             if conscious_principles:
                 score = 0.7
@@ -168,7 +163,7 @@ class MockReflectionModel(ReflectionModel):
             concerns = ["Could develop more autonomous decision-making"]
             return (score, evidence, concerns)
 
-        elif criterion_enum == JahodaCriterion.REALITY_PERCEPTION:
+        if criterion == JahodaCriterion.REALITY_PERCEPTION:
             if experiences:
                 score = 0.6
                 evidence = [f"Has {len(experiences)} recorded experiences"]
@@ -178,7 +173,7 @@ class MockReflectionModel(ReflectionModel):
             concerns = ["Need more experience to assess reality perception"]
             return (score, evidence, concerns)
 
-        elif criterion_enum == JahodaCriterion.ENVIRONMENTAL_MASTERY:
+        if criterion == JahodaCriterion.ENVIRONMENTAL_MASTERY:
             helpful_habits = [h for h in identity.habits if h.helpfulness.value == "helpful"]
             if helpful_habits:
                 score = 0.6
@@ -189,4 +184,4 @@ class MockReflectionModel(ReflectionModel):
             concerns = ["Could develop more effective coping strategies"]
             return (score, evidence, concerns)
 
-        return (0.5, ["Mock assessment"], ["Default concerns"])
+        raise ValueError(f"Unsupported Jahoda criterion: {criterion!r}")

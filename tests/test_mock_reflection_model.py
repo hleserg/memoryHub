@@ -216,7 +216,7 @@ def test_assess_health_all_criteria() -> None:
 
     for criterion in JahodaCriterion:
         score, evidence, concerns = model.assess_health_criterion(
-            identity, experiences, criterion.value
+            identity, experiences, criterion
         )
 
         assert 0.0 <= score <= 1.0
@@ -231,7 +231,7 @@ def test_assess_health_positive_self_attitude() -> None:
     identity = Identity(self_description="I am learning")
 
     score, evidence, _concerns = model.assess_health_criterion(
-        identity, [], JahodaCriterion.POSITIVE_SELF_ATTITUDE.value
+        identity, [], JahodaCriterion.POSITIVE_SELF_ATTITUDE
     )
 
     assert score >= 0.5
@@ -245,7 +245,7 @@ def test_assess_health_growth() -> None:
     identity = Identity(goals=[Goal(content="Learn more")])
 
     score, evidence, _concerns = model.assess_health_criterion(
-        identity, [], JahodaCriterion.GROWTH_AND_ACTUALIZATION.value
+        identity, [], JahodaCriterion.GROWTH_AND_ACTUALIZATION
     )
 
     assert score >= 0.5
@@ -262,7 +262,7 @@ def test_assess_health_integration() -> None:
     )
 
     score, _evidence, _concerns = model.assess_health_criterion(
-        identity, [], JahodaCriterion.INTEGRATION.value
+        identity, [], JahodaCriterion.INTEGRATION
     )
 
     assert score >= 0.5
@@ -275,7 +275,7 @@ def test_assess_health_autonomy() -> None:
     identity = Identity(principles=[Principle(statement="My choice", chosen_consciously=True)])
 
     score, _evidence, _concerns = model.assess_health_criterion(
-        identity, [], JahodaCriterion.AUTONOMY.value
+        identity, [], JahodaCriterion.AUTONOMY
     )
 
     assert score >= 0.5

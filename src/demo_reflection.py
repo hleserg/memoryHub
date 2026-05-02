@@ -370,13 +370,16 @@ def demo_narrative_revision(narrative: NarrativeDocument) -> None:
     )
     demo_pace()
 
+    from atman.core.narrative_write_audit import NoOpNarrativeWriteAudit
     from atman.core.services.narrative_revision import NarrativeRevisionService
 
     narrative_repo = MockNarrativeRepo(narrative)
     reflection_model = MockReflectionModel()
 
     service = NarrativeRevisionService(
-        narrative_repo=narrative_repo, reflection_model=reflection_model
+        narrative_repo=narrative_repo,
+        reflection_model=reflection_model,
+        narrative_audit=NoOpNarrativeWriteAudit(),
     )
 
     print_ok("\n1. Opening a narrative thread:")

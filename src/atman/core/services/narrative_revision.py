@@ -29,8 +29,10 @@ class NarrativeRevisionService:
     - Recent layer updates (frequent, session-by-session)
     - Thread management (opening, updating, closing)
 
-    All commits go through optimistic concurrency on ``updated_at`` and may
-    emit audit records when a :class:`NarrativeWriteAuditPort` is configured.
+    All commits go through optimistic concurrency on ``updated_at`` and emit
+    audit signals via ``narrative_audit``. Callers must pass a real governance
+    sink or explicitly :class:`~atman.core.narrative_write_audit.NoOpNarrativeWriteAudit`
+    for tests/demos — there is no silent ``None`` default.
     """
 
     def __init__(
@@ -38,7 +40,7 @@ class NarrativeRevisionService:
         narrative_repo: NarrativeRepository,
         reflection_model: ReflectionModel,
         *,
-        narrative_audit: NarrativeWriteAuditPort | None = None,
+        narrative_audit: NarrativeWriteAuditPort,
     ):
         """Initialize narrative revision service."""
         self.narrative_repo = narrative_repo
@@ -55,8 +57,6 @@ class NarrativeRevisionService:
     ) -> None:
         """Persist draft if ``expected_updated_at`` matches last commit; then audit."""
         self.narrative_repo.update(draft, expected_updated_at=expected_updated_at)
-        if self._narrative_audit is None:
-            return
         try:
             self._narrative_audit.record_narrative_commit(
                 change_kind=change_kind,

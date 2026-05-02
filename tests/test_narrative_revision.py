@@ -22,6 +22,7 @@ from atman.core.models.narrative import (
     NarrativeLayer,
 )
 from atman.core.models.reflection import PatternCandidate, PatternType, ReflectionLevel
+from atman.core.narrative_write_audit import NoOpNarrativeWriteAudit
 from atman.core.services.narrative_revision import NarrativeRevisionService
 
 
@@ -145,14 +146,16 @@ def _sample_experience() -> SessionExperience:
 
 
 def test_update_recent_layer_no_narrative() -> None:
-    svc = NarrativeRevisionService(_StubNarrativeRepo(None), MockReflectionModel())
+    svc = NarrativeRevisionService(
+        _StubNarrativeRepo(None), MockReflectionModel(), narrative_audit=NoOpNarrativeWriteAudit()
+    )
     assert svc.update_recent_layer([], ReflectionLevel.MICRO) == "No narrative to update"
 
 
 def test_update_recent_layer_updates_repo() -> None:
     doc = _minimal_narrative()
     repo = _StubNarrativeRepo(doc)
-    svc = NarrativeRevisionService(repo, MockReflectionModel())
+    svc = NarrativeRevisionService(repo, MockReflectionModel(), narrative_audit=NoOpNarrativeWriteAudit())
     out = svc.update_recent_layer([_sample_experience()], ReflectionLevel.MICRO)
     assert len(out) > 0
     cur = repo.get_current()
@@ -161,7 +164,9 @@ def test_update_recent_layer_updates_repo() -> None:
 
 
 def test_update_core_layer_no_narrative() -> None:
-    svc = NarrativeRevisionService(_StubNarrativeRepo(None), MockReflectionModel())
+    svc = NarrativeRevisionService(
+        _StubNarrativeRepo(None), MockReflectionModel(), narrative_audit=NoOpNarrativeWriteAudit()
+    )
     ident = Identity(self_description="Me")
     assert svc.update_core_layer(ident, [], "reason") == "No narrative to update"
 
@@ -169,7 +174,7 @@ def test_update_core_layer_no_narrative() -> None:
 def test_update_core_layer_minimal_identity_low_confidence_patterns() -> None:
     doc = _minimal_narrative()
     repo = _StubNarrativeRepo(doc)
-    svc = NarrativeRevisionService(repo, MockReflectionModel())
+    svc = NarrativeRevisionService(repo, MockReflectionModel(), narrative_audit=NoOpNarrativeWriteAudit())
     ident = Identity()
     pat = PatternCandidate(
         pattern_type=PatternType.COGNITIVE,
@@ -184,7 +189,7 @@ def test_update_core_layer_minimal_identity_low_confidence_patterns() -> None:
 def test_update_core_layer_with_identity_and_patterns() -> None:
     doc = _minimal_narrative()
     repo = _StubNarrativeRepo(doc)
-    svc = NarrativeRevisionService(repo, MockReflectionModel())
+    svc = NarrativeRevisionService(repo, MockReflectionModel(), narrative_audit=NoOpNarrativeWriteAudit())
     ident = Identity(
         self_description="I grow.",
         core_values=[CoreValue(name="honesty", description="truth", confidence=0.9)],
@@ -205,13 +210,17 @@ def test_update_core_layer_with_identity_and_patterns() -> None:
 
 
 def test_open_thread_raises_without_narrative() -> None:
-    svc = NarrativeRevisionService(_StubNarrativeRepo(None), MockReflectionModel())
+    svc = NarrativeRevisionService(
+        _StubNarrativeRepo(None), MockReflectionModel(), narrative_audit=NoOpNarrativeWriteAudit()
+    )
     with pytest.raises(ValueError, match="No narrative document"):
         svc.open_thread("t", "d")
 
 
 def test_update_thread_and_close_without_narrative() -> None:
-    svc = NarrativeRevisionService(_StubNarrativeRepo(None), MockReflectionModel())
+    svc = NarrativeRevisionService(
+        _StubNarrativeRepo(None), MockReflectionModel(), narrative_audit=NoOpNarrativeWriteAudit()
+    )
     assert svc.update_thread(str(uuid4()), "x") is None
     assert svc.close_thread(str(uuid4()), "reason") is False
 
@@ -219,7 +228,7 @@ def test_update_thread_and_close_without_narrative() -> None:
 def test_open_update_close_thread_flow() -> None:
     doc = _minimal_narrative()
     repo = _StubNarrativeRepo(doc)
-    svc = NarrativeRevisionService(repo, MockReflectionModel())
+    svc = NarrativeRevisionService(repo, MockReflectionModel(), narrative_audit=NoOpNarrativeWriteAudit())
 
     thread = svc.open_thread("Topic", "About topic", context="Started")
     assert thread.title == "Topic"
@@ -240,7 +249,7 @@ def test_open_update_close_thread_flow() -> None:
     assert svc.close_thread("bad", "r") is False
     assert svc.close_thread(str(uuid4()), "r") is False
 
-    svc2 = NarrativeRevisionService(repo, MockReflectionModel())
+    svc2 = NarrativeRevisionService(repo, MockReflectionModel(), narrative_audit=NoOpNarrativeWriteAudit())
     t2 = svc2.open_thread("T2", "D2")
     assert svc2.close_thread(str(t2.id), "") is False
 

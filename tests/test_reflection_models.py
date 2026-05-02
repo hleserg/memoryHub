@@ -121,6 +121,24 @@ def test_health_assessment_complete() -> None:
     assert assessment.summary == "Test assessment"
 
 
+def test_health_assessment_overall_must_match_criteria_mean() -> None:
+    """overall_score cannot drift from the six criterion scores (ingest / adapter guard)."""
+    from pydantic import ValidationError
+
+    criteria = {}
+    for criterion in JahodaCriterion:
+        criteria[criterion] = CriterionAssessment(
+            criterion=criterion,
+            score=0.5,
+            evidence=["e"],
+            concerns=["c"],
+        )
+
+    with pytest.raises(ValidationError) as exc_info:
+        HealthAssessment(criteria=criteria, overall_score=0.99, summary="bad")
+    assert "mean" in str(exc_info.value).lower()
+
+
 def test_reflection_event_creation() -> None:
     """Test creating a reflection event."""
     event = ReflectionEvent(

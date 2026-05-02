@@ -20,6 +20,7 @@ from atman.core.models.identity import Identity, IdentitySnapshot
 from atman.core.models.narrative import NarrativeDocument
 from atman.core.models.reflection import (
     HealthAssessment,
+    JahodaCriterion,
     PatternCandidate,
     ReflectionEvent,
     ReflectionLevel,
@@ -354,7 +355,7 @@ class ReflectionModel(ABC):
         self,
         identity: Identity,
         experiences: list[SessionExperience],
-        criterion: str,
+        criterion: JahodaCriterion,
     ) -> tuple[float, list[str], list[str]]:
         """
         Assess one Jahoda health criterion.

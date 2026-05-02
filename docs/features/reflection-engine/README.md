@@ -36,7 +36,7 @@ DEEP     → Scheduled (weekly+)   → Health assessment, proposals on Reflectio
    - `DailyReflectionService` — pattern detection
    - `DeepReflectionService` — health + identity revision
    - `PrincipleRevisionAdvisor` — distinguishes habits from principles
-   - `NarrativeRevisionService` — narrative updates
+   - `NarrativeRevisionService` — narrative updates (requires an explicit ``NarrativeWriteAuditPort``; use ``atman.core.narrative_write_audit.NoOpNarrativeWriteAudit`` only when acceptable for tests/demos)
 
 3. **Ports**:
    - `ExperienceRepository` — access to experiences
