@@ -6,7 +6,7 @@ import streamlit as st
 
 from atman.tui.features_registry import FEATURES, FeatureInfo
 from atman.tui.repo_root import find_repo_root
-from atman.web_dashboard.utils import python_script_cmd, run_command_sync
+from atman.web_dashboard.utils import demo_subprocess_env, python_script_cmd, run_command_sync
 
 st.set_page_config(page_title="Features - Atman Dashboard", page_icon="🎯", layout="wide")
 
@@ -69,10 +69,10 @@ if selected_title:
 
                 if demo_idx < len(feature.demos):
                     demo = feature.demos[demo_idx]
-                    # Use full argv and env from DemoCommand
                     cmd = python_script_cmd(*demo.argv)
-                    # Merge demo env with any paced overrides if needed
-                    env = dict(demo.env)
+                    # Paced/fast must follow the clicked button (not only registry index;
+                    # a single DemoCommand or mis-ordered env would otherwise be wrong).
+                    env = demo_subprocess_env(demo.env, paced=paced)
 
                     st.markdown("#### Выполнение...")
                     st.code(" ".join(cmd))

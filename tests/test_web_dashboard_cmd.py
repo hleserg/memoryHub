@@ -7,6 +7,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from atman.web_dashboard.utils.cmd import (
+    demo_subprocess_env,
     get_demo_command,
     pytest_cmd,
     python_script_cmd,
@@ -53,6 +54,26 @@ def test_pytest_cmd_no_args() -> None:
     with patch("atman.web_dashboard.utils.cmd.which", return_value=None):
         result = pytest_cmd()
         assert result == [sys.executable, "-m", "pytest"]
+
+
+def test_demo_subprocess_env_paced_overrides_registry() -> None:
+    """Button-selected paced mode must win over registry env (e.g. single-demo list)."""
+    assert demo_subprocess_env({"ATMAN_DEMO_PACE": "off"}, paced=True) == {
+        "ATMAN_DEMO_PACE": "1",
+    }
+
+
+def test_demo_subprocess_env_fast_overrides_registry() -> None:
+    assert demo_subprocess_env({"ATMAN_DEMO_PACE": "1"}, paced=False) == {
+        "ATMAN_DEMO_PACE": "off",
+    }
+
+
+def test_demo_subprocess_env_preserves_other_keys() -> None:
+    assert demo_subprocess_env({"FOO": "bar"}, paced=False) == {
+        "FOO": "bar",
+        "ATMAN_DEMO_PACE": "off",
+    }
 
 
 def test_get_demo_command_paced() -> None:

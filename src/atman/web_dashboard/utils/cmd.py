@@ -7,6 +7,17 @@ from pathlib import Path
 from shutil import which
 
 
+def demo_subprocess_env(
+    base: dict[str, str] | None = None,
+    *,
+    paced: bool,
+) -> dict[str, str]:
+    """Build env for a demo child process; ``paced`` sets ``ATMAN_DEMO_PACE``."""
+    out = dict(base or {})
+    out["ATMAN_DEMO_PACE"] = "1" if paced else "off"
+    return out
+
+
 def python_script_cmd(*script_path_parts: str) -> list[str]:
     """Build command to run Python script, preferring uv if available."""
     if which("uv"):
@@ -38,5 +49,4 @@ def get_demo_command(
         Tuple of (command_args, env_dict)
     """
     cmd = python_script_cmd(script_path)
-    env = {"ATMAN_DEMO_PACE": "1" if paced else "off"}
-    return cmd, env
+    return cmd, demo_subprocess_env(paced=paced)
