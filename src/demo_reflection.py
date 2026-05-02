@@ -23,7 +23,7 @@ from atman.adapters.storage.in_memory_reflection_store import (
     InMemoryReflectionEventStore,
 )
 from atman.core.models.experience import SessionExperience
-from atman.core.models.identity import Identity
+from atman.core.models.identity import Identity, IdentitySnapshot
 from atman.core.models.narrative import LayerType, NarrativeDocument, NarrativeLayer
 from atman.core.services.principle_advisor import PrincipleRevisionAdvisor
 from atman.core.services.reflection_service import (
@@ -90,11 +90,11 @@ class MockIdentityRepo:
         """Get current identity."""
         return self.identity
 
-    def get_snapshot(self, snapshot_id: UUID):
+    def get_snapshot(self, snapshot_id: UUID) -> IdentitySnapshot | None:
         """Get snapshot."""
         return None
 
-    def get_history(self):
+    def get_history(self) -> list[IdentitySnapshot]:
         """Get history."""
         return []
 
@@ -102,9 +102,16 @@ class MockIdentityRepo:
         """Update identity."""
         self.identity = identity
 
-    def create_snapshot(self, identity: Identity, description: str, change_summary: str):
+    def create_snapshot(
+        self, identity: Identity, description: str, change_summary: str
+    ) -> IdentitySnapshot:
         """Create snapshot."""
-        pass
+        return IdentitySnapshot(
+            identity_id=identity.id,
+            identity_snapshot=identity,
+            description=description,
+            change_summary=change_summary,
+        )
 
 
 class MockNarrativeRepo:
@@ -122,7 +129,7 @@ class MockNarrativeRepo:
         """Update narrative."""
         self.narrative = narrative
 
-    def get_history(self):
+    def get_history(self) -> list[NarrativeDocument]:
         """Get history."""
         return []
 
@@ -481,7 +488,7 @@ def main() -> None:
     demo_micro_reflection(experiences, identity)
     demo_daily_reflection(experiences, identity)
     demo_deep_reflection(experiences, identity)
-    
+
     narrative = NarrativeDocument(
         identity_id=identity.id,
         core_layer=NarrativeLayer(
@@ -493,7 +500,7 @@ def main() -> None:
             content="Been exploring different approaches.",
         ),
     )
-    
+
     demo_narrative_revision(narrative)
     demo_principle_advisor(identity)
 

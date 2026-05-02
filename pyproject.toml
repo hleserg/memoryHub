@@ -50,6 +50,8 @@ omit = [
     "src/atman/cli.py",
     "src/atman/cli_experience.py",
     "src/atman/cli_identity.py",
+    "src/atman/cli_reflection.py",
+    "src/atman/core/ports/reflection.py",
     "src/atman/tui/app.py",
     "src/atman/tui/tests_tab.py",
     "src/atman/tui/features_tab.py",

@@ -26,7 +26,7 @@ from atman.core.models.experience import (
     KeyMoment,
     SessionExperience,
 )
-from atman.core.models.identity import Identity
+from atman.core.models.identity import Identity, IdentitySnapshot
 from atman.core.models.narrative import LayerType, NarrativeDocument, NarrativeLayer
 from atman.core.services.reflection_service import (
     DailyReflectionService,
@@ -92,11 +92,11 @@ class MockIdentityRepo:
         """Get current identity."""
         return self.identity
 
-    def get_snapshot(self, snapshot_id: UUID):  # type: ignore[no-untyped-def]
+    def get_snapshot(self, snapshot_id: UUID) -> IdentitySnapshot | None:
         """Get snapshot."""
         return None
 
-    def get_history(self):  # type: ignore[no-untyped-def]
+    def get_history(self) -> list[IdentitySnapshot]:
         """Get history."""
         return []
 
@@ -104,10 +104,10 @@ class MockIdentityRepo:
         """Update identity."""
         self.identity = identity
 
-    def create_snapshot(self, identity: Identity, description: str, change_summary: str):  # type: ignore[no-untyped-def]
+    def create_snapshot(
+        self, identity: Identity, description: str, change_summary: str
+    ) -> IdentitySnapshot:
         """Create snapshot."""
-        from atman.core.models.identity import IdentitySnapshot
-
         return IdentitySnapshot(
             identity_id=identity.id,
             identity_snapshot=identity,
@@ -131,7 +131,7 @@ class MockNarrativeRepo:
         """Update narrative."""
         self.narrative = narrative
 
-    def get_history(self):  # type: ignore[no-untyped-def]
+    def get_history(self) -> list[NarrativeDocument]:
         """Get history."""
         return []
 
@@ -227,7 +227,7 @@ def cmd_reflect_micro(args: list[str]) -> int:
     print_ok("Using test fixtures...")
     demo_pace()
 
-    experience_repo, identity_repo, narrative_repo = setup_fixtures()
+    experience_repo, _identity_repo, narrative_repo = setup_fixtures()
 
     experiences = experience_repo.get_all()
     if not experiences:
@@ -272,7 +272,7 @@ def cmd_reflect_daily(args: list[str]) -> int:
     print_ok("Using test fixtures...")
     demo_pace()
 
-    experience_repo, identity_repo, narrative_repo = setup_fixtures()
+    experience_repo, identity_repo, _narrative_repo = setup_fixtures()
     date = datetime.now(UTC)
 
     print_ok(f"Reflecting on date: {date.strftime('%Y-%m-%d')}")

@@ -12,6 +12,7 @@ from atman.tui.features_registry import FEATURES, get_feature
 from atman.tui.pytest_utils import (
     classify_nodeids,
     extract_failure_only_log,
+    junit_failure_error_count,
     parse_collect_only,
     parse_coverage_total_percent,
     parse_junit_counts,
@@ -51,6 +52,55 @@ def test_parse_collect_only_filters_noise() -> None:
     sample = "tests/a.py::test_one\ntests/a.py::test_two\n116 tests collected in 0.37s\n"
     ids = parse_collect_only(sample)
     assert ids == ["tests/a.py::test_one", "tests/a.py::test_two"]
+
+
+def test_parse_collect_only_skips_collection_error_and_plain_lines() -> None:
+    sample = (
+        "ERROR collecting foo\n"
+        "error during collection: boom\n"
+        "not a test line\n"
+        "=====\n"
+        "tests/a.py::test_one\n"
+    )
+    assert parse_collect_only(sample) == ["tests/a.py::test_one"]
+
+
+def test_parse_summary_line_counts_extras() -> None:
+    log = "=== 1 failed, 2 passed, 1 skipped, 3 deselected, 1 xfailed, 1 xpassed in 9.99s ==="
+    s = parse_summary_line(log)
+    assert s is not None
+    assert s.failed == 1
+    assert s.passed == 2
+    assert s.skipped == 1
+    assert s.deselected == 3
+    assert s.xfailed == 1
+    assert s.xpassed == 1
+    assert s.duration_seconds == pytest.approx(9.99)
+
+
+def test_extract_failure_errors_section() -> None:
+    log = """
+=================================== ERRORS ====================================
+____________________ ERROR collecting tests/broken.py _________________________
+ImportError while loading conftest
+=========================== short test summary info ============================
+ERROR tests/broken.py
+============================== 1 error in 0.2s ===============================
+"""
+    slim = extract_failure_only_log(log)
+    assert "ERRORS" in slim
+    assert "short test summary" in slim.lower()
+
+
+def test_junit_failure_error_count_sums(tmp_path: Path) -> None:
+    p = tmp_path / "j.xml"
+    p.write_text(
+        '<?xml version="1.0"?><testsuites>'
+        '<testsuite tests="2" failures="1" errors="1" skipped="0" name="pytest"/>'
+        "</testsuites>",
+        encoding="utf-8",
+    )
+    assert junit_failure_error_count(p) == 2
 
 
 def test_parse_verbose_result_line() -> None:

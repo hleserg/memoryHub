@@ -6,7 +6,7 @@ Suitable for local development and single-agent use cases.
 """
 
 import json
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 from uuid import UUID
 
@@ -229,17 +229,15 @@ class FileStateStore(StateStore):
         if narrative is None:
             return
 
-        # Create archive entry
+        now = datetime.now(UTC)
         archive_entry = {
             "narrative": narrative.model_dump(mode="json"),
             "reason": reason,
-            "archived_at": datetime.now().isoformat(),
+            "archived_at": now.isoformat(),
         }
 
         # Save to archive
-        archive_file = (
-            self.narrative_archive_dir / f"{narrative_id}_{datetime.now().timestamp()}.json"
-        )
+        archive_file = self.narrative_archive_dir / f"{narrative_id}_{now.timestamp()}.json"
         archive_file.write_text(json.dumps(archive_entry, indent=2), encoding="utf-8")
 
     def list_archived_narratives(
@@ -255,6 +253,8 @@ class FileStateStore(StateStore):
             if narrative.identity_id == identity_id:
                 reason = data["reason"]
                 archived_at = datetime.fromisoformat(data["archived_at"])
+                if archived_at.tzinfo is None:
+                    archived_at = archived_at.replace(tzinfo=UTC)
                 archived.append((narrative, reason, archived_at))
 
         # Sort by archived_at descending

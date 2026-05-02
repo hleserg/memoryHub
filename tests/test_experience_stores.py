@@ -251,3 +251,40 @@ class TestJsonlExperienceStore(StoreTestMixin):
             # Should still work
             results = store.list_recent_experiences()
             assert len(results) == 1
+
+
+def _assert_not_implemented_state_store(fn) -> None:
+    with pytest.raises(NotImplementedError, match="not supported"):
+        fn()
+
+
+def test_in_memory_store_state_port_methods_raise() -> None:
+    store = InMemoryExperienceStore()
+    aid = uuid4()
+    _assert_not_implemented_state_store(lambda: store.load_identity(aid))
+    _assert_not_implemented_state_store(lambda: store.save_identity(None))  # type: ignore[arg-type]
+    _assert_not_implemented_state_store(lambda: store.create_identity_snapshot(None))  # type: ignore[arg-type]
+    _assert_not_implemented_state_store(lambda: store.list_identity_snapshots(aid))
+    _assert_not_implemented_state_store(lambda: store.load_narrative(aid))
+    _assert_not_implemented_state_store(lambda: store.save_narrative(None))  # type: ignore[arg-type]
+    _assert_not_implemented_state_store(lambda: store.archive_narrative(aid, "r"))
+    _assert_not_implemented_state_store(lambda: store.list_archived_narratives(aid))
+    _assert_not_implemented_state_store(lambda: store.save_eigenstate(None))  # type: ignore[arg-type]
+    _assert_not_implemented_state_store(lambda: store.load_latest_eigenstate())
+
+
+def test_jsonl_store_state_port_methods_raise() -> None:
+    with tempfile.TemporaryDirectory() as tmpdir:
+        path = Path(tmpdir) / "e.jsonl"
+        store = JsonlExperienceStore(path)
+        aid = uuid4()
+        _assert_not_implemented_state_store(lambda: store.load_identity(aid))
+        _assert_not_implemented_state_store(lambda: store.save_identity(None))  # type: ignore[arg-type]
+        _assert_not_implemented_state_store(lambda: store.create_identity_snapshot(None))  # type: ignore[arg-type]
+        _assert_not_implemented_state_store(lambda: store.list_identity_snapshots(aid))
+        _assert_not_implemented_state_store(lambda: store.load_narrative(aid))
+        _assert_not_implemented_state_store(lambda: store.save_narrative(None))  # type: ignore[arg-type]
+        _assert_not_implemented_state_store(lambda: store.archive_narrative(aid, "r"))
+        _assert_not_implemented_state_store(lambda: store.list_archived_narratives(aid))
+        _assert_not_implemented_state_store(lambda: store.save_eigenstate(None))  # type: ignore[arg-type]
+        _assert_not_implemented_state_store(lambda: store.load_latest_eigenstate())

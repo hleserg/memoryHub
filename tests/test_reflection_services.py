@@ -17,7 +17,7 @@ from atman.core.models.experience import (
     KeyMoment,
     SessionExperience,
 )
-from atman.core.models.identity import Identity
+from atman.core.models.identity import Identity, IdentitySnapshot
 from atman.core.models.narrative import LayerType, NarrativeDocument, NarrativeLayer
 from atman.core.models.reflection import ReflectionLevel
 from atman.core.services.reflection_service import (
@@ -77,9 +77,28 @@ class MockIdentityRepo:
         """Get current identity."""
         return self.identity
 
+    def get_snapshot(self, snapshot_id: UUID) -> IdentitySnapshot | None:
+        """Get snapshot."""
+        return None
+
+    def get_history(self) -> list[IdentitySnapshot]:
+        """Get history."""
+        return []
+
     def update(self, identity: Identity) -> None:
         """Update identity."""
         self.identity = identity
+
+    def create_snapshot(
+        self, identity: Identity, description: str, change_summary: str
+    ) -> IdentitySnapshot:
+        """Create snapshot."""
+        return IdentitySnapshot(
+            identity_id=identity.id,
+            identity_snapshot=identity,
+            description=description,
+            change_summary=change_summary,
+        )
 
 
 class MockNarrativeRepo:
@@ -96,6 +115,10 @@ class MockNarrativeRepo:
     def update(self, narrative: NarrativeDocument) -> None:
         """Update narrative."""
         self.narrative = narrative
+
+    def get_history(self) -> list[NarrativeDocument]:
+        """Get history."""
+        return []
 
 
 def create_test_experience(session_id: UUID | None = None) -> SessionExperience:

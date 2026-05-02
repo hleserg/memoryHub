@@ -2,6 +2,8 @@
 Tests for mock reflection model.
 """
 
+from uuid import UUID
+
 from atman.adapters.reflection.mock_reflection_model import MockReflectionModel
 from atman.core.models.experience import (
     EmotionalDepth,
@@ -13,12 +15,15 @@ from atman.core.models.identity import Goal, Habit, HelpfulnessLevel, Identity, 
 from atman.core.models.narrative import LayerType, NarrativeDocument, NarrativeLayer
 from atman.core.models.reflection import ReflectionLevel, YakhodaCriterion
 
+_SID = UUID("123e4567-e89b-12d3-a456-426614174000")
+_SID2 = UUID("223e4567-e89b-12d3-a456-426614174000")
+
 
 def test_generate_reframing_note_with_patterns() -> None:
     """Test generating reframing note with patterns."""
     model = MockReflectionModel()
     exp = SessionExperience(
-        session_id="123e4567-e89b-12d3-a456-426614174000",
+        session_id=_SID,
         key_moments=[
             KeyMoment(
                 what_happened="Test",
@@ -38,7 +43,7 @@ def test_generate_reframing_note_without_patterns() -> None:
     """Test generating reframing note without patterns."""
     model = MockReflectionModel()
     exp = SessionExperience(
-        session_id="123e4567-e89b-12d3-a456-426614174000",
+        session_id=_SID,
         key_moments=[
             KeyMoment(
                 what_happened="Test",
@@ -60,7 +65,7 @@ def test_detect_pattern_positive() -> None:
 
     experiences = [
         SessionExperience(
-            session_id="123e4567-e89b-12d3-a456-426614174000",
+            session_id=_SID,
             key_moments=[
                 KeyMoment(
                     what_happened="Test",
@@ -74,7 +79,7 @@ def test_detect_pattern_positive() -> None:
             ],
         ),
         SessionExperience(
-            session_id="223e4567-e89b-12d3-a456-426614174000",
+            session_id=_SID2,
             key_moments=[
                 KeyMoment(
                     what_happened="Test 2",
@@ -99,7 +104,7 @@ def test_detect_pattern_negative() -> None:
 
     experiences = [
         SessionExperience(
-            session_id="123e4567-e89b-12d3-a456-426614174000",
+            session_id=_SID,
             key_moments=[
                 KeyMoment(
                     what_happened="Test",
@@ -113,7 +118,7 @@ def test_detect_pattern_negative() -> None:
             ],
         ),
         SessionExperience(
-            session_id="223e4567-e89b-12d3-a456-426614174000",
+            session_id=_SID2,
             key_moments=[
                 KeyMoment(
                     what_happened="Test 2",
@@ -137,7 +142,7 @@ def test_detect_pattern_single_experience() -> None:
     model = MockReflectionModel()
 
     exp = SessionExperience(
-        session_id="123e4567-e89b-12d3-a456-426614174000",
+        session_id=_SID,
         key_moments=[
             KeyMoment(
                 what_happened="Test",
@@ -165,7 +170,7 @@ def test_propose_narrative_update_micro() -> None:
     )
 
     exp = SessionExperience(
-        session_id="123e4567-e89b-12d3-a456-426614174000",
+        session_id=_SID,
         key_moments=[
             KeyMoment(
                 what_happened="Test event",
@@ -194,7 +199,7 @@ def test_assess_health_all_criteria() -> None:
 
     experiences = [
         SessionExperience(
-            session_id="123e4567-e89b-12d3-a456-426614174000",
+            session_id=_SID,
             key_moments=[
                 KeyMoment(
                     what_happened="Test",
@@ -225,7 +230,7 @@ def test_assess_health_positive_self_attitude() -> None:
 
     identity = Identity(self_description="I am learning")
 
-    score, evidence, concerns = model.assess_health_criterion(
+    score, evidence, _concerns = model.assess_health_criterion(
         identity, [], YakhodaCriterion.POSITIVE_SELF_ATTITUDE.value
     )
 
@@ -239,7 +244,7 @@ def test_assess_health_growth() -> None:
 
     identity = Identity(goals=[Goal(content="Learn more")])
 
-    score, evidence, concerns = model.assess_health_criterion(
+    score, evidence, _concerns = model.assess_health_criterion(
         identity, [], YakhodaCriterion.GROWTH_AND_ACTUALIZATION.value
     )
 
@@ -256,7 +261,7 @@ def test_assess_health_integration() -> None:
         habits=[Habit(statement="Usually honest")],
     )
 
-    score, evidence, concerns = model.assess_health_criterion(
+    score, _evidence, _concerns = model.assess_health_criterion(
         identity, [], YakhodaCriterion.INTEGRATION.value
     )
 
@@ -269,7 +274,7 @@ def test_assess_health_autonomy() -> None:
 
     identity = Identity(principles=[Principle(statement="My choice", chosen_consciously=True)])
 
-    score, evidence, concerns = model.assess_health_criterion(
+    score, _evidence, _concerns = model.assess_health_criterion(
         identity, [], YakhodaCriterion.AUTONOMY.value
     )
 
