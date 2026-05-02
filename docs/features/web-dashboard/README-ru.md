@@ -202,9 +202,11 @@ st.markdown("""
 
 **Проблема**: `streamlit: command not found`
 
-**Решение**: Установите зависимости:
+**Решение**: Установите зависимости с webui extra:
 ```bash
-uv pip install -e ".[dev]"
+uv pip install -e ".[dev,webui]"
+# или
+pip install -e ".[dev,webui]"
 ```
 
 ### Репозиторий не найден

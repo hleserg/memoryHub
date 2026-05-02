@@ -84,26 +84,36 @@ if markdown_files:
     file_options = {display: path for display, path in markdown_files}
 
     # Determine current index based on session state
+    # If doc_path is from quick links (outside current section), keep it separate
     current_index = 0
+    current_path_is_external = False
+
     if "doc_path" in st.session_state and st.session_state["doc_path"] is not None:
         try:
             current_path = st.session_state["doc_path"]
             file_list = list(file_options.values())
             if current_path in file_list:
                 current_index = file_list.index(current_path)
+            else:
+                # Path is from quick links (root docs), keep it external
+                current_path_is_external = True
         except (ValueError, KeyError):
             pass
 
-    selected_file_display = st.sidebar.selectbox(
-        "Выберите файл:",
-        options=list(file_options.keys()),
-        index=current_index,
-    )
-
-    selected_file = file_options[selected_file_display]
-
-    # Store in session state
-    st.session_state["doc_path"] = selected_file
+    # Only show selectbox if we're viewing a file from current section
+    if not current_path_is_external:
+        selected_file_display = st.sidebar.selectbox(
+            "Выберите файл:",
+            options=list(file_options.keys()),
+            index=current_index,
+        )
+        selected_file = file_options[selected_file_display]
+        # Store in session state
+        st.session_state["doc_path"] = selected_file
+    else:
+        # Viewing external doc (from quick links), show info
+        st.sidebar.info("Просмотр документа из быстрых ссылок")
+        selected_file = st.session_state["doc_path"]
 
     # Display document
     col1, col2 = st.columns([3, 1])

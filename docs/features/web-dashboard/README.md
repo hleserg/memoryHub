@@ -202,9 +202,11 @@ The web dashboard is excluded from code coverage (see `pyproject.toml`). Manual 
 
 **Problem**: `streamlit: command not found`
 
-**Solution**: Install dependencies:
+**Solution**: Install dependencies with webui extra:
 ```bash
-uv pip install -e ".[dev]"
+uv pip install -e ".[dev,webui]"
+# or
+pip install -e ".[dev,webui]"
 ```
 
 ### Repository Not Found
