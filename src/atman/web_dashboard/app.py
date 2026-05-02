@@ -1,20 +1,23 @@
-"""Main Streamlit dashboard application."""
+"""Main Streamlit dashboard: features (demos + docs) as home page."""
 
 from __future__ import annotations
 
+import sys
+from shutil import which
+
 import streamlit as st
 
+from atman.tui.features_registry import FEATURES, FeatureInfo
 from atman.tui.repo_root import find_repo_root
+from atman.web_dashboard.utils import demo_subprocess_env, python_script_cmd, run_command_sync
 
-# Page configuration
 st.set_page_config(
-    page_title="Atman Dev Dashboard",
-    page_icon="🧠",
+    page_title="Atman — Features",
+    page_icon="🎯",
     layout="wide",
     initial_sidebar_state="expanded",
 )
 
-# Find repository root
 try:
     repo_root = find_repo_root()
 except FileNotFoundError:
@@ -22,104 +25,119 @@ except FileNotFoundError:
     st.stop()
     raise SystemExit("Repository root not found") from None  # For type checker
 
-# Custom CSS for better UI
-st.markdown(
-    """
-    <style>
-    .main-header {
-        font-size: 2.5rem;
-        font-weight: bold;
-        color: #1f77b4;
-        margin-bottom: 1rem;
-    }
-    .section-header {
-        font-size: 1.5rem;
-        font-weight: bold;
-        margin-top: 1.5rem;
-        margin-bottom: 1rem;
-    }
-    .info-box {
-        padding: 1rem;
-        border-radius: 0.5rem;
-        background-color: #f0f2f6;
-        margin-bottom: 1rem;
-    }
-    </style>
-    """,
-    unsafe_allow_html=True,
-)
-
-# Main header
-st.markdown('<div class="main-header">🧠 Atman Dev Dashboard</div>', unsafe_allow_html=True)
-st.markdown("**Web-интерфейс для работы с проектом Atman**")
+st.title("🎯 Features")
+st.markdown("Управление фичами проекта: запуск демо и просмотр документации")
 st.divider()
 
-# Welcome message
-st.markdown(
-    """
-    ### Добро пожаловать в веб-дашборд Atman!
-
-    Этот дашборд предоставляет удобный браузерный интерфейс для:
-
-    - 🎯 **Features** — запуск демонстраций фичей и просмотр документации
-    - 🧪 **Tests** — запуск тестов и анализ результатов
-    - 📚 **Docs** — навигация по документации проекта
-
-    Выберите страницу в боковом меню слева.
-    """
+feature_options = {f.title: f for f in FEATURES}
+selected_title = st.selectbox(
+    "Выберите фичу:",
+    options=list(feature_options.keys()),
+    index=0,
 )
 
-# Repository info
-st.markdown("### 📂 Информация о репозитории")
-col1, col2 = st.columns(2)
+if not selected_title:
+    st.stop()
 
-with col1:
-    st.markdown(
-        f"""
-        <div class="info-box">
-        <strong>Корень репозитория:</strong><br>
-        <code>{repo_root}</code>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
+feature: FeatureInfo = feature_options[selected_title]
 
-with col2:
-    features_count = 2  # factual-memory, experience-store
-    st.markdown(
-        f"""
-        <div class="info-box">
-        <strong>Зарегистрировано фичей:</strong><br>
-        {features_count}
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
+st.markdown(f"### {feature.title}")
+st.markdown(f"**Slug:** `{feature.slug}`")
+st.markdown(f"**Описание:** {feature.summary}")
 
-# Quick actions
-st.markdown("### ⚡ Быстрые действия")
+with st.expander("📁 Связанные файлы", expanded=False):
+    for path in feature.related_paths:
+        st.code(path)
 
-col1, col2, col3 = st.columns(3)
-
-with col1:
-    if st.button("🎯 Перейти к Features", use_container_width=True):
-        st.switch_page("pages/1_Features.py")
-
-with col2:
-    if st.button("🧪 Перейти к Tests", use_container_width=True):
-        st.switch_page("pages/2_Tests.py")
-
-with col3:
-    if st.button("📚 Перейти к Docs", use_container_width=True):
-        st.switch_page("pages/3_Docs.py")
-
-# Footer
 st.divider()
-st.markdown(
-    """
-    <div style="text-align: center; color: #666; font-size: 0.9rem; margin-top: 2rem;">
-    Atman — Психологический слой для AI-агента | Web Dashboard v0.1.0
-    </div>
-    """,
-    unsafe_allow_html=True,
+
+view_mode = st.radio(
+    "Режим",
+    options=["Документация", "Демонстрация"],
+    horizontal=True,
+    index=0,
+    key="features_view_mode",
 )
+
+if view_mode == "Демонстрация":
+    st.markdown("### 🎬 Демонстрации")
+
+    if feature.demos:
+        demo_paced = st.button(
+            "🎬 Запустить Demo (paced)",
+            key=f"demo_paced_{feature.slug}",
+            use_container_width=True,
+        )
+        demo_fast = st.button(
+            "⚡ Запустить Demo (fast)",
+            key=f"demo_fast_{feature.slug}",
+            use_container_width=True,
+        )
+
+        if demo_paced or demo_fast:
+            paced = demo_paced
+            demo_idx = 0 if paced else min(1, len(feature.demos) - 1)
+
+            if demo_idx < len(feature.demos):
+                demo = feature.demos[demo_idx]
+                cmd = python_script_cmd(*demo.argv)
+                env = demo_subprocess_env(demo.env, paced=paced)
+
+                st.markdown("#### Выполнение...")
+                st.code(" ".join(cmd))
+
+                with st.spinner("Запуск демонстрации..."):
+                    exit_code, output = run_command_sync(cmd, repo_root, env)
+
+                if exit_code == 0:
+                    st.success(f"✅ Демонстрация завершена успешно (exit {exit_code})")
+                else:
+                    st.error(f"❌ Демонстрация завершилась с ошибкой (exit {exit_code})")
+
+                with st.expander("📋 Вывод команды", expanded=True):
+                    st.code(output, language="text")
+    else:
+        st.info("Нет доступных демонстраций для этой фичи")
+
+else:
+    st.markdown("### 📚 Документация")
+
+    readme_lang = st.radio(
+        "Выберите язык:",
+        options=["English", "Русский"],
+        horizontal=True,
+        key=f"readme_lang_{feature.slug}",
+    )
+
+    readme_file = "README.md" if readme_lang == "English" else "README-ru.md"
+    readme_path = repo_root / feature.doc_dir / readme_file
+
+    if readme_path.exists():
+        content = readme_path.read_text(encoding="utf-8", errors="replace")
+
+        with st.container(height=600, border=True):
+            st.markdown(content)
+    else:
+        st.warning(f"Файл `{readme_file}` не найден в `{feature.doc_dir}`")
+
+st.divider()
+st.markdown("### 🔧 Установка dev-зависимостей")
+
+if st.button("📦 Установить dev-зависимости", use_container_width=True):
+    if which("uv"):
+        cmd = ["uv", "pip", "install", "-e", ".[dev]"]
+    else:
+        cmd = [sys.executable, "-m", "pip", "install", "-e", ".[dev]"]
+
+    st.code(" ".join(cmd))
+
+    with st.spinner("Установка зависимостей..."):
+        exit_code, output = run_command_sync(cmd, repo_root)
+
+    if exit_code == 0:
+        st.success("✅ Зависимости установлены успешно")
+    else:
+        st.error(f"❌ Ошибка установки (exit {exit_code})")
+
+    with st.expander("📋 Вывод команды", expanded=False):
+        st.code(output, language="text")

@@ -8,11 +8,12 @@ The Web Dashboard provides a convenient browser interface for daily work with th
 
 ## Features
 
-### 🎯 Features Tab
-- View registered features (Factual Memory, Experience Store)
-- Run feature demos (paced/fast mode)
-- Browse feature documentation (English/Russian)
-- Install dev dependencies
+### 🎯 Features (home, `app.py`)
+- View all registered features from `FEATURES` (Factual Memory, Experience Store, Identity Store, Web Dashboard, …)
+- Toggle **Documentation** / **Demo** (default: documentation); only one panel is shown at a time
+- Run feature demos (paced/fast mode) on the Demo view
+- Browse feature README on the Documentation view (English/Russian)
+- Install dev dependencies (available in both views)
 
 ### 🧪 Tests Tab
 - Run full test suite (all tests in `tests/`)
@@ -71,6 +72,17 @@ streamlit run src/atman/web_dashboard/app.py
 
 The dashboard will open in your default browser at `http://localhost:8501`.
 
+### Console demo (Rich)
+
+Same registry entry supports a short terminal walk-in (no browser):
+
+```bash
+make demo-webui
+make demo-webui-fast
+```
+
+Or: `python3 src/demo_web_dashboard.py` (see `src/demo_web_dashboard.py`).
+
 ## Architecture
 
 ### Project Structure
@@ -78,11 +90,10 @@ The dashboard will open in your default browser at `http://localhost:8501`.
 ```
 src/atman/web_dashboard/
 ├── __init__.py           # Entry point with main() function
-├── app.py                # Main Streamlit application (home page)
+├── app.py                # Home: features (docs/demo toggle), dev install
 ├── pages/
-│   ├── 1_Features.py     # Features management page
-│   ├── 2_Tests.py        # Test runner page
-│   └── 3_Docs.py         # Documentation browser page
+│   ├── 1_Tests.py        # Test runner page
+│   └── 2_Docs.py         # Documentation browser page
 └── utils/
     ├── __init__.py       # Utilities package
     ├── cmd.py            # Command building (pytest, python, demo)
@@ -92,29 +103,24 @@ src/atman/web_dashboard/
 ### Key Components
 
 #### 1. Main Application (`app.py`)
-- Repository info display
-- Quick navigation to main sections
-- Custom CSS styling
-
-#### 2. Features Page
-- Feature selection from registry
-- Demo execution (paced/fast modes)
-- README viewer with language toggle
+- Feature selection from `FEATURES` registry
+- Documentation / Demo toggle (default: documentation)
+- Demo execution (paced/fast modes) and README viewer (language toggle)
 - Dev dependencies installer
 
-#### 3. Tests Page
+#### 2. Tests Page
 - Test suite configuration
 - Real-time test execution
 - Results parsing and display
 - Coverage reporting
 
-#### 4. Docs Page
+#### 3. Docs Page
 - Hierarchical document navigation
 - Markdown rendering
 - Bilingual document support
 - Quick access to key documents
 
-#### 5. Utilities
+#### 4. Utilities
 - **`cmd.py`**: Command builders for pytest, Python scripts, and demos
 - **`runner.py`**: Async/sync process execution with output streaming
 
@@ -124,7 +130,7 @@ src/atman/web_dashboard/
 
 The web dashboard mirrors the TUI dashboard's structure and functionality:
 
-- **Same navigation**: Three main tabs (Features, Tests, Docs)
+- **Same navigation**: Home features plus sidebar pages (Tests, Docs)
 - **Same capabilities**: Run demos, execute tests, browse documentation
 - **Same data sources**: Uses `atman.tui.features_registry` and `atman.tui.repo_root`
 
@@ -190,8 +196,8 @@ st.markdown("""
 The web dashboard is excluded from code coverage (see `pyproject.toml`). Manual testing is recommended:
 
 1. Start the dashboard: `make webui`
-2. Test each page:
-   - Features: Run a demo, view README
+2. Test each area:
+   - Home (Features): Default documentation view; switch to Demo, run paced/fast; install dev deps
    - Tests: Execute test suite, check output
    - Docs: Navigate sections, view markdown files
 3. Verify error handling (e.g., run tests that fail)

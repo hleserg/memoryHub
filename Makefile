@@ -1,4 +1,4 @@
-.PHONY: lint format typecheck security test test-fast audit check all sync-site-content docs-preview demo-experience demo-factual demo-identity demo-experience-fast demo-factual-fast demo-identity-fast demo-experience-paced demo-factual-paced demo-identity-paced webui
+.PHONY: lint format typecheck security test test-fast audit check all sync-site-content docs-preview demo-experience demo-factual demo-identity demo-webui demo-experience-fast demo-factual-fast demo-identity-fast demo-webui-fast demo-experience-paced demo-factual-paced demo-identity-paced demo-webui-paced webui
 
 lint:
 	ruff check src/ tests/
@@ -67,6 +67,13 @@ demo-identity demo-identity-paced:
 
 demo-identity-fast:
 	ATMAN_DEMO_PACE=off python3 src/demo_identity.py
+
+# Web Dashboard console hint (see docs/features/web-dashboard/README.md).
+demo-webui demo-webui-paced:
+	ATMAN_DEMO_PACE=1 python3 src/demo_web_dashboard.py
+
+demo-webui-fast:
+	ATMAN_DEMO_PACE=off python3 src/demo_web_dashboard.py
 
 # Web dashboard — runs Streamlit web UI (see docs/features/web-dashboard/).
 webui:
