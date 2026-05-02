@@ -10,11 +10,11 @@ These services implement the three levels of reflection:
 from __future__ import annotations
 
 import contextlib
-from datetime import datetime
+from datetime import UTC, datetime, time
 from typing import Literal
 from uuid import UUID
 
-from atman.core.clock_impl import SystemClock
+from atman.core.clock_impl import SystemClock, ensure_utc
 from atman.core.exceptions import NarrativePersistenceConflictError
 from atman.core.models.experience import ReframingNote, ReframingNoteAppendResult, SessionExperience
 from atman.core.models.identity import Identity
@@ -65,6 +65,14 @@ def _deep_run_terminal_success(notes: str) -> bool:
     return any(
         x in notes for x in ("outcome=deep_ok", "outcome=deep_empty", "outcome=deep_skipped")
     )
+
+
+def _utc_calendar_day_bounds(calendar_anchor: datetime) -> tuple[datetime, datetime]:
+    """Inclusive [start, end] for the UTC calendar day of ``calendar_anchor``."""
+    d = ensure_utc(calendar_anchor).date()
+    start = datetime.combine(d, time.min, tzinfo=UTC)
+    end = datetime.combine(d, time.max, tzinfo=UTC)
+    return start, end
 
 
 def _reflection_identity_anchor_snapshot_id(
@@ -249,24 +257,27 @@ class DailyReflectionService:
         Perform daily reflection for a specific date.
 
         Args:
-            date: Date to reflect on (will analyze experiences from that day)
+            date: Anchor instant for the **UTC calendar day** to analyze. Naive
+                datetimes are treated as UTC wall time (see :func:`~atman.core.clock_impl.ensure_utc`).
 
         Returns:
             ReflectionEvent recording what was done
         """
-        start = date.replace(hour=0, minute=0, second=0, microsecond=0)
-        end = date.replace(hour=23, minute=59, second=59, microsecond=999999)
+        calendar_anchor = ensure_utc(date)
+        start, end = _utc_calendar_day_bounds(calendar_anchor)
 
         experiences = self.experience_repo.get_in_range(start, end)
 
         if not experiences:
-            return self._create_empty_event(date)
+            return self._create_empty_event(calendar_anchor)
 
         identity = self.identity_repo.get_current()
         if not identity:
-            return self._create_skipped_daily_no_identity(date, [exp.id for exp in experiences])
+            return self._create_skipped_daily_no_identity(
+                calendar_anchor, [exp.id for exp in experiences]
+            )
 
-        run_key = daily_reflection_run_key_for_identity(date, identity.id)
+        run_key = daily_reflection_run_key_for_identity(calendar_anchor, identity.id)
         existing = self.event_store.get_by_reflection_run_key(run_key)
         if existing is not None and _daily_run_terminal_success(existing.notes or ""):
             return existing
@@ -276,7 +287,7 @@ class DailyReflectionService:
         )
 
         patterns_detected = self._detect_patterns(experiences, identity, run_key)
-        reframing_count, reframing_nf, reframing_sr = self._add_reframing_notes(
+        reframing_count, reframing_nf, reframing_sr, reframing_dup = self._add_reframing_notes(
             experiences, patterns_detected, run_key
         )
 
@@ -286,6 +297,8 @@ class DailyReflectionService:
                 f" signal=reframing_append_degraded not_found={reframing_nf} "
                 f"storage_rejected={reframing_sr}"
             )
+        if reframing_dup:
+            notes += f" reframing_duplicate_triggered_by={reframing_dup}"
 
         event = ReflectionEvent(
             reflection_level=ReflectionLevel.DAILY,
@@ -294,6 +307,7 @@ class DailyReflectionService:
             reframing_notes_added=reframing_count,
             reframing_experience_not_found_count=reframing_nf,
             reframing_append_storage_rejected_count=reframing_sr,
+            reframing_duplicate_triggered_by_count=reframing_dup,
             key_insight=f"Daily reflection: {len(patterns_detected)} patterns detected",
             notes=notes,
             reflection_run_key=run_key,
@@ -349,14 +363,15 @@ class DailyReflectionService:
         experiences: list[SessionExperience],
         patterns: list[PatternCandidate],
         run_key: str,
-    ) -> tuple[int, int, int]:
-        """Add reframing notes; return (stored_count, not_found_count, storage_rejected_count)."""
+    ) -> tuple[int, int, int, int]:
+        """Add reframing notes; return (stored, not_found, storage_rejected, duplicate_triggered_by)."""
         if not patterns:
-            return (0, 0, 0)
+            return (0, 0, 0, 0)
 
         count = 0
         not_found = 0
         storage_rejected = 0
+        duplicate = 0
         for exp in experiences[:2]:
             context = {"patterns": ", ".join(p.description for p in patterns)}
 
@@ -377,8 +392,10 @@ class DailyReflectionService:
                     not_found += 1
                 elif outcome == ReframingNoteAppendResult.STORAGE_REJECTED:
                     storage_rejected += 1
+                elif outcome == ReframingNoteAppendResult.DUPLICATE_TRIGGERED_BY:
+                    duplicate += 1
 
-        return (count, not_found, storage_rejected)
+        return (count, not_found, storage_rejected, duplicate)
 
     def _create_empty_event(self, date: datetime) -> ReflectionEvent:
         """Create an event for when there's nothing to reflect on."""
@@ -387,10 +404,11 @@ class DailyReflectionService:
         if existing is not None and "outcome=daily_empty" in (existing.notes or ""):
             return existing
 
+        day_iso = ensure_utc(date).date().isoformat()
         event = ReflectionEvent(
             reflection_level=ReflectionLevel.DAILY,
             experiences_analyzed=[],
-            key_insight=f"No experiences on {date.strftime('%Y-%m-%d')}",
+            key_insight=f"No experiences on {day_iso}",
             notes="outcome=daily_empty reason=no_experiences",
             reflection_run_key=run_key,
             timestamp=self._clock.now(),
@@ -410,12 +428,13 @@ class DailyReflectionService:
             return existing
 
         n = len(experience_ids)
+        day_iso = ensure_utc(date).date().isoformat()
         event = ReflectionEvent(
             reflection_level=ReflectionLevel.DAILY,
             experiences_analyzed=list(experience_ids),
             key_insight=(
                 f"Daily reflection skipped: no current identity loaded "
-                f"({n} experience(s) on {date.strftime('%Y-%m-%d')})."
+                f"({n} experience(s) on {day_iso})."
             ),
             notes="outcome=daily_skipped reason=no_identity",
             reflection_run_key=run_key,
@@ -474,24 +493,26 @@ class DeepReflectionService:
         Perform deep reflection over a period.
 
         Args:
-            since: Start of reflection period
-            until: End of reflection period
+            since: Start of reflection period (inclusive). Naive values are UTC wall time.
+            until: End of reflection period (inclusive). Naive values are UTC wall time.
 
         Returns:
             ReflectionEvent recording what was done
         """
-        experiences = self.experience_repo.get_in_range(since, until)
+        since_utc = ensure_utc(since)
+        until_utc = ensure_utc(until)
+        experiences = self.experience_repo.get_in_range(since_utc, until_utc)
 
         if not experiences:
-            return self._create_empty_event(since, until)
+            return self._create_empty_event(since_utc, until_utc)
 
         identity = self.identity_repo.get_current()
         if not identity:
             return self._create_skipped_deep_no_identity(
-                since, until, [exp.id for exp in experiences]
+                since_utc, until_utc, [exp.id for exp in experiences]
             )
 
-        run_key = deep_reflection_run_key_for_identity(since, until, identity.id)
+        run_key = deep_reflection_run_key_for_identity(since_utc, until_utc, identity.id)
         existing = self.event_store.get_by_reflection_run_key(run_key)
         if existing is not None and _deep_run_terminal_success(existing.notes or ""):
             return existing
@@ -503,7 +524,7 @@ class DeepReflectionService:
         health_assessment = self._perform_health_assessment(identity, experiences, run_key)
 
         patterns_detected = self._detect_deep_patterns(experiences, identity, run_key)
-        reframing_count, reframing_nf, reframing_sr = self._add_strategic_reframing(
+        reframing_count, reframing_nf, reframing_sr, reframing_dup = self._add_strategic_reframing(
             experiences, patterns_detected, run_key
         )
 
@@ -521,6 +542,8 @@ class DeepReflectionService:
                 f" signal=reframing_append_degraded not_found={reframing_nf} "
                 f"storage_rejected={reframing_sr}"
             )
+        if reframing_dup:
+            notes += f" reframing_duplicate_triggered_by={reframing_dup}"
 
         event = ReflectionEvent(
             reflection_level=ReflectionLevel.DEEP,
@@ -529,6 +552,7 @@ class DeepReflectionService:
             reframing_notes_added=reframing_count,
             reframing_experience_not_found_count=reframing_nf,
             reframing_append_storage_rejected_count=reframing_sr,
+            reframing_duplicate_triggered_by_count=reframing_dup,
             narrative_changes_proposed=narrative_changes,
             identity_changes_proposed=identity_changes,
             health_assessment_id=health_assessment.id,
@@ -560,6 +584,7 @@ class DeepReflectionService:
                 reframing_notes_added=reframing_count,
                 reframing_experience_not_found_count=reframing_nf,
                 reframing_append_storage_rejected_count=reframing_sr,
+                reframing_duplicate_triggered_by_count=reframing_dup,
                 narrative_changes_proposed=narrative_changes,
                 identity_changes_proposed=identity_changes,
                 health_assessment_id=health_assessment.id if health_persisted else None,
@@ -645,14 +670,15 @@ class DeepReflectionService:
         experiences: list[SessionExperience],
         patterns: list[PatternCandidate],
         run_key: str,
-    ) -> tuple[int, int, int]:
-        """Add strategic reframing; return (stored_count, not_found_count, storage_rejected_count)."""
+    ) -> tuple[int, int, int, int]:
+        """Add strategic reframing; return (stored, not_found, storage_rejected, duplicate_triggered_by)."""
         if not patterns:
-            return (0, 0, 0)
+            return (0, 0, 0, 0)
 
         count = 0
         not_found = 0
         storage_rejected = 0
+        duplicate = 0
         for exp in experiences[:3]:
             context = {"patterns": ", ".join(p.description for p in patterns)}
 
@@ -673,8 +699,10 @@ class DeepReflectionService:
                     not_found += 1
                 elif outcome == ReframingNoteAppendResult.STORAGE_REJECTED:
                     storage_rejected += 1
+                elif outcome == ReframingNoteAppendResult.DUPLICATE_TRIGGERED_BY:
+                    duplicate += 1
 
-        return (count, not_found, storage_rejected)
+        return (count, not_found, storage_rejected, duplicate)
 
     def _propose_narrative_revision(
         self,
@@ -722,12 +750,12 @@ class DeepReflectionService:
         if existing is not None and "outcome=deep_empty" in (existing.notes or ""):
             return existing
 
+        since_d = ensure_utc(since).date().isoformat()
+        until_d = ensure_utc(until).date().isoformat()
         event = ReflectionEvent(
             reflection_level=ReflectionLevel.DEEP,
             experiences_analyzed=[],
-            key_insight=(
-                f"No experiences from {since.strftime('%Y-%m-%d')} to {until.strftime('%Y-%m-%d')}"
-            ),
+            key_insight=(f"No experiences from {since_d} to {until_d}"),
             notes="outcome=deep_empty reason=no_experiences",
             reflection_run_key=run_key,
             timestamp=self._clock.now(),
@@ -746,12 +774,14 @@ class DeepReflectionService:
             return existing
 
         n = len(experience_ids)
+        since_d = ensure_utc(since).date().isoformat()
+        until_d = ensure_utc(until).date().isoformat()
         event = ReflectionEvent(
             reflection_level=ReflectionLevel.DEEP,
             experiences_analyzed=list(experience_ids),
             key_insight=(
                 "Deep reflection skipped: no current identity loaded "
-                f"({n} experience(s) from {since.strftime('%Y-%m-%d')} to {until.strftime('%Y-%m-%d')})."
+                f"({n} experience(s) from {since_d} to {until_d})."
             ),
             notes="outcome=deep_skipped reason=no_identity",
             reflection_run_key=run_key,

@@ -348,6 +348,14 @@ class ReflectionEvent(BaseModel):
         ge=0,
         description="Append attempts refused by storage while the experience existed",
     )
+    reframing_duplicate_triggered_by_count: int = Field(
+        default=0,
+        ge=0,
+        description=(
+            "Append attempts that returned DUPLICATE_TRIGGERED_BY (idempotent replay; "
+            "note already present for this triggered_by)"
+        ),
+    )
 
     # What was proposed/done
     narrative_changes_proposed: str = Field(default="", description="Proposed changes to narrative")

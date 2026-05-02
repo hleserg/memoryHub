@@ -4,6 +4,7 @@ Tests for reflection services.
 
 from datetime import UTC, datetime
 from uuid import UUID, uuid4
+from zoneinfo import ZoneInfo
 
 import pytest
 
@@ -219,6 +220,21 @@ class FlakyReflectionEventStore(InMemoryReflectionEventStore):
         if self._fail_eligible_once and "outcome=deep_failed" not in notes:
             self._fail_eligible_once = False
             raise RuntimeError("simulated reflection event persist failure")
+        super().save(event)
+
+
+class FlakyDailyReflectionEventStore(InMemoryReflectionEventStore):
+    """Fails the first persistence of a successful daily reflection event."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self._fail_once_daily_ok = True
+
+    def save(self, event: ReflectionEvent) -> None:
+        notes = event.notes or ""
+        if self._fail_once_daily_ok and "outcome=daily_ok" in notes:
+            self._fail_once_daily_ok = False
+            raise RuntimeError("simulated daily reflection event persist failure")
         super().save(event)
 
 
@@ -847,3 +863,135 @@ def test_daily_reflection_second_run_same_window_is_idempotent() -> None:
     r2b = exp_repo.get(exp2.id)
     assert r1b is not None and r2b is not None
     assert len(r1b.reframing_notes) + len(r2b.reframing_notes) == total_notes
+
+
+def test_daily_reflect_naive_anchor_compatible_with_utc_experience_timestamps() -> None:
+    """Naive anchor must be normalized so get_in_range does not mix naive/aware bounds."""
+    naive_day = datetime(2026, 5, 10, 8, 0, 0)
+    ts = datetime(2026, 5, 10, 14, 0, 0, tzinfo=UTC)
+    exp1 = create_test_experience().model_copy(update={"timestamp": ts})
+    exp2 = create_test_experience().model_copy(update={"timestamp": ts})
+
+    identity = Identity()
+    exp_repo = MockExperienceRepo([exp1, exp2])
+    identity_repo = MockIdentityRepo(identity)
+    pattern_store = InMemoryPatternStore()
+    reflection_model = MockReflectionModel()
+    event_store = InMemoryReflectionEventStore()
+
+    service = DailyReflectionService(
+        experience_repo=exp_repo,
+        identity_repo=identity_repo,
+        pattern_store=pattern_store,
+        reflection_model=reflection_model,
+        event_store=event_store,
+    )
+
+    event = service.reflect(naive_day)
+    assert event.reflection_level == ReflectionLevel.DAILY
+    assert len(event.experiences_analyzed) == 2
+
+
+def test_daily_reflect_utc_calendar_day_from_timezone_aware_anchor() -> None:
+    """UTC calendar day for the anchor must match run-key day (not local wall replace)."""
+    msk = ZoneInfo("Europe/Moscow")
+    # 2026-01-16 02:00 MSK == 2026-01-15 23:00 UTC → UTC calendar day is 2026-01-15
+    anchor = datetime(2026, 1, 16, 2, 0, 0, tzinfo=msk)
+    inside = datetime(2026, 1, 15, 22, 0, 0, tzinfo=UTC)
+    outside = datetime(2026, 1, 16, 0, 30, 0, tzinfo=UTC)
+
+    exp_in = create_test_experience().model_copy(update={"timestamp": inside})
+    exp_out = create_test_experience().model_copy(update={"timestamp": outside})
+
+    identity = Identity()
+    exp_repo = MockExperienceRepo([exp_in, exp_out])
+    identity_repo = MockIdentityRepo(identity)
+    pattern_store = InMemoryPatternStore()
+    reflection_model = MockReflectionModel()
+    event_store = InMemoryReflectionEventStore()
+
+    service = DailyReflectionService(
+        experience_repo=exp_repo,
+        identity_repo=identity_repo,
+        pattern_store=pattern_store,
+        reflection_model=reflection_model,
+        event_store=event_store,
+    )
+
+    event = service.reflect(anchor)
+    assert event.reflection_level == ReflectionLevel.DAILY
+    assert event.experiences_analyzed == [exp_in.id]
+    assert exp_out.id not in event.experiences_analyzed
+
+
+def test_daily_reflection_retry_after_event_save_failure_counts_duplicate_reframing() -> None:
+    """If the success event is lost after side effects, retry must not look like a fresh run."""
+    anchor = datetime(2026, 7, 1, 12, 0, 0, tzinfo=UTC)
+    exp1 = create_test_experience().model_copy(update={"timestamp": anchor})
+    exp2 = create_test_experience().model_copy(update={"timestamp": anchor})
+
+    identity = Identity()
+    exp_repo = MockExperienceRepo([exp1, exp2])
+    identity_repo = MockIdentityRepo(identity)
+    pattern_store = InMemoryPatternStore()
+    reflection_model = MockReflectionModel()
+    event_store = FlakyDailyReflectionEventStore()
+
+    service = DailyReflectionService(
+        experience_repo=exp_repo,
+        identity_repo=identity_repo,
+        pattern_store=pattern_store,
+        reflection_model=reflection_model,
+        event_store=event_store,
+    )
+
+    with pytest.raises(RuntimeError, match="persist failure"):
+        service.reflect(anchor)
+
+    retry = service.reflect(anchor)
+    assert "outcome=daily_ok" in (retry.notes or "")
+    assert retry.reframing_notes_added == 0
+    assert retry.reframing_duplicate_triggered_by_count >= 1
+    assert "reframing_duplicate_triggered_by=" in (retry.notes or "")
+
+
+def test_deep_reflection_retry_after_event_save_failure_counts_duplicate_reframing() -> None:
+    exp1 = create_test_experience()
+    exp2 = create_test_experience()
+    exp3 = create_test_experience()
+
+    identity = Identity()
+    narrative = NarrativeDocument(
+        identity_id=identity.id,
+        core_layer=NarrativeLayer(layer_type=LayerType.CORE, content="Core"),
+        recent_layer=NarrativeLayer(layer_type=LayerType.RECENT, content="Recent"),
+    )
+
+    exp_repo = MockExperienceRepo([exp1, exp2, exp3])
+    identity_repo = MockIdentityRepo(identity)
+    narrative_repo = MockNarrativeRepo(narrative)
+    pattern_store = InMemoryPatternStore()
+    health_store = InMemoryHealthAssessmentStore()
+    reflection_model = MockReflectionModel()
+    event_store = FlakyReflectionEventStore()
+
+    service = DeepReflectionService(
+        experience_repo=exp_repo,
+        identity_repo=identity_repo,
+        narrative_repo=narrative_repo,
+        pattern_store=pattern_store,
+        health_store=health_store,
+        reflection_model=reflection_model,
+        event_store=event_store,
+    )
+
+    since = datetime.now(UTC).replace(hour=0, minute=0)
+    until = datetime.now(UTC)
+
+    with pytest.raises(RuntimeError, match="persist failure"):
+        service.reflect(since, until)
+
+    retry = service.reflect(since, until)
+    assert "outcome=deep_ok" in (retry.notes or "")
+    assert retry.reframing_duplicate_triggered_by_count >= 1
+    assert "reframing_duplicate_triggered_by=" in (retry.notes or "")

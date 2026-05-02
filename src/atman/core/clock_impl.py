@@ -21,7 +21,11 @@ class FrozenClock:
 
 
 def ensure_utc(dt: datetime) -> datetime:
-    """Normalize naive datetimes to UTC for stable comparisons."""
+    """
+    Normalize datetimes to UTC for stable comparisons and range queries.
+
+    Naive values are treated as **already in UTC** (wall time), not local time.
+    """
     if dt.tzinfo is None:
         return dt.replace(tzinfo=UTC)
     return dt.astimezone(UTC)

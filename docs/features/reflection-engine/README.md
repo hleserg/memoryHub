@@ -1,6 +1,6 @@
 # Reflection Engine
 
-**Status**: Implemented (WP-04)  
+**Status**: Implemented (WP-04)
 **Русская версия**: [README-ru.md](README-ru.md)
 
 ---
@@ -136,7 +136,7 @@ python -m atman.cli_reflection reflect deep --fixtures
 
 ### Critical Rule
 
-**Reflection does NOT invent emotions for old events.**  
+**Reflection does NOT invent emotions for old events.**
 It can only interpret experiences where `how_i_felt` was recorded first-hand during the session.
 
 ---
@@ -188,14 +188,14 @@ Test fixtures are in `fixtures/reflection/`:
 
 ### 1. Deterministic Mock Model
 
-The `MockReflectionModel` provides template-based responses for testing.  
+The `MockReflectionModel` provides template-based responses for testing.
 Real LLM integration happens through the `ReflectionModel` port.
 
 **Why**: Reflection logic must be testable without external dependencies.
 
 ### 2. Append-Only Reframing
 
-Original experience fields are immutable.  
+Original experience fields are immutable.
 Reframing notes accumulate in a separate list.
 
 **Why**: Preserves first-hand authenticity of original coloring.
@@ -208,7 +208,7 @@ Micro updates the **recent** narrative layer; Daily detects patterns; Deep asses
 
 ### 4. Health Assessment is Optional
 
-Only Deep reflection performs health checks.  
+Only Deep reflection performs health checks.
 Micro and Daily focus on pattern recognition.
 
 **Why**: Health assessment is computationally expensive and rarely needed.

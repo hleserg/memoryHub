@@ -1,4 +1,4 @@
-<img width="200" height="200" alt="logo" src="https://github.com/user-attachments/assets/e7269c6f-f81a-4982-afa3-ed45e8fd1f84" /> 
+<img width="200" height="200" alt="logo" src="https://github.com/user-attachments/assets/e7269c6f-f81a-4982-afa3-ed45e8fd1f84" />
 
 # Atman
 > **Continuous Identity for Your Agents**
@@ -38,8 +38,8 @@ Two modes of existence.
 
 Under the hood — seven components: store of lived experiences, reflection engine, identity anchor, session manager, emotional tone regulation. Atman manages the agent's control files directly — not through manual edits, but as a living process that knows what to write and when.
 
-**Detailed architecture** → [`docs/architecture/SYSTEM.md`](docs/architecture/SYSTEM.md)  
-**Manifesto** → [`MANIFEST.md`](MANIFEST.md)  
+**Detailed architecture** → [`docs/architecture/SYSTEM.md`](docs/architecture/SYSTEM.md)
+**Manifesto** → [`MANIFEST.md`](MANIFEST.md)
 **Development standard** → [`docs/development/DEVELOPMENT_STANDARD.md`](docs/development/DEVELOPMENT_STANDARD.md)
 
 ---
@@ -62,7 +62,7 @@ Under the hood — seven components: store of lived experiences, reflection engi
 
 ### Ready components
 
-**✅ Factual Memory Adapter** ([PR #73](https://github.com/hleserg/atman/pull/73))  
+**✅ Factual Memory Adapter** ([PR #73](https://github.com/hleserg/atman/pull/73))
 Minimal layer for storing verifiable facts without interpretations.
 
 - 📦 Models: `FactRecord`, `Relation`
@@ -72,7 +72,7 @@ Minimal layer for storing verifiable facts without interpretations.
 - 📚 [Guide (EN)](docs/features/factual-memory/README.md) · [RU](docs/features/factual-memory/README-ru.md)
 - ▶️ Demo: `make demo-factual` or `python3 src/demo.py` (`make demo-factual-fast` for instant output; `make` sets pacing by default)
 
-**✅ Experience Store** (work package 02)  
+**✅ Experience Store** (work package 02)
 First-hand lived experience: `SessionExperience`, `KeyMoment`, salience decay, reframing notes — no retroactive emotional “guessing”.
 
 - 📦 Domain models + `ExperienceService` + JSONL / in-memory adapters
@@ -80,13 +80,13 @@ First-hand lived experience: `SessionExperience`, `KeyMoment`, salience decay, r
 - 📚 [Guide (EN)](docs/features/experience-store/README.md) · [RU](docs/features/experience-store/README-ru.md)
 - ▶️ Demo: `make demo-experience` or `python3 src/demo_experience_store.py` (`make demo-experience-fast` for instant output)
 
-**✅ Identity Store** (work package 03)  
+**✅ Identity Store** (work package 03)
 Honest bootstrap identity, eigenstate, three-layer self-narrative, snapshots, CLI.
 
 - 📚 [Guide (EN)](docs/features/identity-store/README.md) · [RU](docs/features/identity-store/README-ru.md)
 - ▶️ Demo: `make demo-identity` or `python3 src/demo_identity.py` (`make demo-identity-fast` for instant output)
 
-**✅ Reflection Engine** (work package 04)  
+**✅ Reflection Engine** (work package 04)
 Micro / daily / deep reflection, patterns, narrative revision hooks, Jahoda health assessment, principle advisor.
 
 - 📚 [Guide (EN)](docs/features/reflection-engine/README.md) · [RU](docs/features/reflection-engine/README-ru.md)
@@ -100,7 +100,7 @@ python3 -m atman.cli   # factual memory REPL (or: uv run python -m atman.cli)
 pytest tests/ -v       # full test suite (or: uv run pytest tests/ -v)
 ```
 
-See **`AGENTS.md`** (*uv — рекомендуемый workflow*) for `uv run` and venv tips.  
+See **`AGENTS.md`** (*uv — рекомендуемый workflow*) for `uv run` and venv tips.
 Contributing: [`CONTRIBUTING.md`](CONTRIBUTING.md) · Community standards: [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md) · Security: [`SECURITY.md`](SECURITY.md).
 
 ---
