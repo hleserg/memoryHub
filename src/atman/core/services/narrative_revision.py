@@ -5,7 +5,7 @@ This service handles narrative document updates during reflection.
 It's part of deep reflection but can be used independently.
 """
 
-from datetime import datetime
+from datetime import UTC, datetime
 
 from atman.core.models.experience import SessionExperience
 from atman.core.models.identity import Identity
@@ -145,7 +145,7 @@ class NarrativeRevisionService:
         for thread in narrative.threads:
             if thread.id == thread_uuid:
                 thread.current_state = new_state
-                thread.last_updated = datetime.now()
+                thread.last_updated = datetime.now(UTC)
 
                 if add_moment:
                     thread.key_moments.append(add_moment)

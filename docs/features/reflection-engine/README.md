@@ -17,7 +17,7 @@ The Reflection Engine is Atman's component for analyzing already-colored experie
 
 ### Three Levels of Reflection
 
-```
+```text
 MICRO    → After each session    → Updates recent layer + checkpoint
 DAILY    → End of day            → Detects patterns, adds reframing notes
 DEEP     → Scheduled (weekly+)   → Health assessment, identity revision
@@ -93,22 +93,10 @@ The demo loads test fixtures and runs all three reflection levels, displaying:
 python -m atman.cli_reflection reflect micro --fixtures
 ```
 
-Or with real data:
-
-```bash
-python -m atman.cli_reflection reflect micro --session-id <uuid>
-```
-
 ### Daily Reflection
 
 ```bash
 python -m atman.cli_reflection reflect daily --fixtures
-```
-
-Or with specific date:
-
-```bash
-python -m atman.cli_reflection reflect daily --date 2026-05-01
 ```
 
 ### Deep Reflection
@@ -117,11 +105,7 @@ python -m atman.cli_reflection reflect daily --date 2026-05-01
 python -m atman.cli_reflection reflect deep --fixtures
 ```
 
-Or with date range:
-
-```bash
-python -m atman.cli_reflection reflect deep --since 2026-04-01 --until 2026-05-01
-```
+**Fixtures-only today:** `atman.cli_reflection` supports only `--fixtures` for each subcommand. A full walkthrough (fixtures, narrative revision, and reflection levels) is `make demo-reflection` or `python src/demo_reflection.py`. Planned (not implemented here yet): `--session-id`, `--date`, and `--since` / `--until` backed by persistent state (for example `FileStateStore`).
 
 ---
 

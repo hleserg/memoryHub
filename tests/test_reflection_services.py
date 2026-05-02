@@ -104,8 +104,8 @@ class MockIdentityRepo:
 class MockNarrativeRepo:
     """Mock narrative repository."""
 
-    def __init__(self, narrative: NarrativeDocument):
-        """Initialize with narrative."""
+    def __init__(self, narrative: NarrativeDocument | None):
+        """Initialize with narrative (None simulates missing current narrative)."""
         self.narrative = narrative
 
     def get_current(self) -> NarrativeDocument | None:
@@ -171,7 +171,9 @@ def test_micro_reflection_updates_narrative() -> None:
 
     assert event.reflection_level == ReflectionLevel.MICRO
     assert len(event.experiences_analyzed) == 1
-    assert narrative_repo.narrative.recent_layer.content != "Old recent"
+    updated = narrative_repo.get_current()
+    assert updated is not None
+    assert updated.recent_layer.content != "Old recent"
 
 
 def test_micro_reflection_no_experiences() -> None:
@@ -199,6 +201,33 @@ def test_micro_reflection_no_experiences() -> None:
 
     assert event.reflection_level == ReflectionLevel.MICRO
     assert len(event.experiences_analyzed) == 0
+    assert "no experiences" in event.key_insight.lower()
+    assert "no_experiences" in event.notes
+
+
+def test_micro_reflection_no_narrative() -> None:
+    """Micro reflection skips distinctly when experiences exist but narrative is missing."""
+    session_id = uuid4()
+    exp = create_test_experience(session_id)
+
+    exp_repo = MockExperienceRepo([exp])
+    narrative_repo = MockNarrativeRepo(None)
+    reflection_model = MockReflectionModel()
+    event_store = InMemoryReflectionEventStore()
+
+    service = MicroReflectionService(
+        experience_repo=exp_repo,
+        narrative_repo=narrative_repo,
+        reflection_model=reflection_model,
+        event_store=event_store,
+    )
+
+    event = service.reflect(session_id)
+
+    assert event.reflection_level == ReflectionLevel.MICRO
+    assert event.experiences_analyzed == [exp.id]
+    assert "no current narrative" in event.key_insight.lower()
+    assert "no_narrative" in event.notes
 
 
 def test_daily_reflection_detects_patterns() -> None:

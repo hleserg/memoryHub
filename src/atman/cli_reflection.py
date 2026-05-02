@@ -38,6 +38,7 @@ from atman.term import (
     print_banner,
     print_err,
     print_help_text,
+    print_info,
     print_ok,
 )
 
@@ -253,9 +254,9 @@ def cmd_reflect_micro(args: list[str]) -> int:
 
     print_ok("\nReflection Complete!")
     demo_pace()
-    print(f"  Level: {event.reflection_level}")
-    print(f"  Experiences analyzed: {len(event.experiences_analyzed)}")
-    print(f"  Key insight: {event.key_insight}")
+    print_info(f"  Level: {event.reflection_level}")
+    print_info(f"  Experiences analyzed: {len(event.experiences_analyzed)}")
+    print_info(f"  Key insight: {event.key_insight}")
 
     return 0
 
@@ -294,11 +295,11 @@ def cmd_reflect_daily(args: list[str]) -> int:
 
     print_ok("\nReflection Complete!")
     demo_pace()
-    print(f"  Level: {event.reflection_level}")
-    print(f"  Experiences analyzed: {len(event.experiences_analyzed)}")
-    print(f"  Patterns detected: {len(event.patterns_detected)}")
-    print(f"  Reframing notes added: {event.reframing_notes_added}")
-    print(f"  Key insight: {event.key_insight}")
+    print_info(f"  Level: {event.reflection_level}")
+    print_info(f"  Experiences analyzed: {len(event.experiences_analyzed)}")
+    print_info(f"  Patterns detected: {len(event.patterns_detected)}")
+    print_info(f"  Reframing notes added: {event.reframing_notes_added}")
+    print_info(f"  Key insight: {event.key_insight}")
 
     return 0
 
@@ -342,17 +343,17 @@ def cmd_reflect_deep(args: list[str]) -> int:
 
     print_ok("\nReflection Complete!")
     demo_pace()
-    print(f"  Level: {event.reflection_level}")
-    print(f"  Experiences analyzed: {len(event.experiences_analyzed)}")
-    print(f"  Patterns detected: {len(event.patterns_detected)}")
-    print(f"  Reframing notes added: {event.reframing_notes_added}")
+    print_info(f"  Level: {event.reflection_level}")
+    print_info(f"  Experiences analyzed: {len(event.experiences_analyzed)}")
+    print_info(f"  Patterns detected: {len(event.patterns_detected)}")
+    print_info(f"  Reframing notes added: {event.reframing_notes_added}")
 
     if event.health_assessment_id:
         assessment = health_store.get(event.health_assessment_id)
         if assessment:
-            print(f"  Health score: {assessment.overall_score:.2f}/1.0")
+            print_info(f"  Health score: {assessment.overall_score:.2f}/1.0")
 
-    print(f"  Key insight: {event.key_insight}")
+    print_info(f"  Key insight: {event.key_insight}")
 
     return 0
 

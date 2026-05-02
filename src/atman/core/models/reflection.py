@@ -82,6 +82,10 @@ class PatternCandidate(BaseModel):
         le=1.0,
         description="Confidence in this pattern (0.0-1.0)",
     )
+    schema_version: str = Field(
+        default="1.0.0",
+        description="Schema version for migrations and safe export/import",
+    )
 
     # Implications
     related_values: list[str] = Field(
@@ -220,6 +224,10 @@ class HealthAssessment(BaseModel):
     recommendations: list[str] = Field(
         default_factory=list, description="Recommendations for healthy development"
     )
+    schema_version: str = Field(
+        default="1.0.0",
+        description="Schema version for migrations and safe export/import",
+    )
 
     @field_validator("overall_score")
     @classmethod
@@ -322,6 +330,10 @@ class ReflectionEvent(BaseModel):
     # Insights
     key_insight: str = Field(default="", description="Main insight from this reflection")
     notes: str = Field(default="", description="Additional notes about this reflection")
+    schema_version: str = Field(
+        default="1.0.0",
+        description="Schema version for migrations and safe export/import",
+    )
 
     @field_validator("reframing_notes_added")
     @classmethod

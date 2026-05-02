@@ -17,7 +17,7 @@
 
 ### Три уровня рефлексии
 
-```
+```text
 MICRO    → После каждой сессии   → Обновление recent layer + checkpoint
 DAILY    → Конец дня             → Обнаружение паттернов, добавление reframing notes
 DEEP     → По расписанию (раз в неделю+) → Оценка здоровья, ревизия идентичности
@@ -93,22 +93,10 @@ make demo-reflection-fast
 python -m atman.cli_reflection reflect micro --fixtures
 ```
 
-Или с реальными данными:
-
-```bash
-python -m atman.cli_reflection reflect micro --session-id <uuid>
-```
-
 ### Daily Reflection
 
 ```bash
 python -m atman.cli_reflection reflect daily --fixtures
-```
-
-Или с конкретной датой:
-
-```bash
-python -m atman.cli_reflection reflect daily --date 2026-05-01
 ```
 
 ### Deep Reflection
@@ -117,11 +105,7 @@ python -m atman.cli_reflection reflect daily --date 2026-05-01
 python -m atman.cli_reflection reflect deep --fixtures
 ```
 
-Или с диапазоном дат:
-
-```bash
-python -m atman.cli_reflection reflect deep --since 2026-04-01 --until 2026-05-01
-```
+**Сейчас только `--fixtures`:** для всех подкоманд `atman.cli_reflection` поддерживается только режим `--fixtures`. Полный сценарий (фикстуры, правка narrative, уровни рефлексии) — `make demo-reflection` или `python src/demo_reflection.py`. В планах (пока не реализовано в этом CLI): `--session-id`, `--date`, `--since` / `--until` поверх постоянного состояния (например `FileStateStore`).
 
 ---
 

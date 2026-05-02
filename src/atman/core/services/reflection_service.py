@@ -8,6 +8,7 @@ These services implement the three levels of reflection:
 """
 
 from datetime import datetime
+from typing import Literal
 from uuid import UUID
 
 from atman.core.models.experience import ReframingNote, SessionExperience
@@ -70,11 +71,14 @@ class MicroReflectionService:
         experiences = self.experience_repo.get_by_session(session_id)
 
         if not experiences:
-            return self._create_empty_event(session_id)
+            return self._create_skipped_micro_event(reason="no_experiences", experience_ids=[])
 
         narrative = self.narrative_repo.get_current()
         if not narrative:
-            return self._create_empty_event(session_id)
+            return self._create_skipped_micro_event(
+                reason="no_narrative",
+                experience_ids=[exp.id for exp in experiences],
+            )
 
         proposed_update = self.reflection_model.propose_narrative_update(
             current_narrative=narrative,
@@ -95,12 +99,28 @@ class MicroReflectionService:
         self.event_store.save(event)
         return event
 
-    def _create_empty_event(self, session_id: UUID) -> ReflectionEvent:
-        """Create an event for when there's nothing to reflect on."""
+    def _create_skipped_micro_event(
+        self,
+        *,
+        reason: Literal["no_experiences", "no_narrative"],
+        experience_ids: list[UUID],
+    ) -> ReflectionEvent:
+        """Persist a skipped micro-reflection (distinct from successful completion)."""
+        if reason == "no_experiences":
+            key_insight = "No experiences to reflect on for this session."
+            notes = "outcome=micro_skipped reason=no_experiences"
+        else:
+            key_insight = (
+                "Cannot update narrative: no current narrative document is loaded "
+                f"({len(experience_ids)} experience(s) were available)."
+            )
+            notes = "outcome=micro_skipped reason=no_narrative"
+
         event = ReflectionEvent(
             reflection_level=ReflectionLevel.MICRO,
-            experiences_analyzed=[],
-            key_insight="No experiences to reflect on",
+            experiences_analyzed=list(experience_ids),
+            key_insight=key_insight,
+            notes=notes,
         )
         self.event_store.save(event)
         return event
