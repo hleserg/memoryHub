@@ -89,7 +89,7 @@ pytest tests/ -v       # все тесты (или: uv run pytest tests/ -v)
 ```
 
 См. **`AGENTS.md`** (раздел *uv — рекомендуемый workflow*).  
-Вклад в проект: [`CONTRIBUTING.md`](CONTRIBUTING.md) · правила общения: [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md).
+Вклад в проект: [`CONTRIBUTING.md`](CONTRIBUTING.md) · правила общения: [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md) · безопасность: [`SECURITY.md`](SECURITY.md).
 
 ---
 

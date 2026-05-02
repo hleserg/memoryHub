@@ -89,7 +89,7 @@ pytest tests/ -v       # full test suite (or: uv run pytest tests/ -v)
 ```
 
 See **`AGENTS.md`** (*uv — рекомендуемый workflow*) for `uv run` and venv tips.  
-Contributing: [`CONTRIBUTING.md`](CONTRIBUTING.md) · Community standards: [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md).
+Contributing: [`CONTRIBUTING.md`](CONTRIBUTING.md) · Community standards: [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md) · Security: [`SECURITY.md`](SECURITY.md).
 
 ---
 
