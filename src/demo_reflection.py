@@ -348,9 +348,81 @@ def demo_deep_reflection(
             demo_pace()
 
 
+def demo_narrative_revision(narrative: NarrativeDocument) -> None:
+    """Demonstrate narrative revision service."""
+    print_banner("4. NARRATIVE REVISION SERVICE")
+    print_help_text(
+        "NarrativeRevisionService manages narrative threads and layer updates during reflection."
+    )
+    demo_pace()
+
+    from atman.core.services.narrative_revision import NarrativeRevisionService
+
+    narrative_repo = MockNarrativeRepo(narrative)
+    reflection_model = MockReflectionModel()
+
+    service = NarrativeRevisionService(
+        narrative_repo=narrative_repo, reflection_model=reflection_model
+    )
+
+    print_ok("\n1. Opening a narrative thread:")
+    demo_pace()
+
+    thread = service.open_thread(
+        title="Learning to handle uncertainty",
+        description="A journey of becoming more comfortable with not knowing",
+        context="Started when I first admitted I don't know something",
+    )
+
+    console.print(f"  ✓ Thread created: '{thread.title}'")
+    console.print(f"    Status: {'active' if thread.is_active else 'closed'}")
+    demo_pace()
+
+    print_ok("\n2. Updating thread state:")
+    demo_pace()
+
+    updated_thread = service.update_thread(
+        thread_id=str(thread.id),
+        new_state="Making progress, feels more natural now",
+        add_moment="Realized that admitting uncertainty builds trust",
+    )
+
+    if updated_thread:
+        console.print(f"  ✓ Thread updated: {updated_thread.current_state}")
+        console.print(f"    Key moments: {len(updated_thread.key_moments)}")
+    demo_pace()
+
+    print_ok("\n3. Closing the thread:")
+    demo_pace()
+
+    success = service.close_thread(
+        thread_id=str(thread.id),
+        reason="This has become a stable part of my identity",
+    )
+
+    if success:
+        console.print("  ✓ Thread closed successfully")
+        closed_narrative = narrative_repo.get_current()
+        if closed_narrative:
+            for t in closed_narrative.threads:
+                if t.id == thread.id:
+                    console.print(f"    Closure reason: {t.closure_reason}")
+    demo_pace()
+
+    print_ok("\n4. Active threads summary:")
+    demo_pace()
+
+    current_narrative = narrative_repo.get_current()
+    if current_narrative:
+        active = current_narrative.get_active_threads()
+        console.print(f"  Active threads: {len(active)}")
+        console.print(f"  Total threads: {len(current_narrative.threads)}")
+    demo_pace()
+
+
 def demo_principle_advisor(identity: Identity) -> None:
     """Demonstrate principle revision advisor."""
-    print_banner("4. PRINCIPLE REVISION ADVISOR")
+    print_banner("5. PRINCIPLE REVISION ADVISOR")
     print_help_text("The advisor helps distinguish habits from principles and suggests revisions.")
     demo_pace()
 
@@ -409,6 +481,20 @@ def main() -> None:
     demo_micro_reflection(experiences, identity)
     demo_daily_reflection(experiences, identity)
     demo_deep_reflection(experiences, identity)
+    
+    narrative = NarrativeDocument(
+        identity_id=identity.id,
+        core_layer=NarrativeLayer(
+            layer_type=LayerType.CORE,
+            content="I am in early stages of self-discovery.",
+        ),
+        recent_layer=NarrativeLayer(
+            layer_type=LayerType.RECENT,
+            content="Been exploring different approaches.",
+        ),
+    )
+    
+    demo_narrative_revision(narrative)
     demo_principle_advisor(identity)
 
     print_banner("DEMO COMPLETE")
