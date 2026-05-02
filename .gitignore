@@ -32,6 +32,9 @@ desktop.ini
 *-test.jpg
 
 # Python
+.venv/
+venv/
+env/
 __pycache__/
 *.py[cod]
 *$py.class

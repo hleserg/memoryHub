@@ -85,6 +85,63 @@ FEATURES: tuple[FeatureInfo, ...] = (
             "tests/test_experience_service.py",
         ),
     ),
+    FeatureInfo(
+        slug="identity-store",
+        title="Identity Store",
+        summary="Identity, eigenstate, self-narrative, snapshots, and CLI (WP-03).",
+        doc_dir="docs/features/identity-store",
+        related_paths=(
+            "src/atman/core/models/identity.py",
+            "src/atman/core/models/narrative.py",
+            "src/atman/core/services/identity_service.py",
+            "src/atman/core/services/narrative_service.py",
+            "src/atman/adapters/storage/",
+            "src/demo_identity.py",
+            "src/atman/cli_identity.py",
+        ),
+        demos=(
+            DemoCommand(
+                "Demo (paced)",
+                ("src/demo_identity.py",),
+                {"ATMAN_DEMO_PACE": "1"},
+            ),
+            DemoCommand(
+                "Demo (fast)",
+                ("src/demo_identity.py",),
+                {"ATMAN_DEMO_PACE": "off"},
+            ),
+        ),
+        test_globs=(
+            "tests/test_identity_*.py",
+            "tests/test_identity_service.py",
+        ),
+    ),
+    FeatureInfo(
+        slug="web-dashboard",
+        title="Web Dashboard",
+        summary="Streamlit browser UI for features, tests, and docs (same registry as TUI).",
+        doc_dir="docs/features/web-dashboard",
+        related_paths=(
+            "src/atman/web_dashboard/app.py",
+            "src/atman/web_dashboard/pages/",
+            "src/atman/web_dashboard/utils/",
+            "src/demo_web_dashboard.py",
+            "Makefile",
+        ),
+        demos=(
+            DemoCommand(
+                "Demo (paced)",
+                ("src/demo_web_dashboard.py",),
+                {"ATMAN_DEMO_PACE": "1"},
+            ),
+            DemoCommand(
+                "Demo (fast)",
+                ("src/demo_web_dashboard.py",),
+                {"ATMAN_DEMO_PACE": "off"},
+            ),
+        ),
+        test_globs=("tests/test_web_dashboard_*.py",),
+    ),
 )
 
 

@@ -160,11 +160,13 @@ def test_junit_parse_counts(tmp_path: Path) -> None:
 
 
 def test_features_registry() -> None:
-    assert len(FEATURES) >= 2
+    assert len(FEATURES) >= 4
     f = get_feature("factual-memory")
     assert f is not None
     assert "Factual" in f.title
     assert f.doc_dir.startswith("docs/features/")
+    assert get_feature("identity-store") is not None
+    assert get_feature("web-dashboard") is not None
     assert get_feature("no-such-slug") is None
 
 
