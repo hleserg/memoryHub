@@ -6,12 +6,17 @@ It's part of deep reflection but can be used independently.
 """
 
 from datetime import UTC, datetime
+from uuid import UUID
 
 from atman.core.models.experience import SessionExperience
 from atman.core.models.identity import Identity
-from atman.core.models.narrative import NarrativeThread
+from atman.core.models.narrative import NarrativeDocument, NarrativeThread
 from atman.core.models.reflection import PatternCandidate, ReflectionLevel
-from atman.core.ports.reflection import NarrativeRepository, ReflectionModel
+from atman.core.ports.reflection import (
+    NarrativeRepository,
+    NarrativeWriteAuditPort,
+    ReflectionModel,
+)
 
 
 class NarrativeRevisionService:
@@ -22,12 +27,40 @@ class NarrativeRevisionService:
     - Core layer updates (rare, fundamental changes)
     - Recent layer updates (frequent, session-by-session)
     - Thread management (opening, updating, closing)
+
+    All commits go through optimistic concurrency on ``updated_at`` and may
+    emit audit records when a :class:`NarrativeWriteAuditPort` is configured.
     """
 
-    def __init__(self, narrative_repo: NarrativeRepository, reflection_model: ReflectionModel):
+    def __init__(
+        self,
+        narrative_repo: NarrativeRepository,
+        reflection_model: ReflectionModel,
+        *,
+        narrative_audit: NarrativeWriteAuditPort | None = None,
+    ):
         """Initialize narrative revision service."""
         self.narrative_repo = narrative_repo
         self.reflection_model = reflection_model
+        self._narrative_audit = narrative_audit
+
+    def _commit_narrative(
+        self,
+        draft: NarrativeDocument,
+        *,
+        expected_updated_at: datetime,
+        change_kind: str,
+        audit_summary: str,
+    ) -> None:
+        """Persist draft if ``expected_updated_at`` matches last commit; then audit."""
+        self.narrative_repo.update(draft, expected_updated_at=expected_updated_at)
+        if self._narrative_audit is not None:
+            self._narrative_audit.record_narrative_commit(
+                change_kind=change_kind,
+                narrative_id=draft.id,
+                identity_id=draft.identity_id,
+                reason_or_summary=audit_summary,
+            )
 
     def update_recent_layer(
         self, experiences: list[SessionExperience], reflection_level: ReflectionLevel
@@ -42,18 +75,26 @@ class NarrativeRevisionService:
         Returns:
             New content for recent layer
         """
-        narrative = self.narrative_repo.get_current()
-        if not narrative:
+        base = self.narrative_repo.get_current()
+        if not base:
             return "No narrative to update"
 
+        etag = base.updated_at
+        draft = base.model_copy(deep=True)
+
         proposed_update = self.reflection_model.propose_narrative_update(
-            current_narrative=narrative,
+            current_narrative=draft,
             recent_experiences=experiences,
             reflection_level=reflection_level,
         )
 
-        narrative.update_recent_layer(proposed_update)
-        self.narrative_repo.update(narrative)
+        draft.update_recent_layer(proposed_update)
+        self._commit_narrative(
+            draft,
+            expected_updated_at=etag,
+            change_kind="recent_layer",
+            audit_summary=f"recent_layer:{reflection_level.value}",
+        )
 
         return proposed_update
 
@@ -76,15 +117,28 @@ class NarrativeRevisionService:
 
         Returns:
             New content for core layer
+
+        Raises:
+            NarrativePersistenceConflictError: If the repository rejects the
+                write because ``updated_at`` no longer matches the snapshot
+                taken at read time.
         """
-        narrative = self.narrative_repo.get_current()
-        if not narrative:
+        base = self.narrative_repo.get_current()
+        if not base:
             return "No narrative to update"
+
+        etag = base.updated_at
+        draft = base.model_copy(deep=True)
 
         new_core_content = self._generate_core_content(identity, patterns, reason)
 
-        narrative.update_core_layer(new_core_content)
-        self.narrative_repo.update(narrative)
+        draft.update_core_layer(new_core_content)
+        self._commit_narrative(
+            draft,
+            expected_updated_at=etag,
+            change_kind="core_layer",
+            audit_summary=reason,
+        )
 
         return new_core_content
 
@@ -102,9 +156,12 @@ class NarrativeRevisionService:
         Returns:
             The created thread
         """
-        narrative = self.narrative_repo.get_current()
-        if not narrative:
+        base = self.narrative_repo.get_current()
+        if not base:
             raise ValueError("No narrative document to add thread to")
+
+        etag = base.updated_at
+        draft = base.model_copy(deep=True)
 
         thread = NarrativeThread(
             title=title,
@@ -112,8 +169,13 @@ class NarrativeRevisionService:
             current_state=context if context else "Just started",
         )
 
-        narrative.add_thread(thread)
-        self.narrative_repo.update(narrative)
+        draft.add_thread(thread)
+        self._commit_narrative(
+            draft,
+            expected_updated_at=etag,
+            change_kind="thread_open",
+            audit_summary=title,
+        )
 
         return thread
 
@@ -131,18 +193,19 @@ class NarrativeRevisionService:
         Returns:
             Updated thread or None if not found
         """
-        narrative = self.narrative_repo.get_current()
-        if not narrative:
+        base = self.narrative_repo.get_current()
+        if not base:
             return None
-
-        from uuid import UUID
 
         try:
             thread_uuid = UUID(thread_id)
         except ValueError:
             return None
 
-        for thread in narrative.threads:
+        etag = base.updated_at
+        draft = base.model_copy(deep=True)
+
+        for thread in draft.threads:
             if thread.id == thread_uuid:
                 thread.current_state = new_state
                 thread.last_updated = datetime.now(UTC)
@@ -150,7 +213,12 @@ class NarrativeRevisionService:
                 if add_moment:
                     thread.key_moments.append(add_moment)
 
-                self.narrative_repo.update(narrative)
+                self._commit_narrative(
+                    draft,
+                    expected_updated_at=etag,
+                    change_kind="thread_update",
+                    audit_summary=f"thread:{thread_uuid}",
+                )
                 return thread
 
         return None
@@ -168,23 +236,30 @@ class NarrativeRevisionService:
         Returns:
             True if closed successfully, False if thread not found
         """
-        narrative = self.narrative_repo.get_current()
-        if not narrative:
+        base = self.narrative_repo.get_current()
+        if not base:
             return False
-
-        from uuid import UUID
 
         try:
             thread_uuid = UUID(thread_id)
         except ValueError:
             return False
 
+        etag = base.updated_at
+        draft = base.model_copy(deep=True)
+
         try:
-            narrative.close_thread(thread_uuid, reason)
-            self.narrative_repo.update(narrative)
-            return True
+            draft.close_thread(thread_uuid, reason)
         except ValueError:
             return False
+
+        self._commit_narrative(
+            draft,
+            expected_updated_at=etag,
+            change_kind="thread_close",
+            audit_summary=reason,
+        )
+        return True
 
     def _generate_core_content(
         self, identity: Identity, patterns: list[PatternCandidate], reason: str

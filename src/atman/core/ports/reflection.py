@@ -58,8 +58,13 @@ class ExperienceRepository(Protocol):
         """Update an experience (e.g., after adding reframing note)."""
         ...
 
-    def add_reframing_note(self, experience_id: UUID, note: ReframingNote) -> None:
-        """Add a reframing note to an experience."""
+    def add_reframing_note(self, experience_id: UUID, note: ReframingNote) -> bool:
+        """
+        Append a reframing note to an experience.
+
+        Returns:
+            True if the experience existed and the note was stored; False otherwise.
+        """
         ...
 
 
@@ -106,12 +111,56 @@ class NarrativeRepository(Protocol):
         """Get the current narrative document."""
         ...
 
-    def update(self, narrative: NarrativeDocument) -> None:
-        """Update the narrative document."""
+    def update(
+        self,
+        narrative: NarrativeDocument,
+        *,
+        expected_updated_at: datetime | None = None,
+    ) -> None:
+        """
+        Persist the narrative document.
+
+        When ``expected_updated_at`` is set, implementations must reject the
+        write unless the last committed narrative has the same ``updated_at``
+        (optimistic concurrency). On mismatch, raise
+        :class:`NarrativePersistenceConflictError` so callers do not silently
+        overwrite concurrent edits.
+
+        When ``expected_updated_at`` is None, implementations may skip the
+        check (legacy / tooling paths only — production reflection paths
+        should pass the token).
+        """
         ...
 
     def get_history(self) -> list[NarrativeDocument]:
         """Get history of narrative documents (if versioned)."""
+        ...
+
+
+class NarrativeWriteAuditPort(Protocol):
+    """
+    Optional hook for governance / audit after a successful narrative commit.
+
+    Implementations may append :class:`AuditEvent`-like records, emit metrics,
+    or enqueue human review. Core layer commits should always be observable
+    when this port is wired.
+    """
+
+    def record_narrative_commit(
+        self,
+        *,
+        change_kind: str,
+        narrative_id: UUID,
+        identity_id: UUID,
+        reason_or_summary: str,
+    ) -> None:
+        """
+        Record that a narrative mutation was committed.
+
+        ``change_kind`` values used by ``NarrativeRevisionService``:
+        ``core_layer``, ``recent_layer``, ``thread_open``, ``thread_update``,
+        ``thread_close``.
+        """
         ...
 
 

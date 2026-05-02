@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
-from uuid import uuid4
+from datetime import datetime, timedelta
+from uuid import UUID, uuid4
 
 import pytest
 
 from atman.adapters.reflection.mock_reflection_model import MockReflectionModel
+from atman.core.exceptions import NarrativePersistenceConflictError
 from atman.core.models.experience import (
     EmotionalDepth,
     FeltSense,
@@ -27,16 +29,51 @@ class _StubNarrativeRepo:
     """Minimal NarrativeRepository for tests."""
 
     def __init__(self, initial: NarrativeDocument | None) -> None:
-        self._current = initial
+        self._current = initial.model_copy(deep=True) if initial is not None else None
 
     def get_current(self) -> NarrativeDocument | None:
-        return self._current
+        if self._current is None:
+            return None
+        return self._current.model_copy(deep=True)
 
-    def update(self, narrative: NarrativeDocument) -> None:
-        self._current = narrative
+    def update(
+        self, narrative: NarrativeDocument, *, expected_updated_at: datetime | None = None
+    ) -> None:
+        if self._current is None:
+            self._current = narrative.model_copy(deep=True)
+            return
+        if expected_updated_at is not None and self._current.updated_at != expected_updated_at:
+            raise NarrativePersistenceConflictError(
+                "Narrative was modified concurrently since this snapshot was read."
+            )
+        self._current = narrative.model_copy(deep=True)
 
     def get_history(self) -> list[NarrativeDocument]:
         return []
+
+    def bump_committed_timestamp(self) -> None:
+        """Simulate another writer advancing ``updated_at`` on the stored document."""
+        if self._current is None:
+            return
+        self._current = self._current.model_copy(deep=True)
+        self._current.updated_at = self._current.updated_at + timedelta(seconds=30)
+
+
+class _AuditSink:
+    """Captures :class:`NarrativeWriteAuditPort` calls for assertions."""
+
+    def __init__(self) -> None:
+        self.kinds: list[str] = []
+
+    def record_narrative_commit(
+        self,
+        *,
+        change_kind: str,
+        narrative_id: UUID,
+        identity_id: UUID,
+        reason_or_summary: str,
+    ) -> None:
+        self.kinds.append(change_kind)
 
 
 def _minimal_narrative() -> NarrativeDocument:
@@ -165,3 +202,33 @@ def test_open_update_close_thread_flow() -> None:
     svc2 = NarrativeRevisionService(repo, MockReflectionModel())
     t2 = svc2.open_thread("T2", "D2")
     assert svc2.close_thread(str(t2.id), "") is False
+
+
+def test_repo_update_rejects_stale_concurrency_token() -> None:
+    doc = _minimal_narrative()
+    repo = _StubNarrativeRepo(doc)
+    token = doc.updated_at
+    repo.bump_committed_timestamp()
+    fresh = repo.get_current()
+    assert fresh is not None
+    with pytest.raises(NarrativePersistenceConflictError):
+        repo.update(fresh, expected_updated_at=token)
+
+
+def test_update_core_layer_records_audit_when_configured() -> None:
+    doc = _minimal_narrative()
+    repo = _StubNarrativeRepo(doc)
+    audit = _AuditSink()
+    svc = NarrativeRevisionService(repo, MockReflectionModel(), narrative_audit=audit)
+    ident = Identity(self_description="Audited")
+    svc.update_core_layer(ident, [], "reason")
+    assert audit.kinds == ["core_layer"]
+
+
+def test_open_thread_records_audit_when_configured() -> None:
+    doc = _minimal_narrative()
+    repo = _StubNarrativeRepo(doc)
+    audit = _AuditSink()
+    svc = NarrativeRevisionService(repo, MockReflectionModel(), narrative_audit=audit)
+    svc.open_thread("T", "D")
+    assert audit.kinds == ["thread_open"]

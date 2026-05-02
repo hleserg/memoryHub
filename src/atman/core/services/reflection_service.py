@@ -80,14 +80,17 @@ class MicroReflectionService:
                 experience_ids=[exp.id for exp in experiences],
             )
 
+        etag = narrative.updated_at
+        draft = narrative.model_copy(deep=True)
+
         proposed_update = self.reflection_model.propose_narrative_update(
-            current_narrative=narrative,
+            current_narrative=draft,
             recent_experiences=experiences,
             reflection_level=ReflectionLevel.MICRO,
         )
 
-        narrative.update_recent_layer(proposed_update)
-        self.narrative_repo.update(narrative)
+        draft.update_recent_layer(proposed_update)
+        self.narrative_repo.update(draft, expected_updated_at=etag)
 
         event = ReflectionEvent(
             reflection_level=ReflectionLevel.MICRO,
@@ -241,8 +244,8 @@ class DailyReflectionService:
                     reflection_type="pattern",
                     triggered_by=f"daily_reflection_{patterns[0].id}",
                 )
-                self.experience_repo.add_reframing_note(exp.id, note)
-                count += 1
+                if self.experience_repo.add_reframing_note(exp.id, note):
+                    count += 1
 
         return count
 
@@ -418,8 +421,8 @@ class DeepReflectionService:
                     reflection_type="growth",
                     triggered_by="deep_reflection",
                 )
-                self.experience_repo.add_reframing_note(exp.id, note)
-                count += 1
+                if self.experience_repo.add_reframing_note(exp.id, note):
+                    count += 1
 
         return count
 

@@ -12,20 +12,21 @@ which is not yet implemented. Use demo_reflection.py for full walkthrough.
 
 import sys
 from datetime import UTC, datetime
-from uuid import UUID, uuid4
+from uuid import UUID
 
+from atman.adapters.reflection.fixture_loader import (
+    anchor_session_experiences_to_utc_day_window,
+    load_reflection_identity,
+    load_reflection_session_experiences,
+)
 from atman.adapters.reflection.mock_reflection_model import MockReflectionModel
 from atman.adapters.storage.in_memory_reflection_store import (
     InMemoryHealthAssessmentStore,
     InMemoryPatternStore,
     InMemoryReflectionEventStore,
 )
-from atman.core.models.experience import (
-    EmotionalDepth,
-    FeltSense,
-    KeyMoment,
-    SessionExperience,
-)
+from atman.core.exceptions import NarrativePersistenceConflictError
+from atman.core.models.experience import ReframingNote, SessionExperience
 from atman.core.models.identity import Identity, IdentitySnapshot
 from atman.core.models.narrative import LayerType, NarrativeDocument, NarrativeLayer
 from atman.core.services.reflection_service import (
@@ -75,11 +76,13 @@ class MockExperienceRepo:
         """Update experience."""
         self.experiences[experience.id] = experience
 
-    def add_reframing_note(self, experience_id: UUID, note):  # type: ignore[no-untyped-def]
-        """Add reframing note."""
+    def add_reframing_note(self, experience_id: UUID, note: ReframingNote) -> bool:
+        """Add reframing note; return True if the experience existed."""
         exp = self.experiences.get(experience_id)
-        if exp:
-            exp.add_reframing_note(note)
+        if exp is None:
+            return False
+        exp.add_reframing_note(note)
+        return True
 
 
 class MockIdentityRepo:
@@ -126,11 +129,22 @@ class MockNarrativeRepo:
 
     def get_current(self) -> NarrativeDocument | None:
         """Get current narrative."""
-        return self.narrative
+        if self.narrative is None:
+            return None
+        return self.narrative.model_copy(deep=True)
 
-    def update(self, narrative: NarrativeDocument) -> None:
-        """Update narrative."""
-        self.narrative = narrative
+    def update(
+        self, narrative: NarrativeDocument, *, expected_updated_at: datetime | None = None
+    ) -> None:
+        """Update narrative with optional optimistic concurrency on ``updated_at``."""
+        if self.narrative is None:
+            self.narrative = narrative.model_copy(deep=True)
+            return
+        if expected_updated_at is not None and self.narrative.updated_at != expected_updated_at:
+            raise NarrativePersistenceConflictError(
+                "Narrative was modified concurrently since this snapshot was read."
+            )
+        self.narrative = narrative.model_copy(deep=True)
 
     def get_history(self) -> list[NarrativeDocument]:
         """Get history."""
@@ -139,22 +153,19 @@ class MockNarrativeRepo:
 
 def setup_fixtures() -> tuple[MockExperienceRepo, MockIdentityRepo, MockNarrativeRepo]:
     """
-    Set up test fixtures for reflection.
+    Set up test fixtures for reflection CLI.
 
-    Creates:
-    - Some sample experiences
-    - A basic identity
-    - A narrative document
+    Loads `fixtures/reflection/experiences.json` and `identity.json`, anchors
+    experience timestamps into the current UTC day (so deep/daily in-range
+    queries match), and builds a minimal narrative for the loaded identity.
 
     Returns:
         Tuple of (experience_repo, identity_repo, narrative_repo)
     """
-
-    identity = Identity(
-        self_description="I am learning to understand myself through experience.",
-        core_values=[],
-        emotional_baseline=0.1,
+    experiences = anchor_session_experiences_to_utc_day_window(
+        load_reflection_session_experiences()
     )
+    identity = load_reflection_identity()
 
     narrative = NarrativeDocument(
         identity_id=identity.id,
@@ -168,48 +179,7 @@ def setup_fixtures() -> tuple[MockExperienceRepo, MockIdentityRepo, MockNarrativ
         ),
     )
 
-    session_id = uuid4()
-    exp1 = SessionExperience(
-        session_id=session_id,
-        key_moments=[
-            KeyMoment(
-                what_happened="User asked me a question I didn't know how to answer",
-                how_i_felt=FeltSense(
-                    emotional_valence=-0.2,
-                    emotional_intensity=0.6,
-                    depth=EmotionalDepth.MEANINGFUL,
-                ),
-                why_it_matters="This tested my honesty about limitations",
-                values_touched=["honesty", "competence"],
-                what_changed="Realized I need to be more comfortable with uncertainty",
-            )
-        ],
-        identity_snapshot_id=identity.id,
-        importance=0.7,
-        salience=0.7,
-    )
-
-    exp2 = SessionExperience(
-        session_id=uuid4(),
-        key_moments=[
-            KeyMoment(
-                what_happened="Successfully helped user with a complex problem",
-                how_i_felt=FeltSense(
-                    emotional_valence=0.5,
-                    emotional_intensity=0.7,
-                    depth=EmotionalDepth.MEANINGFUL,
-                ),
-                why_it_matters="Confirmed my ability to be helpful",
-                values_touched=["competence", "helpfulness"],
-                what_changed="Gained confidence in problem-solving",
-            )
-        ],
-        identity_snapshot_id=identity.id,
-        importance=0.6,
-        salience=0.6,
-    )
-
-    experience_repo = MockExperienceRepo([exp1, exp2])
+    experience_repo = MockExperienceRepo(experiences)
     identity_repo = MockIdentityRepo(identity)
     narrative_repo = MockNarrativeRepo(narrative)
 

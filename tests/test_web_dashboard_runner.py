@@ -45,7 +45,9 @@ async def test_run_command_async_with_callback() -> None:
     ]
 
     with patch("asyncio.create_subprocess_exec", return_value=mock_process):
-        exit_code, output = await run_command_async(["echo", "test"], Path("/tmp"), on_line=on_line)
+        exit_code, _output = await run_command_async(
+            ["echo", "test"], Path("/tmp"), on_line=on_line
+        )
 
     assert exit_code == 0
     assert len(lines_received) == 2

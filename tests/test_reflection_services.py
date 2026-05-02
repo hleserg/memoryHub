@@ -5,16 +5,23 @@ Tests for reflection services.
 from datetime import UTC, datetime
 from uuid import UUID, uuid4
 
+from atman.adapters.reflection.fixture_loader import (
+    anchor_session_experiences_to_utc_day_window,
+    load_reflection_identity,
+    load_reflection_session_experiences,
+)
 from atman.adapters.reflection.mock_reflection_model import MockReflectionModel
 from atman.adapters.storage.in_memory_reflection_store import (
     InMemoryHealthAssessmentStore,
     InMemoryPatternStore,
     InMemoryReflectionEventStore,
 )
+from atman.core.exceptions import NarrativePersistenceConflictError
 from atman.core.models.experience import (
     EmotionalDepth,
     FeltSense,
     KeyMoment,
+    ReframingNote,
     SessionExperience,
 )
 from atman.core.models.identity import Identity, IdentitySnapshot
@@ -59,11 +66,13 @@ class MockExperienceRepo:
         """Update experience."""
         self.experiences[experience.id] = experience
 
-    def add_reframing_note(self, experience_id: UUID, note) -> None:
-        """Add reframing note."""
+    def add_reframing_note(self, experience_id: UUID, note: ReframingNote) -> bool:
+        """Add reframing note; return True if the experience existed."""
         exp = self.experiences.get(experience_id)
-        if exp:
-            exp.add_reframing_note(note)
+        if exp is None:
+            return False
+        exp.add_reframing_note(note)
+        return True
 
 
 class MockIdentityRepo:
@@ -110,15 +119,33 @@ class MockNarrativeRepo:
 
     def get_current(self) -> NarrativeDocument | None:
         """Get current narrative."""
-        return self.narrative
+        if self.narrative is None:
+            return None
+        return self.narrative.model_copy(deep=True)
 
-    def update(self, narrative: NarrativeDocument) -> None:
-        """Update narrative."""
-        self.narrative = narrative
+    def update(
+        self, narrative: NarrativeDocument, *, expected_updated_at: datetime | None = None
+    ) -> None:
+        """Update narrative with optional optimistic concurrency on ``updated_at``."""
+        if self.narrative is None:
+            self.narrative = narrative.model_copy(deep=True)
+            return
+        if expected_updated_at is not None and self.narrative.updated_at != expected_updated_at:
+            raise NarrativePersistenceConflictError(
+                "Narrative was modified concurrently since this snapshot was read."
+            )
+        self.narrative = narrative.model_copy(deep=True)
 
     def get_history(self) -> list[NarrativeDocument]:
         """Get history."""
         return []
+
+
+class RejectingReframeMockRepo(MockExperienceRepo):
+    """Experience repo that never persists reframing notes (audit edge case)."""
+
+    def add_reframing_note(self, experience_id: UUID, note: ReframingNote) -> bool:
+        return False
 
 
 def create_test_experience(session_id: UUID | None = None) -> SessionExperience:
@@ -283,6 +310,35 @@ def test_daily_reflection_adds_reframing_notes() -> None:
     event = service.reflect(date)
 
     assert event.reflection_level == ReflectionLevel.DAILY
+    assert event.reframing_notes_added >= 1
+
+
+def test_daily_reflection_reframing_count_skips_failed_persist() -> None:
+    """Reframing count must not increase when the repo rejects the append."""
+    exp1 = create_test_experience()
+    exp2 = create_test_experience()
+
+    identity = Identity()
+
+    exp_repo = RejectingReframeMockRepo([exp1, exp2])
+    identity_repo = MockIdentityRepo(identity)
+    pattern_store = InMemoryPatternStore()
+    reflection_model = MockReflectionModel()
+    event_store = InMemoryReflectionEventStore()
+
+    service = DailyReflectionService(
+        experience_repo=exp_repo,
+        identity_repo=identity_repo,
+        pattern_store=pattern_store,
+        reflection_model=reflection_model,
+        event_store=event_store,
+    )
+
+    event = service.reflect(datetime.now(UTC))
+
+    assert event.reflection_level == ReflectionLevel.DAILY
+    assert len(event.patterns_detected) >= 1
+    assert event.reframing_notes_added == 0
 
 
 def test_deep_reflection_performs_health_assessment() -> None:
@@ -370,3 +426,47 @@ def test_deep_reflection_proposes_changes() -> None:
     assert event.reflection_level == ReflectionLevel.DEEP
     assert event.narrative_changes_proposed != ""
     assert event.identity_changes_proposed != ""
+    assert event.reframing_notes_added >= 1
+    assert any(len(e.reframing_notes) > 0 for e in (exp1, exp2, exp3))
+
+
+def test_deep_reflection_fixture_json_adds_reframing() -> None:
+    """JSON fixtures (3+ experiences) anchored to today support deep reframing path."""
+    experiences = anchor_session_experiences_to_utc_day_window(
+        load_reflection_session_experiences()
+    )
+    assert len(experiences) >= 3
+
+    identity = load_reflection_identity()
+    narrative = NarrativeDocument(
+        identity_id=identity.id,
+        core_layer=NarrativeLayer(layer_type=LayerType.CORE, content="Core"),
+        recent_layer=NarrativeLayer(layer_type=LayerType.RECENT, content="Recent"),
+    )
+
+    exp_repo = MockExperienceRepo(experiences)
+    identity_repo = MockIdentityRepo(identity)
+    narrative_repo = MockNarrativeRepo(narrative)
+    pattern_store = InMemoryPatternStore()
+    health_store = InMemoryHealthAssessmentStore()
+    reflection_model = MockReflectionModel()
+    event_store = InMemoryReflectionEventStore()
+
+    service = DeepReflectionService(
+        experience_repo=exp_repo,
+        identity_repo=identity_repo,
+        narrative_repo=narrative_repo,
+        pattern_store=pattern_store,
+        health_store=health_store,
+        reflection_model=reflection_model,
+        event_store=event_store,
+    )
+
+    since = datetime.now(UTC).replace(hour=0, minute=0, second=0, microsecond=0)
+    until = datetime.now(UTC)
+    event = service.reflect(since, until)
+
+    assert event.reflection_level == ReflectionLevel.DEEP
+    assert len(event.patterns_detected) >= 1
+    assert event.reframing_notes_added >= 1
+    assert any(len(exp.reframing_notes) > 0 for exp in experiences)

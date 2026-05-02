@@ -9,20 +9,24 @@ This demonstrates the three levels of reflection:
 All outputs use Rich via atman.term for consistent styling.
 """
 
-import json
 from datetime import UTC, datetime
-from pathlib import Path
 from uuid import UUID
 
 from rich.table import Table
 
+from atman.adapters.reflection.fixture_loader import (
+    anchor_session_experiences_to_utc_day_window,
+    load_reflection_identity,
+    load_reflection_session_experiences,
+)
 from atman.adapters.reflection.mock_reflection_model import MockReflectionModel
 from atman.adapters.storage.in_memory_reflection_store import (
     InMemoryHealthAssessmentStore,
     InMemoryPatternStore,
     InMemoryReflectionEventStore,
 )
-from atman.core.models.experience import SessionExperience
+from atman.core.exceptions import NarrativePersistenceConflictError
+from atman.core.models.experience import ReframingNote, SessionExperience
 from atman.core.models.identity import Identity, IdentitySnapshot
 from atman.core.models.narrative import LayerType, NarrativeDocument, NarrativeLayer
 from atman.core.services.principle_advisor import PrincipleRevisionAdvisor
@@ -72,11 +76,13 @@ class MockExperienceRepo:
         """Update experience."""
         self.experiences[experience.id] = experience
 
-    def add_reframing_note(self, experience_id: UUID, note) -> None:
-        """Add reframing note."""
+    def add_reframing_note(self, experience_id: UUID, note: ReframingNote) -> bool:
+        """Add reframing note; return True if the experience existed."""
         exp = self.experiences.get(experience_id)
-        if exp:
-            exp.add_reframing_note(note)
+        if exp is None:
+            return False
+        exp.add_reframing_note(note)
+        return True
 
 
 class MockIdentityRepo:
@@ -123,11 +129,17 @@ class MockNarrativeRepo:
 
     def get_current(self) -> NarrativeDocument | None:
         """Get current narrative."""
-        return self.narrative
+        return self.narrative.model_copy(deep=True)
 
-    def update(self, narrative: NarrativeDocument) -> None:
-        """Update narrative."""
-        self.narrative = narrative
+    def update(
+        self, narrative: NarrativeDocument, *, expected_updated_at: datetime | None = None
+    ) -> None:
+        """Update narrative with optional optimistic concurrency on ``updated_at``."""
+        if expected_updated_at is not None and self.narrative.updated_at != expected_updated_at:
+            raise NarrativePersistenceConflictError(
+                "Narrative was modified concurrently since this snapshot was read."
+            )
+        self.narrative = narrative.model_copy(deep=True)
 
     def get_history(self) -> list[NarrativeDocument]:
         """Get history."""
@@ -135,17 +147,11 @@ class MockNarrativeRepo:
 
 
 def load_fixtures() -> tuple[list[SessionExperience], Identity]:
-    """Load test fixtures."""
-    fixtures_path = Path("fixtures/reflection")
-
-    with open(fixtures_path / "experiences.json") as f:
-        exp_data = json.load(f)
-        experiences = [SessionExperience(**exp) for exp in exp_data]
-
-    with open(fixtures_path / "identity.json") as f:
-        identity_data = json.load(f)
-        identity = Identity(**identity_data)
-
+    """Load fixtures and anchor experience timestamps to the current UTC day (same as CLI)."""
+    experiences = anchor_session_experiences_to_utc_day_window(
+        load_reflection_session_experiences()
+    )
+    identity = load_reflection_identity()
     return experiences, identity
 
 
@@ -304,11 +310,12 @@ def demo_deep_reflection(
         event_store=event_store,
     )
 
-    since = datetime(2026, 4, 30, tzinfo=UTC)
-    until = datetime(2026, 5, 1, 23, 59, 59, tzinfo=UTC)
+    until = datetime.now(UTC)
+    since = until.replace(hour=0, minute=0, second=0, microsecond=0)
 
     print_ok(
-        f"Running deep reflection from {since.strftime('%Y-%m-%d')} to {until.strftime('%Y-%m-%d')}"
+        f"Running deep reflection from {since.strftime('%Y-%m-%d %H:%M')} "
+        f"UTC to {until.strftime('%Y-%m-%d %H:%M')} UTC"
     )
     demo_pace()
 
