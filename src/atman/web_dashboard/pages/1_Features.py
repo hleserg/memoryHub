@@ -6,7 +6,7 @@ import streamlit as st
 
 from atman.tui.features_registry import FEATURES, FeatureInfo
 from atman.tui.repo_root import find_repo_root
-from atman.web_dashboard.utils import get_demo_command, run_command_sync
+from atman.web_dashboard.utils import python_script_cmd, run_command_sync
 
 st.set_page_config(page_title="Features - Atman Dashboard", page_icon="🎯", layout="wide")
 
@@ -16,6 +16,7 @@ try:
 except FileNotFoundError:
     st.error("Repository root not found.")
     st.stop()
+    raise SystemExit("Repository root not found") from None  # For type checker
 
 st.title("🎯 Features")
 st.markdown("Управление фичами проекта: запуск демо и просмотр документации")
@@ -68,7 +69,10 @@ if selected_title:
 
                 if demo_idx < len(feature.demos):
                     demo = feature.demos[demo_idx]
-                    cmd, env = get_demo_command(demo.argv[0], paced=paced, repo_root=repo_root)
+                    # Use full argv and env from DemoCommand
+                    cmd = python_script_cmd(*demo.argv)
+                    # Merge demo env with any paced overrides if needed
+                    env = dict(demo.env)
 
                     st.markdown("#### Выполнение...")
                     st.code(" ".join(cmd))

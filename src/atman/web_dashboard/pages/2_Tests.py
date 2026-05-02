@@ -15,6 +15,7 @@ try:
 except FileNotFoundError:
     st.error("Repository root not found.")
     st.stop()
+    raise SystemExit("Repository root not found") from None  # For type checker
 
 st.title("🧪 Tests")
 st.markdown("Запуск и просмотр результатов тестов")

@@ -16,6 +16,7 @@ try:
 except FileNotFoundError:
     st.error("Repository root not found.")
     st.stop()
+    raise SystemExit("Repository root not found") from None  # For type checker
 
 st.title("📚 Documentation")
 st.markdown("Просмотр документации проекта")
@@ -57,6 +58,7 @@ section_path = repo_root / DOC_SECTIONS[selected_section]
 if not section_path.exists():
     st.error(f"Раздел `{DOC_SECTIONS[selected_section]}` не найден")
     st.stop()
+    raise SystemExit("Section not found")  # For type checker
 
 
 def list_markdown_files(path: Path, prefix: str = "") -> list[tuple[str, Path]]:

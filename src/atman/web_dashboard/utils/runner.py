@@ -59,6 +59,7 @@ def run_command_sync(
     args: list[str],
     cwd: Path,
     env: dict[str, str] | None = None,
+    timeout: int = 300,
 ) -> tuple[int, str]:
     """
     Run command synchronously and capture output.
@@ -67,6 +68,7 @@ def run_command_sync(
         args: Command arguments
         cwd: Working directory
         env: Environment variables to add/override
+        timeout: Timeout in seconds (default: 300s / 5 minutes)
 
     Returns:
         Tuple of (exit_code, output)
@@ -77,12 +79,29 @@ def run_command_sync(
     if env:
         merged_env.update(env)
 
-    result = subprocess.run(  # nosec B603
-        args,
-        cwd=str(cwd),
-        env=merged_env,
-        capture_output=True,
-        text=True,
-    )
-
-    return result.returncode, result.stdout + result.stderr
+    try:
+        result = subprocess.run(  # nosec B603
+            args,
+            cwd=str(cwd),
+            env=merged_env,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+        )
+        return result.returncode, result.stdout + result.stderr
+    except subprocess.TimeoutExpired as e:
+        output = ""
+        if e.stdout:
+            output += (
+                e.stdout.decode("utf-8", errors="replace")
+                if isinstance(e.stdout, bytes)
+                else e.stdout
+            )
+        if e.stderr:
+            output += (
+                e.stderr.decode("utf-8", errors="replace")
+                if isinstance(e.stderr, bytes)
+                else e.stderr
+            )
+        output += f"\n\n❌ Command timed out after {timeout} seconds"
+        return 124, output  # Standard timeout exit code

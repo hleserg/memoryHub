@@ -20,6 +20,7 @@ try:
 except FileNotFoundError:
     st.error("Repository root not found. Please run from within the Atman repository.")
     st.stop()
+    raise SystemExit("Repository root not found") from None  # For type checker
 
 # Custom CSS for better UI
 st.markdown(

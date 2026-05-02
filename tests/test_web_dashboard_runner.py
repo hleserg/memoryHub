@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import subprocess
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -91,8 +92,11 @@ def test_run_command_sync_success() -> None:
     mock_result.stdout = "stdout output"
     mock_result.stderr = "stderr output"
 
-    with patch("subprocess.run", return_value=mock_result):
+    with patch("subprocess.run", return_value=mock_result) as mock_run:
         exit_code, output = run_command_sync(["echo", "test"], Path("/tmp"))
+
+        # Check that timeout was passed
+        assert mock_run.call_args[1]["timeout"] == 300
 
     assert exit_code == 0
     assert output == "stdout outputstderr output"
@@ -143,3 +147,32 @@ def test_run_command_sync_cwd() -> None:
         # Check that cwd was passed as string
         call_kwargs = mock_run.call_args[1]
         assert call_kwargs["cwd"] == str(test_path)
+
+
+def test_run_command_sync_timeout() -> None:
+    """Test run_command_sync handles timeout correctly."""
+    mock_timeout = subprocess.TimeoutExpired(["test"], 300)
+    mock_timeout.stdout = b"partial output"
+    mock_timeout.stderr = b"error output"
+
+    with patch("subprocess.run", side_effect=mock_timeout):
+        exit_code, output = run_command_sync(["slow-command"], Path("/tmp"))
+
+    assert exit_code == 124  # Standard timeout exit code
+    assert "partial output" in output
+    assert "error output" in output
+    assert "timed out after 300 seconds" in output
+
+
+def test_run_command_sync_custom_timeout() -> None:
+    """Test run_command_sync with custom timeout."""
+    mock_result = MagicMock()
+    mock_result.returncode = 0
+    mock_result.stdout = ""
+    mock_result.stderr = ""
+
+    with patch("subprocess.run", return_value=mock_result) as mock_run:
+        run_command_sync(["test"], Path("/tmp"), timeout=60)
+
+        # Check that custom timeout was passed
+        assert mock_run.call_args[1]["timeout"] == 60
