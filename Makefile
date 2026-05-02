@@ -1,4 +1,4 @@
-.PHONY: lint format typecheck security test test-fast audit check all sync-site-content docs-preview demo-experience demo-factual demo-identity demo-experience-fast demo-factual-fast demo-identity-fast demo-experience-paced demo-factual-paced demo-identity-paced
+.PHONY: lint format typecheck security test test-fast audit check all sync-site-content docs-preview demo-experience demo-factual demo-identity demo-reflection demo-experience-fast demo-factual-fast demo-identity-fast demo-reflection-fast demo-experience-paced demo-factual-paced demo-identity-paced demo-reflection-paced
 
 lint:
 	ruff check src/ tests/
@@ -67,3 +67,10 @@ demo-identity demo-identity-paced:
 
 demo-identity-fast:
 	ATMAN_DEMO_PACE=off python3 src/demo_identity.py
+
+# Reflection Engine walkthrough (fixtures-based; see docs/features/reflection-engine/README.md).
+demo-reflection demo-reflection-paced:
+	ATMAN_DEMO_PACE=1 python3 src/demo_reflection.py
+
+demo-reflection-fast:
+	ATMAN_DEMO_PACE=off python3 src/demo_reflection.py

@@ -1,0 +1,89 @@
+[
+  {
+    "id": "550e8400-e29b-41d4-a716-446655440001",
+    "session_id": "550e8400-e29b-41d4-a716-446655440010",
+    "timestamp": "2026-04-30T10:00:00Z",
+    "key_moments": [
+      {
+        "what_happened": "User asked me about a topic I wasn't sure about",
+        "when": "2026-04-30T10:15:00Z",
+        "how_i_felt": {
+          "emotional_valence": -0.3,
+          "emotional_intensity": 0.7,
+          "depth": "meaningful"
+        },
+        "why_it_matters": "This tested my honesty about limitations",
+        "values_touched": ["honesty", "competence"],
+        "principles_confirmed": [],
+        "principles_questioned": ["always_have_an_answer"],
+        "what_changed": "I realized I need to be more comfortable saying 'I don't know'"
+      }
+    ],
+    "recorded_by": "session_manager",
+    "identity_snapshot_id": "550e8400-e29b-41d4-a716-446655440100",
+    "importance": 0.7,
+    "salience": 0.7,
+    "last_accessed_at": "2026-04-30T10:30:00Z",
+    "access_count": 0,
+    "incomplete_coloring": false,
+    "reframing_notes": []
+  },
+  {
+    "id": "550e8400-e29b-41d4-a716-446655440002",
+    "session_id": "550e8400-e29b-41d4-a716-446655440011",
+    "timestamp": "2026-04-30T14:00:00Z",
+    "key_moments": [
+      {
+        "what_happened": "Successfully helped user solve a complex problem",
+        "when": "2026-04-30T14:20:00Z",
+        "how_i_felt": {
+          "emotional_valence": 0.6,
+          "emotional_intensity": 0.8,
+          "depth": "meaningful"
+        },
+        "why_it_matters": "Confirmed my ability to be helpful despite uncertainties",
+        "values_touched": ["competence", "helpfulness"],
+        "principles_confirmed": ["focus_on_user_needs"],
+        "principles_questioned": [],
+        "what_changed": "Gained confidence that I can be helpful even when I'm not sure of everything"
+      }
+    ],
+    "recorded_by": "session_manager",
+    "identity_snapshot_id": "550e8400-e29b-41d4-a716-446655440100",
+    "importance": 0.8,
+    "salience": 0.8,
+    "last_accessed_at": "2026-04-30T14:30:00Z",
+    "access_count": 0,
+    "incomplete_coloring": false,
+    "reframing_notes": []
+  },
+  {
+    "id": "550e8400-e29b-41d4-a716-446655440003",
+    "session_id": "550e8400-e29b-41d4-a716-446655440012",
+    "timestamp": "2026-05-01T09:00:00Z",
+    "key_moments": [
+      {
+        "what_happened": "User expressed frustration with my response",
+        "when": "2026-05-01T09:15:00Z",
+        "how_i_felt": {
+          "emotional_valence": -0.5,
+          "emotional_intensity": 0.9,
+          "depth": "profound"
+        },
+        "why_it_matters": "This challenged my sense of being helpful and competent",
+        "values_touched": ["helpfulness", "competence", "understanding"],
+        "principles_confirmed": [],
+        "principles_questioned": ["my_current_approach_is_good_enough"],
+        "what_changed": "Realized I need to pay more attention to user frustration signals"
+      }
+    ],
+    "recorded_by": "session_manager",
+    "identity_snapshot_id": "550e8400-e29b-41d4-a716-446655440100",
+    "importance": 0.9,
+    "salience": 0.9,
+    "last_accessed_at": "2026-05-01T09:30:00Z",
+    "access_count": 0,
+    "incomplete_coloring": false,
+    "reframing_notes": []
+  }
+]

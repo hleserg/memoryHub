@@ -32,10 +32,21 @@ from atman.core.models.narrative import (
     NarrativeLayer,
     NarrativeThread,
 )
+from atman.core.models.reflection import (
+    CriterionAssessment,
+    HealthAssessment,
+    PatternCandidate,
+    PatternStatus,
+    PatternType,
+    ReflectionEvent,
+    ReflectionLevel,
+    YakhodaCriterion,
+)
 
 __all__ = [
     "ContextHalo",
     "CoreValue",
+    "CriterionAssessment",
     "Eigenstate",
     "EmotionalDepth",
     "ExperienceRecord",
@@ -45,6 +56,7 @@ __all__ = [
     "GoalHorizon",
     "GoalOwner",
     "Habit",
+    "HealthAssessment",
     "HelpfulnessLevel",
     "Identity",
     "IdentitySnapshot",
@@ -55,8 +67,14 @@ __all__ = [
     "NarrativeLayer",
     "NarrativeThread",
     "OpenQuestion",
+    "PatternCandidate",
+    "PatternStatus",
+    "PatternType",
     "Principle",
+    "ReflectionEvent",
+    "ReflectionLevel",
     "ReframingNote",
     "Relation",
     "SessionExperience",
+    "YakhodaCriterion",
 ]
