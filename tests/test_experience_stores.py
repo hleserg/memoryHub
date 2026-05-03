@@ -252,6 +252,58 @@ class TestJsonlExperienceStore(StoreTestMixin):
             results = store.list_recent_experiences()
             assert len(results) == 1
 
+    def test_skips_malformed_json_lines_with_warning(self, sample_record):
+        """A corrupt JSONL row must not hide valid persisted experiences."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            storage_path = Path(tmpdir) / "test_experiences.jsonl"
+            store = JsonlExperienceStore(storage_path)
+            store.create_experience(sample_record)
+
+            with open(storage_path, "a", encoding="utf-8") as f:
+                f.write("{not-valid-json\n")
+
+            with pytest.warns(UserWarning, match="Failed to parse line 2"):
+                results = store.list_recent_experiences()
+
+            assert len(results) == 1
+            assert results[0].experience.id == sample_record.experience.id
+
+    def test_skips_schema_invalid_lines_with_warning(self, sample_record):
+        """Schema-drifted rows are dropped without corrupting valid reads."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            storage_path = Path(tmpdir) / "test_experiences.jsonl"
+            store = JsonlExperienceStore(storage_path)
+            store.create_experience(sample_record)
+
+            with open(storage_path, "a", encoding="utf-8") as f:
+                f.write('{"schema_version":"1.0.0","experience":{"id":"not-a-uuid"}}\n')
+
+            with pytest.warns(UserWarning, match="Failed to parse line 2"):
+                retrieved = store.get_experience(sample_record.experience.id)
+
+            assert retrieved is not None
+            assert retrieved.experience.id == sample_record.experience.id
+
+    def test_duplicate_experience_id_uses_last_valid_jsonl_row(self, sample_record):
+        """Document append-only recovery behavior when a JSONL file contains stale rows."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            storage_path = Path(tmpdir) / "test_experiences.jsonl"
+            store = JsonlExperienceStore(storage_path)
+
+            first = sample_record
+            second = sample_record.model_copy(deep=True)
+            second.experience.salience = 0.2
+            assert second.experience.id == first.experience.id
+
+            with open(storage_path, "w", encoding="utf-8") as f:
+                f.write(first.model_dump_json() + "\n")
+                f.write(second.model_dump_json() + "\n")
+
+            retrieved = store.get_experience(first.experience.id)
+
+            assert retrieved is not None
+            assert retrieved.experience.salience == 0.2
+
 
 def _assert_not_implemented_state_store(fn) -> None:
     with pytest.raises(NotImplementedError, match="not supported"):

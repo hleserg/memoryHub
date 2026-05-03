@@ -34,6 +34,7 @@ from atman.core.models.reflection import ReflectionEvent, ReflectionLevel
 from atman.core.narrative_write_audit import NoOpNarrativeWriteAudit
 from atman.core.reflection_run_keys import (
     daily_reflection_run_key_for_identity,
+    deep_reflection_run_key_for_identity,
     identity_anchor_snapshot_id_for_run_key,
 )
 from atman.core.services.narrative_revision import NarrativeRevisionService
@@ -708,6 +709,7 @@ def test_deep_reflection_persist_failure_links_health_assessment() -> None:
     health_store = InMemoryHealthAssessmentStore()
     reflection_model = MockReflectionModel()
     event_store = FlakyReflectionEventStore()
+    observer = _CapturingReflectionEventObserver()
 
     service = DeepReflectionService(
         experience_repo=exp_repo,
@@ -717,14 +719,19 @@ def test_deep_reflection_persist_failure_links_health_assessment() -> None:
         health_store=health_store,
         reflection_model=reflection_model,
         event_store=event_store,
+        reflection_event_observer=observer,
     )
 
     since = datetime.now(UTC).replace(hour=0, minute=0)
     until = datetime.now(UTC)
+    run_key = deep_reflection_run_key_for_identity(since, until, identity.id)
 
     with pytest.raises(RuntimeError, match="persist failure"):
         service.reflect(since, until)
 
+    assert observer.side_effect_errors == [
+        f"deep|{run_key}|RuntimeError: simulated reflection event persist failure"
+    ]
     assert len(health_store.get_all()) == 1
     stored_events = event_store.get_all()
     assert len(stored_events) == 1
@@ -936,6 +943,7 @@ def test_daily_reflection_retry_after_event_save_failure_counts_duplicate_refram
     pattern_store = InMemoryPatternStore()
     reflection_model = MockReflectionModel()
     event_store = FlakyDailyReflectionEventStore()
+    observer = _CapturingReflectionEventObserver()
 
     service = DailyReflectionService(
         experience_repo=exp_repo,
@@ -943,11 +951,16 @@ def test_daily_reflection_retry_after_event_save_failure_counts_duplicate_refram
         pattern_store=pattern_store,
         reflection_model=reflection_model,
         event_store=event_store,
+        reflection_event_observer=observer,
     )
+    run_key = daily_reflection_run_key_for_identity(anchor, identity.id)
 
     with pytest.raises(RuntimeError, match="persist failure"):
         service.reflect(anchor)
 
+    assert observer.side_effect_errors == [
+        f"daily|{run_key}|RuntimeError: simulated daily reflection event persist failure"
+    ]
     retry = service.reflect(anchor)
     assert "outcome=daily_ok" in (retry.notes or "")
     assert retry.reframing_notes_added == 0
@@ -974,6 +987,7 @@ def test_deep_reflection_retry_after_event_save_failure_counts_duplicate_reframi
     health_store = InMemoryHealthAssessmentStore()
     reflection_model = MockReflectionModel()
     event_store = FlakyReflectionEventStore()
+    observer = _CapturingReflectionEventObserver()
 
     service = DeepReflectionService(
         experience_repo=exp_repo,
@@ -983,6 +997,7 @@ def test_deep_reflection_retry_after_event_save_failure_counts_duplicate_reframi
         health_store=health_store,
         reflection_model=reflection_model,
         event_store=event_store,
+        reflection_event_observer=observer,
     )
 
     since = datetime.now(UTC).replace(hour=0, minute=0)
@@ -991,6 +1006,11 @@ def test_deep_reflection_retry_after_event_save_failure_counts_duplicate_reframi
     with pytest.raises(RuntimeError, match="persist failure"):
         service.reflect(since, until)
 
+    assert len(observer.side_effect_errors) == 1
+    assert observer.side_effect_errors[0].startswith("deep|deep|v1|identity|")
+    assert observer.side_effect_errors[0].endswith(
+        "|RuntimeError: simulated reflection event persist failure"
+    )
     retry = service.reflect(since, until)
     assert "outcome=deep_ok" in (retry.notes or "")
     assert retry.reframing_duplicate_triggered_by_count >= 1
