@@ -1178,7 +1178,9 @@ def test_deep_reflection_second_successful_run_is_idempotent() -> None:
     assert ev1.id == ev2.id
     assert ev1.reflection_run_key == deep_reflection_run_key_for_identity(since, until, identity.id)
     assert ev1.reflection_run_key is not None
-    assert ev1.identity_snapshot_id == identity_anchor_snapshot_id_for_run_key(ev1.reflection_run_key)
+    assert ev1.identity_snapshot_id == identity_anchor_snapshot_id_for_run_key(
+        ev1.reflection_run_key
+    )
     assert ev1.identity_snapshot_id != identity.id
     assert len(event_store.get_all()) == 1
     assert len(health_store.get_all()) == 1
