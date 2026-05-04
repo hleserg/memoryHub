@@ -164,6 +164,30 @@ def test_identity_load_save_mismatch_and_version() -> None:
             store.save_identity(identity, expected_version="wrong-version")
 
 
+def test_identity_save_failure_preserves_previous_file(monkeypatch: pytest.MonkeyPatch) -> None:
+    with TemporaryDirectory() as tmp:
+        store = FileStateStore(Path(tmp))
+        agent = uuid4()
+        original = Identity(id=agent, self_description="Stable.")
+        store.save_identity(original)
+        original_bytes = store.identity_path.read_bytes()
+
+        def fail_replace(src: str | bytes | Path, dst: str | bytes | Path) -> None:
+            raise OSError("simulated replace failure")
+
+        monkeypatch.setattr("atman.adapters.storage.file_state_store.os.replace", fail_replace)
+
+        changed = Identity(id=agent, self_description="Interrupted.")
+        with pytest.raises(OSError, match="simulated replace failure"):
+            store.save_identity(changed)
+
+        assert store.identity_path.read_bytes() == original_bytes
+        loaded = store.load_identity(agent)
+        assert loaded is not None
+        assert loaded.self_description == "Stable."
+        assert list(Path(tmp).glob(".identity.json.*.tmp")) == []
+
+
 def test_identity_snapshots_listing() -> None:
     with TemporaryDirectory() as tmp:
         store = FileStateStore(Path(tmp))

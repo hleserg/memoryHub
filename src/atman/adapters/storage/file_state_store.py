@@ -6,6 +6,8 @@ Suitable for local development and single-agent use cases.
 """
 
 import json
+import os
+import tempfile
 from datetime import UTC, datetime
 from pathlib import Path
 from uuid import UUID
@@ -66,6 +68,32 @@ class FileStateStore(StateStore):
         self.narrative_path = self.workspace / "narrative.json"
         self.eigenstate_path = self.workspace / "eigenstate.json"
 
+    def _write_json_atomically(self, path: Path, content: str) -> None:
+        """Write JSON without exposing callers to partially rewritten files."""
+        path.parent.mkdir(parents=True, exist_ok=True)
+        file_mode = path.stat().st_mode & 0o777 if path.exists() else 0o600
+        temp_file = tempfile.NamedTemporaryFile(
+            mode="w",
+            encoding="utf-8",
+            dir=path.parent,
+            prefix=f".{path.name}.",
+            suffix=".tmp",
+            delete=False,
+        )
+        temp_path = Path(temp_file.name)
+
+        try:
+            with temp_file as f:
+                f.write(content)
+                f.flush()
+                os.fsync(f.fileno())
+
+            temp_path.chmod(file_mode)
+            os.replace(temp_path, path)
+        finally:
+            if temp_path.exists():
+                temp_path.unlink()
+
     # Experience Store operations (minimal implementation)
 
     def create_experience(self, record: ExperienceRecord) -> ExperienceRecord:
@@ -73,7 +101,7 @@ class FileStateStore(StateStore):
         experience_file = self.experiences_dir / f"{record.experience.id}.json"
         if experience_file.exists():
             raise ValueError(f"Experience with id {record.experience.id} already exists")
-        experience_file.write_text(record.model_dump_json(indent=2), encoding="utf-8")
+        self._write_json_atomically(experience_file, record.model_dump_json(indent=2))
         return record
 
     def get_experience(self, experience_id: UUID) -> ExperienceRecord | None:
@@ -97,7 +125,7 @@ class FileStateStore(StateStore):
             return record
         record.experience.add_reframing_note(note)
         experience_file = self.experiences_dir / f"{experience_id}.json"
-        experience_file.write_text(record.model_dump_json(indent=2), encoding="utf-8")
+        self._write_json_atomically(experience_file, record.model_dump_json(indent=2))
         return record
 
     def mark_accessed(self, experience_id: UUID) -> ExperienceRecord | None:
@@ -107,7 +135,7 @@ class FileStateStore(StateStore):
             return None
         record.experience.mark_accessed()
         experience_file = self.experiences_dir / f"{experience_id}.json"
-        experience_file.write_text(record.model_dump_json(indent=2), encoding="utf-8")
+        self._write_json_atomically(experience_file, record.model_dump_json(indent=2))
         return record
 
     def search_experiences(
@@ -176,13 +204,13 @@ class FileStateStore(StateStore):
                     f"Version mismatch: expected {expected_version}, got {existing.schema_version}"
                 )
 
-        self.identity_path.write_text(identity.model_dump_json(indent=2), encoding="utf-8")
+        self._write_json_atomically(self.identity_path, identity.model_dump_json(indent=2))
         return identity
 
     def create_identity_snapshot(self, snapshot: IdentitySnapshot) -> IdentitySnapshot:
         """Create identity snapshot."""
         snapshot_file = self.identity_snapshots_dir / f"{snapshot.id}.json"
-        snapshot_file.write_text(snapshot.model_dump_json(indent=2), encoding="utf-8")
+        self._write_json_atomically(snapshot_file, snapshot.model_dump_json(indent=2))
         return snapshot
 
     def list_identity_snapshots(self, identity_id: UUID, limit: int = 10) -> list[IdentitySnapshot]:
@@ -228,7 +256,7 @@ class FileStateStore(StateStore):
                     f"Version mismatch: expected {expected_version}, got {existing.schema_version}"
                 )
 
-        self.narrative_path.write_text(narrative.model_dump_json(indent=2), encoding="utf-8")
+        self._write_json_atomically(self.narrative_path, narrative.model_dump_json(indent=2))
         return narrative
 
     def archive_narrative(self, narrative_id: UUID, reason: str) -> None:
@@ -246,7 +274,7 @@ class FileStateStore(StateStore):
 
         # Save to archive
         archive_file = self.narrative_archive_dir / f"{narrative_id}_{now.timestamp()}.json"
-        archive_file.write_text(json.dumps(archive_entry, indent=2), encoding="utf-8")
+        self._write_json_atomically(archive_file, json.dumps(archive_entry, indent=2))
 
     def list_archived_narratives(
         self, identity_id: UUID, limit: int = 10
@@ -273,7 +301,7 @@ class FileStateStore(StateStore):
 
     def save_eigenstate(self, eigenstate: Eigenstate) -> Eigenstate:
         """Save eigenstate."""
-        self.eigenstate_path.write_text(eigenstate.model_dump_json(indent=2), encoding="utf-8")
+        self._write_json_atomically(self.eigenstate_path, eigenstate.model_dump_json(indent=2))
         return eigenstate
 
     def load_latest_eigenstate(self, session_id: UUID | None = None) -> Eigenstate | None:
