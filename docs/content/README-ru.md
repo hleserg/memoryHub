@@ -40,6 +40,7 @@
 
 **Подробная архитектура** → [`docs/architecture/SYSTEM-ru.md`](docs/architecture/SYSTEM-ru.md)
 **Манифест** → [`MANIFEST-ru.md`](MANIFEST-ru.md)
+**Сравнение: Atman vs. обычный агент** → [`docs/research/agent-thinking-comparison-ru.md`](docs/research/agent-thinking-comparison-ru.md)
 **Стандарт разработки** → [`docs/development/DEVELOPMENT_STANDARD.md`](docs/development/DEVELOPMENT_STANDARD.md)
 
 ---

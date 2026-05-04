@@ -528,6 +528,7 @@
             <a class="tab" data-doc-link="readme" href="document.html?doc=readme">README</a>
             <a class="tab" data-doc-link="manifest" href="document.html?doc=manifest" data-i18n="doc.tab_manifest">Манифест</a>
             <a class="tab" data-doc-link="system" href="document.html?doc=system" data-i18n="doc.tab_system">Архитектура</a>
+            <a class="tab" data-doc-link="comparison" href="document.html?doc=comparison" data-i18n="doc.tab_comparison">Сравнение</a>
           </nav>
         </section>
 
@@ -575,6 +576,7 @@
             description: 'Манифест, README и архитектура открываются в той же визуальной среде, что и сайт: без сырого Markdown на белом фоне.',
             tab_manifest: 'Манифест',
             tab_system: 'Архитектура',
+            tab_comparison: 'Сравнение',
             loading: 'Загрузка документа...',
             source: 'Текст загружается из Markdown',
             loading_text: 'Загружаю текст документа...',
@@ -597,6 +599,10 @@
             system: {
               title: "Архитектура системы",
               description: "Техническое описание компонентов, интерфейсов и режимов работы психологического слоя."
+            },
+            comparison: {
+              title: "Atman vs. обычный агент",
+              description: "Как агент мыслит в типовых ситуациях: сравнительная таблица для тех, кто читает про Atman впервые."
             }
           }
         },
@@ -612,6 +618,7 @@
             description: 'Manifesto, README, and architecture are presented in the same visual environment as the site: no raw Markdown on a white background.',
             tab_manifest: 'Manifesto',
             tab_system: 'Architecture',
+            tab_comparison: 'Comparison',
             loading: 'Loading document...',
             source: 'Text is loading from Markdown',
             loading_text: 'Loading document text...',
@@ -634,6 +641,10 @@
             system: {
               title: "System Architecture",
               description: "Technical description of components, interfaces, and operating modes of the psychological layer."
+            },
+            comparison: {
+              title: "Atman vs. a Standard Agent",
+              description: "How an agent thinks in typical situations: a side-by-side table for first-time readers of Atman."
             }
           }
         }
@@ -745,6 +756,10 @@
           system: {
             ru: "content/SYSTEM-ru.md",
             en: "content/SYSTEM.md"
+          },
+          comparison: {
+            ru: "content/COMPARISON-ru.md",
+            en: "content/COMPARISON.md"
           }
         };
         return paths[docKey]?.[lang] || paths[docKey]?.ru || "content/README-ru.md";
@@ -767,6 +782,11 @@
             title: t.documents.system.title,
             path: getDocumentPath('system', lang),
             description: t.documents.system.description,
+          },
+          comparison: {
+            title: t.documents.comparison.title,
+            path: getDocumentPath('comparison', lang),
+            description: t.documents.comparison.description,
           },
         };
       }
@@ -802,6 +822,18 @@
         "/content/SYSTEM-ru.md": "system",
         "content/SYSTEM.md": "system",
         "/content/SYSTEM.md": "system",
+        "docs/research/agent-thinking-comparison.md": "comparison",
+        "/docs/research/agent-thinking-comparison.md": "comparison",
+        "docs/research/agent-thinking-comparison-ru.md": "comparison",
+        "/docs/research/agent-thinking-comparison-ru.md": "comparison",
+        "research/agent-thinking-comparison.md": "comparison",
+        "/research/agent-thinking-comparison.md": "comparison",
+        "research/agent-thinking-comparison-ru.md": "comparison",
+        "/research/agent-thinking-comparison-ru.md": "comparison",
+        "content/COMPARISON.md": "comparison",
+        "/content/COMPARISON.md": "comparison",
+        "content/COMPARISON-ru.md": "comparison",
+        "/content/COMPARISON-ru.md": "comparison",
       };
 
       const params = new URLSearchParams(window.location.search);

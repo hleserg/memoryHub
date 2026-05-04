@@ -39,6 +39,8 @@ sync-site-content:
 	cp README.md README-ru.md MANIFEST.md MANIFEST-ru.md docs/content/
 	cp docs/architecture/SYSTEM.md docs/content/SYSTEM.md
 	cp docs/architecture/SYSTEM-ru.md docs/content/SYSTEM-ru.md
+	cp docs/research/agent-thinking-comparison.md docs/content/COMPARISON.md
+	cp docs/research/agent-thinking-comparison-ru.md docs/content/COMPARISON-ru.md
 
 docs-preview: sync-site-content
 	@echo "Serving from docs/ — open http://127.0.0.1:8765/"
