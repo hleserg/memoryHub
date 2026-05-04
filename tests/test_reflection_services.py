@@ -33,7 +33,12 @@ from atman.core.models.narrative import LayerType, NarrativeDocument, NarrativeL
 from atman.core.models.reflection import ReflectionEvent, ReflectionLevel
 from atman.core.narrative_write_audit import NoOpNarrativeWriteAudit
 from atman.core.reflection_run_keys import (
+    daily_reflection_run_key_empty_day,
     daily_reflection_run_key_for_identity,
+<<<<<<< cursor/missing-test-coverage-2fb1
+    deep_reflection_run_key_empty,
+=======
+>>>>>>> main
     deep_reflection_run_key_for_identity,
     identity_anchor_snapshot_id_for_run_key,
 )
@@ -1120,27 +1125,81 @@ def test_deep_reflection_retry_after_event_save_failure_counts_duplicate_reframi
     assert "reframing_duplicate_triggered_by=" in (retry.notes or "")
 
 
-def test_deep_reflection_event_save_failure_notifies_observer_after_side_effects() -> None:
-    """Observer must record lost deep success event after health/pattern side effects."""
-    exp1 = create_test_experience()
-    exp2 = create_test_experience()
-    exp3 = create_test_experience()
+<<<<<<< cursor/missing-test-coverage-2fb1
+def test_daily_reflection_empty_day_is_idempotent() -> None:
+    """Empty scheduled daily runs should upsert one terminal event, not spam history."""
+    anchor = datetime(2026, 8, 5, 9, 30, 0, tzinfo=UTC)
+    exp_repo = MockExperienceRepo([])
+    identity_repo = MockIdentityRepo(Identity())
+    pattern_store = InMemoryPatternStore()
+    reflection_model = MockReflectionModel()
+    event_store = InMemoryReflectionEventStore()
 
+    service = DailyReflectionService(
+        experience_repo=exp_repo,
+        identity_repo=identity_repo,
+        pattern_store=pattern_store,
+        reflection_model=reflection_model,
+        event_store=event_store,
+    )
+
+    ev1 = service.reflect(anchor)
+    ev2 = service.reflect(anchor)
+
+    assert ev1.id == ev2.id
+    assert ev1.reflection_run_key == daily_reflection_run_key_empty_day(anchor)
+    assert ev1.experiences_analyzed == []
+    assert "daily_empty" in (ev1.notes or "")
+    assert len(event_store.get_all()) == 1
+    assert pattern_store.get_all() == []
+
+
+def test_daily_reflection_no_identity_is_idempotent() -> None:
+    """Missing identity is a terminal skip for the same observed experience set."""
+    anchor = datetime(2026, 8, 6, 14, 0, 0, tzinfo=UTC)
+    exp1 = create_test_experience().model_copy(update={"timestamp": anchor})
+    exp2 = create_test_experience().model_copy(update={"timestamp": anchor})
+    exp_repo = MockExperienceRepo([exp1, exp2])
+    identity_repo = NullIdentityRepo()
+    pattern_store = InMemoryPatternStore()
+    reflection_model = MockReflectionModel()
+    event_store = InMemoryReflectionEventStore()
+
+    service = DailyReflectionService(
+        experience_repo=exp_repo,
+        identity_repo=identity_repo,
+        pattern_store=pattern_store,
+        reflection_model=reflection_model,
+        event_store=event_store,
+    )
+
+    ev1 = service.reflect(anchor)
+    ev2 = service.reflect(anchor)
+
+    assert ev1.id == ev2.id
+    assert set(ev1.experiences_analyzed) == {exp1.id, exp2.id}
+    assert "daily_skipped" in (ev1.notes or "")
+    assert len(event_store.get_all()) == 1
+    assert pattern_store.get_all() == []
+
+
+def test_deep_reflection_empty_window_is_idempotent() -> None:
+    """Empty deep windows should be durable terminal successes with stable run keys."""
+    since = datetime(2026, 8, 1, 0, 0, 0, tzinfo=UTC)
+    until = datetime(2026, 8, 7, 23, 59, 0, tzinfo=UTC)
     identity = Identity()
     narrative = NarrativeDocument(
         identity_id=identity.id,
         core_layer=NarrativeLayer(layer_type=LayerType.CORE, content="Core"),
         recent_layer=NarrativeLayer(layer_type=LayerType.RECENT, content="Recent"),
     )
-
-    exp_repo = MockExperienceRepo([exp1, exp2, exp3])
+    exp_repo = MockExperienceRepo([])
     identity_repo = MockIdentityRepo(identity)
     narrative_repo = MockNarrativeRepo(narrative)
     pattern_store = InMemoryPatternStore()
     health_store = InMemoryHealthAssessmentStore()
     reflection_model = MockReflectionModel()
-    event_store = FlakyReflectionEventStore()
-    observer = _CapturingReflectionEventObserver()
+    event_store = InMemoryReflectionEventStore()
 
     service = DeepReflectionService(
         experience_repo=exp_repo,
@@ -1150,6 +1209,128 @@ def test_deep_reflection_event_save_failure_notifies_observer_after_side_effects
         health_store=health_store,
         reflection_model=reflection_model,
         event_store=event_store,
+    )
+
+    ev1 = service.reflect(since, until)
+    ev2 = service.reflect(since, until)
+
+    assert ev1.id == ev2.id
+    assert ev1.reflection_run_key == deep_reflection_run_key_empty(since, until)
+    assert ev1.experiences_analyzed == []
+    assert "deep_empty" in (ev1.notes or "")
+    assert len(event_store.get_all()) == 1
+    assert health_store.get_all() == []
+    assert pattern_store.get_all() == []
+
+
+def test_deep_reflection_no_identity_is_idempotent() -> None:
+    """Deep reflection without identity must not create health checks or patterns on retry."""
+    since = datetime(2026, 8, 1, 0, 0, 0, tzinfo=UTC)
+    until = datetime(2026, 8, 7, 23, 59, 0, tzinfo=UTC)
+    exp1 = create_test_experience().model_copy(update={"timestamp": since})
+    exp2 = create_test_experience().model_copy(update={"timestamp": until})
+    exp3 = create_test_experience().model_copy(update={"timestamp": since})
+=======
+def test_deep_reflection_event_save_failure_notifies_observer_after_side_effects() -> None:
+    """Observer must record lost deep success event after health/pattern side effects."""
+    exp1 = create_test_experience()
+    exp2 = create_test_experience()
+    exp3 = create_test_experience()
+
+>>>>>>> main
+    identity = Identity()
+    narrative = NarrativeDocument(
+        identity_id=identity.id,
+        core_layer=NarrativeLayer(layer_type=LayerType.CORE, content="Core"),
+        recent_layer=NarrativeLayer(layer_type=LayerType.RECENT, content="Recent"),
+    )
+<<<<<<< cursor/missing-test-coverage-2fb1
+    exp_repo = MockExperienceRepo([exp1, exp2, exp3])
+    identity_repo = NullIdentityRepo()
+    narrative_repo = MockNarrativeRepo(narrative)
+    pattern_store = InMemoryPatternStore()
+    health_store = InMemoryHealthAssessmentStore()
+    reflection_model = MockReflectionModel()
+    event_store = InMemoryReflectionEventStore()
+
+    service = DeepReflectionService(
+        experience_repo=exp_repo,
+        identity_repo=identity_repo,
+        narrative_repo=narrative_repo,
+        pattern_store=pattern_store,
+        health_store=health_store,
+        reflection_model=reflection_model,
+        event_store=event_store,
+    )
+
+    ev1 = service.reflect(since, until)
+    ev2 = service.reflect(since, until)
+
+    assert ev1.id == ev2.id
+    assert set(ev1.experiences_analyzed) == {exp1.id, exp2.id, exp3.id}
+    assert "deep_skipped" in (ev1.notes or "")
+    assert len(event_store.get_all()) == 1
+    assert health_store.get_all() == []
+    assert pattern_store.get_all() == []
+
+
+def test_deep_reflection_second_successful_run_is_idempotent() -> None:
+    """A terminal deep success should suppress duplicate health, patterns, and reframing."""
+    anchor = datetime(2026, 8, 9, 12, 0, 0, tzinfo=UTC)
+    exp1 = create_test_experience().model_copy(update={"timestamp": anchor})
+    exp2 = create_test_experience().model_copy(update={"timestamp": anchor})
+    exp3 = create_test_experience().model_copy(update={"timestamp": anchor})
+    identity = Identity()
+    narrative = NarrativeDocument(
+        identity_id=identity.id,
+        core_layer=NarrativeLayer(layer_type=LayerType.CORE, content="Core"),
+        recent_layer=NarrativeLayer(layer_type=LayerType.RECENT, content="Recent"),
+    )
+=======
+
+>>>>>>> main
+    exp_repo = MockExperienceRepo([exp1, exp2, exp3])
+    identity_repo = MockIdentityRepo(identity)
+    narrative_repo = MockNarrativeRepo(narrative)
+    pattern_store = InMemoryPatternStore()
+    health_store = InMemoryHealthAssessmentStore()
+    reflection_model = MockReflectionModel()
+<<<<<<< cursor/missing-test-coverage-2fb1
+    event_store = InMemoryReflectionEventStore()
+=======
+    event_store = FlakyReflectionEventStore()
+    observer = _CapturingReflectionEventObserver()
+>>>>>>> main
+
+    service = DeepReflectionService(
+        experience_repo=exp_repo,
+        identity_repo=identity_repo,
+        narrative_repo=narrative_repo,
+        pattern_store=pattern_store,
+        health_store=health_store,
+        reflection_model=reflection_model,
+        event_store=event_store,
+<<<<<<< cursor/missing-test-coverage-2fb1
+    )
+
+    since = anchor.replace(hour=0, minute=0, second=0, microsecond=0)
+    until = anchor.replace(hour=23, minute=59, second=59, microsecond=0)
+    ev1 = service.reflect(since, until)
+    total_notes = sum(len(exp.reframing_notes) for exp in (exp1, exp2, exp3))
+    ev2 = service.reflect(since, until)
+
+    assert ev1.id == ev2.id
+    assert ev1.reflection_run_key == deep_reflection_run_key_for_identity(since, until, identity.id)
+    assert ev1.reflection_run_key is not None
+    assert ev1.identity_snapshot_id == identity_anchor_snapshot_id_for_run_key(
+        ev1.reflection_run_key
+    )
+    assert ev1.identity_snapshot_id != identity.id
+    assert len(event_store.get_all()) == 1
+    assert len(health_store.get_all()) == 1
+    assert len(pattern_store.get_all()) == 2
+    assert sum(len(exp.reframing_notes) for exp in (exp1, exp2, exp3)) == total_notes
+=======
         reflection_event_observer=observer,
     )
 
@@ -1165,3 +1346,4 @@ def test_deep_reflection_event_save_failure_notifies_observer_after_side_effects
     observed = observer.side_effect_errors[0]
     assert observed.startswith("deep|deep|")
     assert "RuntimeError: simulated reflection event persist failure" in observed
+>>>>>>> main
