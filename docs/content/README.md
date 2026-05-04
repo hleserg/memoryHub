@@ -40,6 +40,7 @@ Under the hood — seven components: store of lived experiences, reflection engi
 
 **Detailed architecture** → [`docs/architecture/SYSTEM.md`](docs/architecture/SYSTEM.md)
 **Manifesto** → [`MANIFEST.md`](MANIFEST.md)
+**Side-by-side: Atman vs. a standard agent** → [`docs/research/agent-thinking-comparison.md`](docs/research/agent-thinking-comparison.md)
 **Development standard** → [`docs/development/DEVELOPMENT_STANDARD.md`](docs/development/DEVELOPMENT_STANDARD.md)
 
 ---
