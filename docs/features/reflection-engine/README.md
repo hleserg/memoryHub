@@ -33,8 +33,8 @@ DEEP     → Scheduled (weekly+)   → Health assessment, proposals on Reflectio
 
 2. **Services**:
    - `MicroReflectionService` — session checkpoint
-   - `DailyReflectionService` — pattern detection
-   - `DeepReflectionService` — health + identity revision
+   - `DailyReflectionService` — UTC-calendar-day pattern detection
+   - `DeepReflectionService` — windowed health assessment + proposal generation
    - `PrincipleRevisionAdvisor` — distinguishes habits from principles
    - `NarrativeRevisionService` — narrative updates (requires an explicit ``NarrativeWriteAuditPort``; use ``atman.core.narrative_write_audit.NoOpNarrativeWriteAudit`` only when acceptable for tests/demos)
 
@@ -128,6 +128,25 @@ python -m atman.cli_reflection reflect deep --fixtures
 - `HealthAssessment` records (deep path only)
 - **Micro**: persists an update to the narrative **recent** layer via `NarrativeRepository` when the optimistic concurrency token matches
 
+### Operational Contracts
+
+- **Time windows are UTC**: daily reflection analyzes the UTC calendar day containing the provided anchor; deep reflection treats `since` and `until` as inclusive UTC instants. Naive datetimes are normalized as UTC wall time.
+- **Daily/deep runs are idempotent**: each normal, empty, or skipped daily/deep job receives a deterministic `reflection_run_key`. If a terminal success event already exists (`outcome=daily_ok`, `outcome=daily_empty`, `outcome=daily_skipped`, `outcome=deep_ok`, `outcome=deep_empty`, `outcome=deep_skipped`), the service returns it instead of repeating side effects.
+- **Identity is anchored by snapshot**: normal daily/deep jobs materialize or reuse a deterministic `IdentitySnapshot` and store its id in `ReflectionEvent.identity_snapshot_id`. This is never the mutable `Identity.id`.
+- **Reframing is replay-safe**: generated notes use stable `triggered_by` keys (`reflection|<run_key>|reframe|<experience_id>`). Replays count `DUPLICATE_TRIGGERED_BY` outcomes in `reframing_duplicate_triggered_by_count` rather than appending duplicate notes.
+- **Degraded reframing is explicit**: missing experiences and storage rejections are recorded on `ReflectionEvent` as `reframing_experience_not_found_count` and `reframing_append_storage_rejected_count`; `notes` also includes `signal=reframing_append_degraded` when applicable.
+- **Persistence failures are observable**: if daily/deep side effects happen but saving the success event fails, a `ReflectionEventPersistenceObserver` is notified. Deep reflection also attempts to save an `outcome=deep_failed reason=persist` event; callers still receive the original exception.
+
+Example `ReflectionEvent.notes` values:
+
+```text
+outcome=daily_ok
+outcome=daily_empty reason=no_experiences
+outcome=daily_skipped reason=no_identity
+outcome=micro_failed reason=narrative_conflict
+outcome=deep_ok signal=reframing_append_degraded not_found=1 storage_rejected=0
+```
+
 ### Not implemented in this package (future / proposal-only)
 
 - **`Uncertainty` store**: no port or persistence yet; reflection does not read or write uncertainty rows.
@@ -170,6 +189,10 @@ Reflection engine tests cover:
 
 - Model validation
 - Service logic (micro/daily/deep)
+- Idempotent daily/deep run keys and identity anchor snapshots
+- Skipped/empty outcomes (`no_experiences`, `no_identity`, `no_narrative`)
+- Reframing duplicate and degraded append accounting
+- Persistence observer paths for event-store failures after side effects
 - Principle vs habit distinction
 - Health assessment completeness
 - Pattern detection
@@ -254,4 +277,4 @@ See `docs/development/work-packages/04-reflection-engine.md` for:
 
 ---
 
-**Last Updated**: 2026-05-02
+**Last Updated**: 2026-05-04
