@@ -967,6 +967,31 @@ docs/
 
 `make sync-site-content` карту не копирует — она остаётся в `docs/architecture/`.
 
+### 26.5. Тесты-страховки агентной разработки
+
+Семь файлов в `tests/` — это **жёсткие контракты системы**, которые ловят
+тихие поломки при изменении кода агентами. Они обязаны обновляться вместе с
+кодом в том же PR. Если агент внёс изменение из левой колонки, но не обновил
+файл из правой — PR не готов.
+
+| Файл-страховка | Что фиксирует | Когда расширять |
+|----------------|---------------|-----------------|
+| `tests/test_state_store_contract.py` | контракт порта `StateStore` (параметризован по реализациям) | новый метод в `core/ports/state_store.py`; новая реализация порта (добавить параметр в `@pytest.fixture(params=[...])`) |
+| `tests/test_serialization_roundtrip.py` | round-trip JSON и persistence-after-restart для всех персистируемых сущностей | переименование/удаление поля в `Identity`, `ExperienceRecord`, `NarrativeDocument`, `Eigenstate`; смена сериализации |
+| `tests/test_golden_schema.py` | inline-эталонные JSON-фикстуры тех же моделей + `FactRecord` | при любом изменении сериализации модели — обновить эталон с описанием миграционного пути |
+| `tests/test_cli_roundtrip.py` | CLI → файл на диске → CLI читает обратно | новая CLI-команда, изменение пути или формата файла стораджа |
+| `tests/test_cli_all_commands.py` | exit code и ключевые строки для каждой публичной CLI-команды | новая CLI-команда — добавить тест успеха + тест ошибки (invalid input / missing entity) |
+| `tests/test_domain_invariants.py` | бизнес-правила, которые должны выполняться всегда (newest-first, idempotent reframing, salience bounds, deterministic run_key) | новый инвариант, изменение существующего, новый источник идемпотентности |
+| `tests/test_e2e_full_cli.py` | сквозной subprocess-тест §3 A–G одним прогоном | изменение порядка/состава шагов lifecycle |
+
+**Прежде чем закоммитить изменение в порт, модель или CLI**, агент должен
+прогнать `uv run pytest tests/test_state_store_contract.py
+tests/test_serialization_roundtrip.py tests/test_cli_roundtrip.py
+tests/test_domain_invariants.py tests/test_golden_schema.py
+tests/test_cli_all_commands.py tests/test_e2e_full_cli.py` локально и
+убедиться, что либо все тесты проходят, либо они обновлены под новый
+контракт с явным указанием в описании PR.
+
 ## 27. Принцип безопасности смысла
 
 Atman строит доверие не тем, что звучит убедительно, а тем, что сохраняет

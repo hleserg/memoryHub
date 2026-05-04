@@ -162,6 +162,20 @@ Cloud agents only see repo files: put demo instructions in **this file**, the **
 В описании PR явно укажите, какие пункты карты затронуты и какими тестами они
 покрыты (см. шаблон `.github/pull_request_template.md`).
 
+**Тесты-страховки агентной разработки.** Семь файлов в `tests/` фиксируют
+ключевые контракты системы и обязаны обновляться в том же PR при следующих
+изменениях:
+
+| Изменение в коде | Какой тест расширить |
+|------------------|----------------------|
+| Новый метод в порту `core/ports/state_store.py` | `test_state_store_contract.py` — добавить тест |
+| Новый адаптер `StateStore` (например, in-memory) | `test_state_store_contract.py` — добавить параметр в `@pytest.fixture(params=[...])` |
+| Переименовано/удалено поле в Pydantic-модели (`Identity`, `ExperienceRecord`, `NarrativeDocument`, `Eigenstate`, `FactRecord`) | `test_serialization_roundtrip.py` + `test_golden_schema.py` — обновить inline-фикстуру |
+| Новая CLI-команда (`cli_*.py`) | `test_cli_all_commands.py` — добавить тест успеха + ошибки |
+| Изменение пути или формата файла стораджа | `test_cli_roundtrip.py` — обновить ассерт на путь/структуру |
+| Новый бизнес-инвариант (например, новое правило для salience, идемпотентности) | `test_domain_invariants.py` — добавить тест |
+| Изменение цепочки сценариев §3 A–G | `test_e2e_full_cli.py` — обновить шаги |
+
 **Двуязычная синхронизация:** правки сначала в `SYSTEM_MAP.md` (английский —
 канонический), затем синхронизация в `SYSTEM_MAP-ru.md`. То же правило, что и
 для пар README / MANIFEST / SYSTEM.

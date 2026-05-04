@@ -27,6 +27,19 @@
 - **Закрытые GAP'ы из §4.5:** какие edge-case пропуски закрыты (если применимо)
 - **Карта обновлена:** [ ] `docs/architecture/SYSTEM_MAP.md` + [ ] `SYSTEM_MAP-ru.md` (или **N/A** с причиной)
 
+## Тесты-страховки агентной разработки
+
+См. `DEVELOPMENT_STANDARD.md` §26.5. Отметьте те, что были обновлены, или
+оставьте **N/A** с обоснованием:
+
+- [ ] `tests/test_state_store_contract.py` — изменён порт `StateStore` или добавлен адаптер
+- [ ] `tests/test_serialization_roundtrip.py` — изменены поля персистируемых моделей
+- [ ] `tests/test_golden_schema.py` — изменена сериализация модели (с описанием миграции)
+- [ ] `tests/test_cli_roundtrip.py` — изменён путь/формат файла стораджа
+- [ ] `tests/test_cli_all_commands.py` — добавлена/изменена CLI-команда
+- [ ] `tests/test_domain_invariants.py` — изменён или добавлен бизнес-инвариант
+- [ ] `tests/test_e2e_full_cli.py` — изменён состав/порядок шагов lifecycle §3 A–G
+
 ## Чеклист
 
 - [ ] Описание соответствует фактическим изменениям
