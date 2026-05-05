@@ -94,8 +94,6 @@ All paths are absolute relative to the repository root.
 | `src/demo_session_manager.py` | demo | session lifecycle: start, record events/key moments, finish with eigenstate |
 | `src/demo_reflection.py` | demo | micro→daily→deep with fixtures |
 | `src/demo_web_dashboard.py` | demo | web dashboard launch hint |
-| `e2e/generate_fixtures.py` | e2e | LLM-backed session JSON fixture generator (`python -m e2e.generate_fixtures`); default 20 `en/` + 20 `ru/` corpora with parallel locale runs; Anthropic tool_use, two-pass skeleton + per-session; optional extra `[e2e]`; not CI ([issue #141](https://github.com/hleserg/atman/issues/141)) |
-| `e2e/models.py`, `e2e/validation.py`, `e2e/llm.py`, `e2e/prompts.py` | e2e | fixture schema, intra/cross-session validators, API orchestration, prompts |
 
 ---
 
