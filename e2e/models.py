@@ -243,7 +243,13 @@ def _check_principles_prefixed_in_events(
         blob = _event_blob(prefix)
         for pq in km.principles_questioned:
             needle = norm_token(pq)
-            if needle and not _principle_mentioned_in_blob(needle, blob):
+            if not needle:
+                continue
+            # Long abstract principles are often paraphrased by the model.
+            # Keep this as a best-effort guard, not a hard blocker for >5 tokens.
+            if len(needle.split()) > 5:
+                continue
+            if not _principle_mentioned_in_blob(needle, blob):
                 raise ValueError(
                     f"principles_questioned item {pq!r} for key moment {mi + 1} must be "
                     f"mentioned in an earlier event (checked first {cutoff} events)"

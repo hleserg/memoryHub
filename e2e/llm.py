@@ -145,7 +145,12 @@ def generate_corpus_with_retries(
     max_corpus_attempts = 8
     skeleton = run_skeleton_pass(client, model, count, locale)
     skeleton_by_num = {item.session_number: item for item in skeleton}
-    docs_by_num: dict[int, SessionFixtureDocument] = {}
+    docs_by_num = _load_existing_docs(output_dir, count)
+    if docs_by_num:
+        print(
+            f"[{locale}] loaded {len(docs_by_num)} existing sessions from disk",
+            flush=True,
+        )
 
     if output_dir is not None:
         output_dir.mkdir(parents=True, exist_ok=True)
@@ -255,6 +260,25 @@ def _sessions_to_regenerate(error_text: str, count: int) -> list[int]:
         if 1 <= start <= count:
             return list(range(start, count + 1))
     return list(range(1, count + 1))
+
+
+def _load_existing_docs(output_dir: Path | None, count: int) -> dict[int, SessionFixtureDocument]:
+    """Load already generated session files and keep only valid docs in range 1..count."""
+    if output_dir is None or not output_dir.exists():
+        return {}
+    docs_by_num: dict[int, SessionFixtureDocument] = {}
+    for path in sorted(output_dir.glob("session_*.json")):
+        try:
+            raw = path.read_text(encoding="utf-8")
+            doc = SessionFixtureDocument.model_validate_json(raw)
+            n = doc.metadata.session_number
+            if 1 <= n <= count:
+                validate_fixture_document(doc)
+                docs_by_num[n] = doc
+        except Exception:
+            # Malformed partial files are ignored; they will be regenerated.
+            continue
+    return docs_by_num
 
 
 def print_summary(fixtures: list[SessionFixtureDocument]) -> None:
