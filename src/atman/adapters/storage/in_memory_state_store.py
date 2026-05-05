@@ -1,0 +1,230 @@
+"""In-memory implementation of StateStore for fast unit tests.
+
+This implementation stores all state in memory dictionaries.
+Use for unit tests where file I/O is not needed.
+For integration tests, use FileStateStore.
+"""
+
+from datetime import datetime
+from uuid import UUID
+
+from atman.core.models import (
+    Eigenstate,
+    ExperienceRecord,
+    Identity,
+    IdentitySnapshot,
+    NarrativeDocument,
+    ReframingNote,
+)
+from atman.core.ports.state_store import (
+    DateRangeQuery,
+    DepthQuery,
+    ExperienceQuery,
+    SessionExperienceQuery,
+    StateStore,
+    ValuesTouchedQuery,
+)
+
+
+class InMemoryStateStore(StateStore):
+    """In-memory implementation of StateStore for unit tests."""
+
+    def __init__(self) -> None:
+        """Initialize empty in-memory storage."""
+        self._experiences: dict[UUID, ExperienceRecord] = {}
+        self._identities: dict[UUID, Identity] = {}
+        self._identity_snapshots: dict[UUID, IdentitySnapshot] = {}
+        self._narratives: dict[UUID, NarrativeDocument] = {}
+        self._archived_narratives: dict[UUID, list[tuple[NarrativeDocument, str, datetime]]] = {}
+        self._eigenstates: list[Eigenstate] = []
+
+    def create_experience(self, record: ExperienceRecord) -> ExperienceRecord:
+        """Store experience in memory."""
+        if record.experience.id in self._experiences:
+            raise ValueError(f"Experience {record.experience.id} already exists")
+        self._experiences[record.experience.id] = record.model_copy(deep=True)
+        return record
+
+    def get_experience(self, experience_id: UUID) -> ExperienceRecord | None:
+        """Retrieve experience by ID."""
+        record = self._experiences.get(experience_id)
+        return record.model_copy(deep=True) if record else None
+
+    def add_reframing_note(
+        self, experience_id: UUID, note: ReframingNote
+    ) -> ExperienceRecord | None:
+        """Add reframing note to experience."""
+        record = self._experiences.get(experience_id)
+        if record is None:
+            return None
+        # Create updated record with new note via experience method
+        updated = record.model_copy(deep=True)
+        updated.experience.add_reframing_note(note)
+        self._experiences[experience_id] = updated
+        return updated
+
+    def mark_accessed(self, experience_id: UUID) -> ExperienceRecord | None:
+        """Mark experience as accessed."""
+        record = self._experiences.get(experience_id)
+        if record is None:
+            return None
+        # Update access metadata via experience method
+        updated = record.model_copy(deep=True)
+        updated.experience.mark_accessed()
+        self._experiences[experience_id] = updated
+        return updated
+
+    def search_experiences(
+        self, query: ExperienceQuery | None = None, limit: int = 10
+    ) -> list[ExperienceRecord]:
+        """Search experiences by query."""
+        results = list(self._experiences.values())
+
+        if query is None:
+            # Return all experiences, newest first
+            results.sort(key=lambda r: r.experience.timestamp, reverse=True)
+            return [r.model_copy(deep=True) for r in results[:limit]]
+
+        if isinstance(query, SessionExperienceQuery):
+            results = [
+                r
+                for r in results
+                if hasattr(r.experience, "session_id")
+                and r.experience.session_id == query.session_id
+            ]
+        elif isinstance(query, ValuesTouchedQuery):
+            results = [
+                r
+                for r in results
+                if any(
+                    value in moment.values_touched
+                    for moment in r.experience.key_moments
+                    for value in query.values
+                )
+            ]
+        elif isinstance(query, DepthQuery):
+            results = [
+                r
+                for r in results
+                if any(
+                    moment.how_i_felt.depth.value == query.depth
+                    for moment in r.experience.key_moments
+                )
+            ]
+        elif isinstance(query, DateRangeQuery):
+            results = [
+                r for r in results if query.start_date <= r.experience.timestamp <= query.end_date
+            ]
+
+        results.sort(key=lambda r: r.experience.timestamp, reverse=True)
+        return [r.model_copy(deep=True) for r in results[:limit]]
+
+    def list_recent_experiences(self, limit: int = 10) -> list[ExperienceRecord]:
+        """List recent experiences."""
+        results = list(self._experiences.values())
+        results.sort(key=lambda r: r.experience.timestamp, reverse=True)
+        return [r.model_copy(deep=True) for r in results[:limit]]
+
+    def load_identity(self, agent_id: UUID) -> Identity | None:
+        """Load identity by agent ID."""
+        identity = self._identities.get(agent_id)
+        return identity.model_copy(deep=True) if identity else None
+
+    def save_identity(self, identity: Identity, expected_version: str | None = None) -> Identity:
+        """Save identity."""
+        if expected_version is not None:
+            existing = self._identities.get(identity.id)
+            if existing and existing.schema_version != expected_version:
+                raise ValueError(
+                    f"Identity version mismatch: expected {expected_version}, "
+                    f"got {existing.schema_version}"
+                )
+        self._identities[identity.id] = identity.model_copy(deep=True)
+        return identity
+
+    def create_identity_snapshot(self, snapshot: IdentitySnapshot) -> IdentitySnapshot:
+        """Store identity snapshot."""
+        if snapshot.id in self._identity_snapshots:
+            raise ValueError(f"IdentitySnapshot {snapshot.id} already exists")
+        self._identity_snapshots[snapshot.id] = snapshot.model_copy(deep=True)
+        return snapshot
+
+    def list_identity_snapshots(self, identity_id: UUID, limit: int = 10) -> list[IdentitySnapshot]:
+        """List identity snapshots."""
+        snapshots = [s for s in self._identity_snapshots.values() if s.identity_id == identity_id]
+        snapshots.sort(key=lambda s: s.timestamp, reverse=True)
+        return [s.model_copy(deep=True) for s in snapshots[:limit]]
+
+    def load_narrative(self, identity_id: UUID) -> NarrativeDocument | None:
+        """Load narrative by identity ID."""
+        narrative = self._narratives.get(identity_id)
+        return narrative.model_copy(deep=True) if narrative else None
+
+    def save_narrative(
+        self,
+        narrative: NarrativeDocument,
+        expected_version: str | None = None,
+        expected_updated_at: datetime | None = None,
+    ) -> NarrativeDocument:
+        """Save narrative."""
+        if expected_version is not None:
+            existing = self._narratives.get(narrative.identity_id)
+            if existing and existing.schema_version != expected_version:
+                raise ValueError(
+                    f"Narrative version mismatch: expected {expected_version}, "
+                    f"got {existing.schema_version}"
+                )
+        if expected_updated_at is not None:
+            existing = self._narratives.get(narrative.identity_id)
+            if existing and existing.updated_at != expected_updated_at:
+                raise ValueError(
+                    f"Narrative updated_at mismatch: expected {expected_updated_at}, "
+                    f"got {existing.updated_at} (concurrent update detected)"
+                )
+        self._narratives[narrative.identity_id] = narrative.model_copy(deep=True)
+        return narrative
+
+    def archive_narrative(self, narrative_id: UUID, reason: str) -> None:
+        """Archive narrative."""
+        narrative = self._narratives.get(narrative_id)
+        if narrative is None:
+            return
+        if narrative_id not in self._archived_narratives:
+            self._archived_narratives[narrative_id] = []
+        self._archived_narratives[narrative_id].append(
+            (narrative.model_copy(deep=True), reason, datetime.utcnow())
+        )
+
+    def list_archived_narratives(
+        self, identity_id: UUID, limit: int = 10
+    ) -> list[tuple[NarrativeDocument, str, datetime]]:
+        """List archived narratives."""
+        archived = self._archived_narratives.get(identity_id, [])
+        archived.sort(key=lambda x: x[2], reverse=True)
+        return [(n.model_copy(deep=True), r, a) for n, r, a in archived[:limit]]
+
+    def save_eigenstate(self, eigenstate: Eigenstate) -> Eigenstate:
+        """Save eigenstate."""
+        self._eigenstates.append(eigenstate.model_copy(deep=True))
+        return eigenstate
+
+    def load_latest_eigenstate(
+        self,
+        session_id: UUID | None = None,
+        identity_id: UUID | None = None,
+    ) -> Eigenstate | None:
+        """Load latest eigenstate."""
+        candidates = self._eigenstates
+
+        if session_id is not None:
+            candidates = [e for e in candidates if e.session_id == session_id]
+
+        if identity_id is not None:
+            candidates = [e for e in candidates if e.identity_id == identity_id]
+
+        if not candidates:
+            return None
+
+        # Return most recent by timestamp
+        latest = max(candidates, key=lambda e: e.timestamp)
+        return latest.model_copy(deep=True)

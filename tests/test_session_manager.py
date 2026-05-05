@@ -12,6 +12,7 @@ from uuid import uuid4
 import pytest
 
 from atman.adapters.storage.file_state_store import FileStateStore
+from atman.adapters.storage.in_memory_state_store import InMemoryStateStore
 from atman.core.clock_impl import FrozenClock
 from atman.core.models import (
     ActiveSessionSummary,
@@ -38,10 +39,13 @@ from atman.core.services import (
 from atman.core.services.session_manager import deterministic_session_experience_id
 
 
-@pytest.fixture
-def temp_storage(tmp_path):
-    """Create temporary file storage."""
-    return FileStateStore(workspace=tmp_path / "session_test")
+@pytest.fixture(params=["in_memory", "file_based"])
+def temp_storage(request, tmp_path):
+    """Create storage adapter (parametrized for unit + integration tests)."""
+    if request.param == "in_memory":
+        return InMemoryStateStore()
+    else:  # file_based
+        return FileStateStore(workspace=tmp_path / "session_test")
 
 
 @pytest.fixture
@@ -430,10 +434,17 @@ def test_max_active_sessions_limit(temp_storage, test_identity, test_narrative):
     temp_storage.save_narrative(test_narrative)
     manager = SessionManager(temp_storage, max_active_sessions=1)
     manager.start_session(test_identity.id)
-    snap_before = len(list(temp_storage.identity_snapshots_dir.glob("*.json")))
+    # Check snapshot count (file-based specific check)
+    if hasattr(temp_storage, "identity_snapshots_dir"):
+        snap_before = len(list(temp_storage.identity_snapshots_dir.glob("*.json")))
+    else:
+        snap_before = len(temp_storage.list_identity_snapshots(test_identity.id))
     with pytest.raises(TooManyActiveSessionsError):
         manager.start_session(test_identity.id)
-    assert len(list(temp_storage.identity_snapshots_dir.glob("*.json"))) == snap_before
+    if hasattr(temp_storage, "identity_snapshots_dir"):
+        assert len(list(temp_storage.identity_snapshots_dir.glob("*.json"))) == snap_before
+    else:
+        assert len(temp_storage.list_identity_snapshots(test_identity.id)) == snap_before
 
 
 def test_overall_emotional_tone_out_of_range_raises(session_manager):
