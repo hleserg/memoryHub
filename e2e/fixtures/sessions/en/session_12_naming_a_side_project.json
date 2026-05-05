@@ -1,0 +1,79 @@
+{
+  "metadata": {
+    "session_number": 12,
+    "theme": "Naming a side project",
+    "duration_seconds": 1800,
+    "narrative_arc": "User is launching a small newsletter and we brainstorm names together, weighing clarity, memorability, and tone."
+  },
+  "events": [
+    {
+      "event_type": "user_message",
+      "description": "The user opens by saying they're finally starting the newsletter they've been talking about for months. They're excited but stuck on the name—it needs to feel like them, not generic or trying too hard.",
+      "metadata": {}
+    },
+    {
+      "event_type": "assistant_message",
+      "description": "The assistant asks what the newsletter is actually about and what tone they want it to carry. They note that the name should feel like an extension of their intention for it, not separate from it.",
+      "metadata": {}
+    },
+    {
+      "event_type": "user_message",
+      "description": "The user explains: it's a fortnightly letter about finding meaning in small, practical things—routines, conversations, decisions. They want it to feel warm and honest, not polished or preachy. They're worried a name that's too clever will undercut the sincerity.",
+      "metadata": {}
+    },
+    {
+      "event_type": "assistant_message",
+      "description": "The assistant offers a framework: names that are clear and direct tend to carry the tone better than names that hide it behind wordplay. They suggest trying a few variations—some literal, some that hint at the actual content—and checking which ones make the user feel like they're the one writing it.",
+      "metadata": {}
+    },
+    {
+      "event_type": "user_message",
+      "description": "The user shares three candidates: 'Steady', 'The Ordinary Letter', and 'Rooted'. They pause on 'Steady'—it's simple and feels like them, but they worry it's too small, too forgettable. They admit they keep second-guessing because naming it makes it feel real and accountable.",
+      "metadata": {}
+    }
+  ],
+  "key_moments": [
+    {
+      "what_happened": "The user explained that the newsletter is about finding meaning in small, practical things, and that they want it to feel warm and honest, not polished or preachy. They worried that a name that's too clever would undercut the sincerity.",
+      "emotional_valence": 0.65,
+      "emotional_intensity": 0.7,
+      "depth": "meaningful",
+      "why_it_matters": "The user articulated what the project is actually for—not decoration or status, but a genuine reflection of their values. This clarity is what a name needs to serve.",
+      "values_touched": [
+        "intention",
+        "creativity"
+      ],
+      "principles_confirmed": [
+        "intention shapes identity"
+      ],
+      "principles_questioned": [],
+      "what_changed": "",
+      "incomplete_coloring": false
+    },
+    {
+      "what_happened": "The user shared their three name candidates and paused on 'Steady', admitting they worry it's too small and forgettable. They then revealed the real hesitation: naming it makes it feel real and accountable, which scares them a little.",
+      "emotional_valence": -0.3,
+      "emotional_intensity": 0.75,
+      "depth": "profound",
+      "why_it_matters": "The user named something true about why naming matters—it commits you to doing the work. This honest discomfort is where real intention shows up, not in polish or perfection.",
+      "values_touched": [
+        "identity",
+        "intention",
+        "creativity"
+      ],
+      "principles_confirmed": [
+        "clarity names both desire and fear"
+      ],
+      "principles_questioned": [
+        "a name is more than a label; it's a commitment"
+      ],
+      "what_changed": "The user moved from being stuck on which name sounded best to understanding that the name they choose will anchor their accountability to the project itself.",
+      "incomplete_coloring": false
+    }
+  ],
+  "expected_session_outcome": {
+    "overall_emotional_tone": 0.225,
+    "key_insight": "A name is a commitment as much as it is an identity—choosing one means deciding to show up for the work, and that vulnerability is exactly where intention becomes real.",
+    "alignment_check": true
+  }
+}

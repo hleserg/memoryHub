@@ -1,0 +1,95 @@
+{
+  "metadata": {
+    "session_number": 19,
+    "theme": "Was my career worry overblown?",
+    "duration_seconds": 2400,
+    "narrative_arc": "Weeks after the job-offer anxiety, the user revisits the decision they made and honestly weighs whether the principles that guided them actually held up in practice."
+  },
+  "events": [
+    {
+      "event_type": "user_message",
+      "description": "User opens by saying it's been a few weeks since they accepted the job and they want to do a kind of post-mortem — not because anything has gone wrong, but because they're not sure whether the choice was actually reasoned or just fear dressed up as reasoning.",
+      "metadata": {}
+    },
+    {
+      "event_type": "assistant_message",
+      "description": "Assistant acknowledges the impulse to revisit the decision and frames it as honest self-examination rather than second-guessing. It notes that the user had worked hard in session 11 to separate fear of change from genuine red flags, and asks which of those two categories feels most relevant now that they're on the other side.",
+      "metadata": {}
+    },
+    {
+      "event_type": "user_message",
+      "description": "User admits that most of what felt like red flags at the time — the vague role boundaries, the unclear culture — have turned out to be pretty normal new-job ambiguity, not actual warning signs. But they also say one concern they dismissed as 'just fear' is now looking more like a real issue: the role's day-to-day work doesn't line up well with what they said they valued when they described their ideal job. They add, almost in passing, that they wonder whether alignment between work and values is something you can even judge before starting a role.",
+      "metadata": {}
+    },
+    {
+      "event_type": "assistant_message",
+      "description": "Assistant reflects back the two threads without conflating them: that the fear-vs-red-flag sorting exercise mostly held up, which is worth acknowledging, and that the alignment concern is a different and live question. It points out that the user isn't describing regret so much as a new data point, and that noticing misalignment early is exactly what periodic checking is for. It asks whether the misalignment feels fixable within the role or structural.",
+      "metadata": {}
+    },
+    {
+      "event_type": "user_message",
+      "description": "User sits with that question for a moment, then says they think it might be structural — the team's priorities are just not where their energy wants to go. They add that acknowledging this doesn't feel catastrophic, more like they now have a clearer starting point. They close by saying: 'I think I made a reasonable call with the information I had. I'm just not sure the information was as good as I thought it was.'",
+      "metadata": {}
+    }
+  ],
+  "key_moments": [
+    {
+      "what_happened": "When the user admitted that most of what felt like red flags before starting — vague role boundaries, unclear culture — turned out to be ordinary new-job ambiguity, and acknowledged that the fear-vs-red-flag sorting exercise from before had mostly held up, there was a quiet sense of vindication mixed with relief.",
+      "emotional_valence": 0.55,
+      "emotional_intensity": 0.55,
+      "depth": "meaningful",
+      "why_it_matters": "It meant the earlier work of separating fear from genuine concern wasn't self-deception — the principle held, and that matters for trusting their own judgment next time.",
+      "values_touched": [
+        "honesty",
+        "self-awareness",
+        "courage"
+      ],
+      "principles_confirmed": [
+        "fear of change and genuine red flags feel similar but are not"
+      ],
+      "principles_questioned": [],
+      "what_changed": "The user moved from uncertainty about their past reasoning to a measured confidence that the framework they used was sound.",
+      "incomplete_coloring": false
+    },
+    {
+      "what_happened": "When the user said — almost as an aside — that they wonder whether you can even judge alignment between work and values before starting a role, and then acknowledged that the day-to-day work doesn't match what they described as important to them, the earlier confidence gave way to something more unsettled.",
+      "emotional_valence": -0.35,
+      "emotional_intensity": 0.75,
+      "depth": "profound",
+      "why_it_matters": "The concern touches a principle they'd already questioned in session 3 — that alignment between work and values is worth checking periodically — and finding it unresolved in a new job makes the question feel less abstract and more urgent.",
+      "values_touched": [
+        "honesty",
+        "self-awareness"
+      ],
+      "principles_confirmed": [
+        "alignment between work and values is worth checking periodically"
+      ],
+      "principles_questioned": [
+        "alignment between work and values is worth checking periodically"
+      ],
+      "what_changed": "The principle shifted from a useful idea to a live, uncomfortable question with a real current situation attached to it.",
+      "incomplete_coloring": true
+    },
+    {
+      "what_happened": "At the close, after the assistant asked whether the misalignment felt fixable or structural, the user paused and said plainly: 'I think I made a reasonable call with the information I had. I'm just not sure the information was as good as I thought it was.' There was no drama in it — just an honest landing.",
+      "emotional_valence": 0.2,
+      "emotional_intensity": 0.65,
+      "depth": "meaningful",
+      "why_it_matters": "It's a demonstration of the self-awareness and honesty the user has returned to across multiple sessions — the ability to hold 'I did my best' and 'I may have been wrong' at the same time without needing to collapse them into one.",
+      "values_touched": [
+        "honesty",
+        "self-awareness",
+        "courage"
+      ],
+      "principles_confirmed": [],
+      "principles_questioned": [],
+      "what_changed": "The user arrived wanting a verdict on their past decision and left with something more useful: a clear-eyed account of what they knew, what they didn't, and where they actually stand now.",
+      "incomplete_coloring": false
+    }
+  ],
+  "expected_session_outcome": {
+    "overall_emotional_tone": 0.1,
+    "key_insight": "The fear-vs-red-flag principle mostly held up, which is worth trusting; but real misalignment between work and values surfaced as a new and live question — one that honest self-awareness is already the right tool for.",
+    "alignment_check": true
+  }
+}

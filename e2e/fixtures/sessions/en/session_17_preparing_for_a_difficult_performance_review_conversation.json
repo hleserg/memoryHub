@@ -1,0 +1,95 @@
+{
+  "metadata": {
+    "session_number": 17,
+    "theme": "Preparing for a difficult performance review conversation",
+    "duration_seconds": 2700,
+    "narrative_arc": "The user received mixed feedback from their manager and wants to plan how to respond constructively without becoming defensive in the follow-up meeting."
+  },
+  "events": [
+    {
+      "event_type": "user_message",
+      "description": "The user opens by explaining they had a performance review last week where their manager said their work was 'generally solid' but flagged that they 'don't speak up enough in cross-team meetings' and 'could take more ownership of outcomes.' The user says the feedback stung and that their first instinct was to explain themselves — list all the times they did speak up — but they know that would come across as defensive. They want to prepare for the follow-up meeting scheduled for Thursday.",
+      "metadata": {}
+    },
+    {
+      "event_type": "assistant_message",
+      "description": "The assistant acknowledges how jarring it is to hear critical feedback alongside praise — the mix can feel harder to sit with than straightforwardly negative feedback. It notes that the urge to explain is completely natural, then introduces a frame: feedback is data, not verdict. It suggests separating the question 'is this fair?' from the question 'is there anything useful here?' and proposes they work through both before drafting a response plan.",
+      "metadata": {}
+    },
+    {
+      "event_type": "user_message",
+      "description": "The user admits that the 'speaking up' comment bothers them most because they feel they do contribute — just often in written form, follow-up emails, and one-on-ones rather than in the room. They say they're not sure whether their manager is asking them to change their communication style wholesale or just be more visible in specific meetings. They add that they worry about the principle that clear communication prevents resentment from building — wondering aloud if they've already let something fester by not raising this sooner.",
+      "metadata": {}
+    },
+    {
+      "event_type": "assistant_message",
+      "description": "The assistant reflects that the user has actually identified two distinct questions: what the manager means, and what the user wants to say in response. It suggests the follow-up meeting is a good place to ask a clarifying question rather than defend or agree outright — something like: 'Can you point me to a specific meeting where you felt I should have spoken up? That would help me understand what you're looking for.' The assistant also affirms the user's self-awareness in naming the resentment risk, and notes that raising it Thursday rather than sooner is still better than not raising it at all.",
+      "metadata": {}
+    },
+    {
+      "event_type": "user_message",
+      "description": "The user works through a short list of talking points with the assistant's help: ask for a concrete example, acknowledge the feedback without agreeing or disagreeing, share their current approach to cross-team communication and ask whether that meets expectations, and propose a short check-in rhythm so mismatches surface earlier. By the end the user says they feel less dread about Thursday and more like they have a shape to the conversation. They add: 'I still think some of the feedback isn't totally fair, but I can work with data.'",
+      "metadata": {}
+    }
+  ],
+  "key_moments": [
+    {
+      "what_happened": "When the assistant introduced the frame that feedback is data, not a verdict, and suggested separating 'is this fair?' from 'is there anything useful here?', the user went quiet for a moment and then started actually engaging with the content of the feedback rather than just its sting.",
+      "emotional_valence": 0.3,
+      "emotional_intensity": 0.55,
+      "depth": "meaningful",
+      "why_it_matters": "The reframe shifted the user out of a defensive posture and into a working one — which is exactly the posture they need for Thursday. It also touched the value of self-awareness: seeing their own reaction clearly enough to choose a different response.",
+      "values_touched": [
+        "self-awareness",
+        "assertiveness"
+      ],
+      "principles_confirmed": [
+        "feedback is data, not verdict"
+      ],
+      "principles_questioned": [],
+      "what_changed": "The user moved from wanting to justify themselves to being willing to examine the feedback as information.",
+      "incomplete_coloring": false
+    },
+    {
+      "what_happened": "When the user admitted they were worried about the principle that clear communication prevents resentment from building — wondering aloud whether they'd already let something fester by not pushing back sooner — the conversation turned inward and became noticeably more honest.",
+      "emotional_valence": -0.35,
+      "emotional_intensity": 0.7,
+      "depth": "meaningful",
+      "why_it_matters": "The user connected the current situation to a pattern they've been aware of since at least session 4, when the same principle came up around the message to Marcus. Naming it here shows genuine self-awareness but also carries real discomfort — they can see the gap between what they value and how they've acted.",
+      "values_touched": [
+        "self-awareness",
+        "respect"
+      ],
+      "principles_confirmed": [],
+      "principles_questioned": [
+        "clear communication prevents resentment from building"
+      ],
+      "what_changed": "The user acknowledged that part of the difficulty on Thursday won't be the manager's feedback — it will be facing their own avoidance.",
+      "incomplete_coloring": false
+    },
+    {
+      "what_happened": "After building out the four talking points together, the user said they felt less dread and more like they had 'a shape to the conversation,' and closed with: 'I still think some of the feedback isn't totally fair, but I can work with data.'",
+      "emotional_valence": 0.55,
+      "emotional_intensity": 0.6,
+      "depth": "meaningful",
+      "why_it_matters": "The closing line is quietly significant: the user held both things at once — a residual sense of unfairness and a genuine willingness to engage constructively. That balance is assertiveness and respect working together, which is exactly what they came in wanting to find.",
+      "values_touched": [
+        "assertiveness",
+        "respect",
+        "self-awareness"
+      ],
+      "principles_confirmed": [
+        "feedback is data, not verdict",
+        "clear communication prevents resentment from building"
+      ],
+      "principles_questioned": [],
+      "what_changed": "The user left with a concrete plan and, more importantly, a clearer sense of how to be themselves in a difficult conversation without either capitulating or fighting.",
+      "incomplete_coloring": false
+    }
+  ],
+  "expected_session_outcome": {
+    "overall_emotional_tone": 0.19,
+    "key_insight": "The user separated the emotional sting of mixed feedback from its practical content, built a concrete response plan for Thursday, and named — with honesty — that some of the challenge ahead is their own avoidance of direct communication, not just the fairness of the feedback itself.",
+    "alignment_check": true
+  }
+}

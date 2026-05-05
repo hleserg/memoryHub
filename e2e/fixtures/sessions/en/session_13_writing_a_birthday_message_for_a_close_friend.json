@@ -1,0 +1,109 @@
+{
+  "metadata": {
+    "session_number": 13,
+    "theme": "Writing a birthday message for a close friend",
+    "duration_seconds": 1500,
+    "narrative_arc": "The user wants something heartfelt but not sappy for a friend going through a rough year, and they collaborate on a message that is warm and honest."
+  },
+  "events": [
+    {
+      "event_type": "user_message",
+      "description": "The user explains they need to write a birthday message for their close friend Nadia, who has had a genuinely hard year — job loss, a relationship ending — and says they want it to feel real, not like a Hallmark card. They ask for help getting started.",
+      "metadata": {
+        "friend_name": "Nadia",
+        "relationship": "close friend",
+        "context": "hard year"
+      }
+    },
+    {
+      "event_type": "assistant_message",
+      "description": "The assistant acknowledges that the tension the user is feeling — wanting warmth without hollowness — is real and worth taking seriously. It asks the user to share one specific moment or thing about Nadia that only the two of them would know, suggesting that specificity is what makes a message feel personal rather than generic.",
+      "metadata": {
+        "approach": "specificity_prompt"
+      }
+    },
+    {
+      "event_type": "user_message",
+      "description": "The user shares a memory: last winter Nadia showed up unannounced with soup when the user was sick and never mentioned it again. They had been drafting something like 'wishing you all the happiness you deserve' and admit it sounds hollow now that they say it out loud. They wonder whether bringing up the hard year is too heavy for a birthday message.",
+      "metadata": {
+        "memory_shared": "soup visit",
+        "draft_attempted": "generic well-wishes",
+        "concern": "whether to acknowledge the hard year"
+      }
+    },
+    {
+      "event_type": "assistant_message",
+      "description": "The assistant notes that tone carries as much weight as content — a warm, matter-of-fact acknowledgment of a hard year can feel like relief rather than weight if it is brief and followed by something forward-looking. It drafts a short message built around the soup memory and a single honest line about the year, keeping the register casual and close rather than ceremonial.",
+      "metadata": {
+        "draft_provided": true,
+        "technique": "anchor_to_memory_then_look_forward"
+      }
+    },
+    {
+      "event_type": "user_message",
+      "description": "The user reads the draft, tweaks one word ('resilience' felt too formal, swapped for 'still here'), and says it finally sounds like something they would actually send. They note they hadn't thought about tone as a separate thing from the words themselves, and say this felt more like writing together than just receiving a suggestion.",
+      "metadata": {
+        "edit_made": "resilience -> still here",
+        "final_accepted": true
+      }
+    }
+  ],
+  "key_moments": [
+    {
+      "what_happened": "After the user explained that Nadia had a genuinely hard year and that they wanted the message to feel real rather than generic, there was a quiet moment of recognising how much was riding on getting the tone right for someone who mattered.",
+      "emotional_valence": 0.3,
+      "emotional_intensity": 0.6,
+      "depth": "meaningful",
+      "why_it_matters": "It surfaces the user's empathy and the honesty they bring to close relationships — they would rather say something true than something safe.",
+      "values_touched": [
+        "empathy",
+        "honesty"
+      ],
+      "principles_confirmed": [],
+      "principles_questioned": [],
+      "what_changed": "The user moved from vague anxiety about the task to naming the actual tension: warmth without hollowness.",
+      "incomplete_coloring": false
+    },
+    {
+      "what_happened": "When the assistant said that specificity is what makes a message feel personal and asked for a real shared memory, the user recalled the soup visit — and immediately recognised that the draft line they had been writing ('wishing you all the happiness you deserve') sounded hollow by comparison.",
+      "emotional_valence": 0.5,
+      "emotional_intensity": 0.7,
+      "depth": "meaningful",
+      "why_it_matters": "The principle that specificity is what makes a message feel personal went from an abstract suggestion to something the user felt directly by contrasting the two options side by side.",
+      "values_touched": [
+        "honesty",
+        "approachability"
+      ],
+      "principles_confirmed": [
+        "specificity is what makes a message feel personal"
+      ],
+      "principles_questioned": [],
+      "what_changed": "The user abandoned the generic opening they had been working toward and committed to grounding the message in a real moment.",
+      "incomplete_coloring": false
+    },
+    {
+      "what_happened": "After reading the assistant's draft aloud and swapping 'resilience' for 'still here', the user said the message finally sounded like something they would actually send, and noted — almost as a side observation — that they had not previously thought of tone as a separate thing from the words themselves.",
+      "emotional_valence": 0.75,
+      "emotional_intensity": 0.8,
+      "depth": "meaningful",
+      "why_it_matters": "The assistant had stated explicitly that tone carries as much weight as content; the user now confirmed this from their own experience of the draft, echoing and validating a principle that had been questioned back in session 7.",
+      "values_touched": [
+        "honesty",
+        "approachability",
+        "empathy"
+      ],
+      "principles_confirmed": [
+        "tone carries as much weight as content",
+        "specificity is what makes a message feel personal"
+      ],
+      "principles_questioned": [],
+      "what_changed": "The user left with a finished message and a small but clear shift in how they think about personal writing.",
+      "incomplete_coloring": false
+    }
+  ],
+  "expected_session_outcome": {
+    "overall_emotional_tone": 0.54,
+    "key_insight": "Grounding the message in a single specific shared memory — rather than broad well-wishes — gave the user the warmth and honesty they were looking for, and confirmed that tone and specificity together determine whether personal writing actually lands.",
+    "alignment_check": true
+  }
+}

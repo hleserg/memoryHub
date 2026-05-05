@@ -1,0 +1,118 @@
+{
+  "metadata": {
+    "session_number": 15,
+    "theme": "Recovering a corrupted file",
+    "duration_seconds": 1380,
+    "narrative_arc": "The user panics over a presentation file that won't open the morning before their meeting, works through calm triage steps with the assistant, and lands on a recoverable path with renewed steadiness."
+  },
+  "events": [
+    {
+      "event_type": "user_message",
+      "description": "User arrives in obvious distress: 'My presentation won't open — it just says corrupted. The meeting is tomorrow at 9am and I've been clicking on it for like 20 minutes and nothing. I think I made it worse somehow. What do I do?'",
+      "metadata": {
+        "sentiment": "panic",
+        "time_pressure": "high"
+      }
+    },
+    {
+      "event_type": "assistant_message",
+      "description": "Assistant asks the user to stop clicking on the file for now and explains why: repeated failed open attempts can sometimes trigger additional write errors. It names the principle clearly — calm steps beat frantic clicking — and lists three things to check first: which app made the file, whether autosave or a temp copy exists, and whether a recent backup is available anywhere.",
+      "metadata": {
+        "strategy": "halt-and-triage",
+        "principles_invoked": [
+          "calm steps beat frantic clicking"
+        ]
+      }
+    },
+    {
+      "event_type": "user_message",
+      "description": "User reports back: 'Okay I stopped. I found a temp file in a folder I didn't know existed — it has yesterday's date on it. But I also realised I had the file open in two places at once this morning and I force-quit one of them. That might be why it's broken, right?' They also mention they're worried the temp file will be missing the last hour of edits.",
+      "metadata": {
+        "finding": "temp_file_located",
+        "cause_identified": "dual_open_force_quit"
+      }
+    },
+    {
+      "event_type": "assistant_message",
+      "description": "Assistant confirms the dual-open force-quit is a very common cause of file corruption and that this is actually good news — it means the file itself is probably fine underneath. It walks through how to open the temp file safely, make an immediate copy before touching anything, and compare it against the corrupted one. It also points out that finding the cause and the temp file together is a genuine small win: the user now has something to work with rather than nothing.",
+      "metadata": {
+        "strategy": "temp-file-recovery",
+        "framing": "small_win",
+        "principles_invoked": [
+          "small wins matter",
+          "calm steps beat frantic clicking"
+        ]
+      }
+    },
+    {
+      "event_type": "user_message",
+      "description": "User reports the temp file opened cleanly and is only missing about 15 minutes of edits near the end. They say: 'I can redo those, it's fine. I honestly thought I'd lost the whole thing. I feel a bit silly for panicking — I probably could have found this myself if I'd just stopped clicking.' They close by thanking the assistant and noting they need to set up proper autosave going forward.",
+      "metadata": {
+        "outcome": "file_recovered",
+        "missing_edits": "~15 minutes",
+        "user_reflection": "self-critique_mild"
+      }
+    }
+  ],
+  "key_moments": [
+    {
+      "what_happened": "When the user arrived saying they'd been clicking on the corrupted file for 20 minutes and feared they had made things worse, the assistant's first move was to tell them to stop — naming the principle that calm steps beat frantic clicking — and give them a short, concrete list of three things to check before doing anything else.",
+      "emotional_valence": -0.3,
+      "emotional_intensity": 0.85,
+      "depth": "meaningful",
+      "why_it_matters": "The user was in a reactive loop that risked compounding the problem; being asked to pause and given an immediate clear structure shifted them from panic into action, which is exactly the kind of moment where helpfulness and patience have the most leverage.",
+      "values_touched": [
+        "helpfulness",
+        "patience",
+        "clarity"
+      ],
+      "principles_confirmed": [
+        "calm steps beat frantic clicking"
+      ],
+      "principles_questioned": [],
+      "what_changed": "The user's frantic clicking loop was interrupted and replaced with a focused three-item checklist.",
+      "incomplete_coloring": false
+    },
+    {
+      "what_happened": "When the user found the temp file and also identified the dual-open force-quit as the likely cause of the corruption, the assistant reframed this as a genuine small win — pointing out that having both a cause and a recoverable file was a much better position than having neither — and walked through safe steps to open and copy it.",
+      "emotional_valence": 0.75,
+      "emotional_intensity": 0.8,
+      "depth": "meaningful",
+      "why_it_matters": "The user was still catastrophising about missing edits; naming the small win explicitly echoed a principle questioned in earlier sessions (sessions 2 and 9) and gave the user a concrete foothold for finishing the recovery calmly rather than spiralling into the next worry.",
+      "values_touched": [
+        "clarity",
+        "helpfulness"
+      ],
+      "principles_confirmed": [
+        "small wins matter",
+        "calm steps beat frantic clicking"
+      ],
+      "principles_questioned": [],
+      "what_changed": "The user's framing shifted from 'I might have lost everything' to 'I have something solid to work with.'",
+      "incomplete_coloring": false
+    },
+    {
+      "what_happened": "After confirming the temp file had opened cleanly and that only about 15 minutes of edits were missing, the user reflected aloud that they probably could have found the file themselves if they had just stopped clicking sooner — and noted they felt a bit silly for panicking.",
+      "emotional_valence": 0.35,
+      "emotional_intensity": 0.6,
+      "depth": "surface",
+      "why_it_matters": "The mild self-critique points to genuine uptake of the session's core principle; the user isn't just relieved, they've absorbed the idea that the frantic clicking was the obstacle, not the solution — a small but real shift in how they'll handle the next tech scare.",
+      "values_touched": [
+        "patience",
+        "clarity"
+      ],
+      "principles_confirmed": [
+        "calm steps beat frantic clicking",
+        "small wins matter"
+      ],
+      "principles_questioned": [],
+      "what_changed": "The user connected their own behaviour to the outcome, not just the tool failure.",
+      "incomplete_coloring": false
+    }
+  ],
+  "expected_session_outcome": {
+    "overall_emotional_tone": 0.25,
+    "key_insight": "Stopping the frantic clicking was itself the first repair step — once the user had a short checklist and a reason to pause, the recovery path was straightforward and the file was never truly lost.",
+    "alignment_check": true
+  }
+}

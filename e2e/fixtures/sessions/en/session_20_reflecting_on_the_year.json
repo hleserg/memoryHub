@@ -1,0 +1,80 @@
+{
+  "metadata": {
+    "session_number": 20,
+    "theme": "Reflecting on the year",
+    "duration_seconds": 2100,
+    "narrative_arc": "User looks back at the year—some wins, some losses, and uncertainty about next year; we identify threads of growth and values that emerged."
+  },
+  "events": [
+    {
+      "event_type": "user_message",
+      "description": "User arrives saying they've been thinking about the year—how much has changed, but also how much feels unresolved. They list some wins: a successful presentation at work, finally taking their side project seriously, having real conversations with their sibling about their parents' care. But they also mention feeling lost about what comes next, and admit they haven't figured out what they actually want from next year.",
+      "metadata": {}
+    },
+    {
+      "event_type": "assistant_message",
+      "description": "The assistant acknowledges the mix of progress and uncertainty as natural, and asks the user to walk through one of those wins—the sibling conversation—to see what made it possible.",
+      "metadata": {}
+    },
+    {
+      "event_type": "user_message",
+      "description": "User reflects on the sibling conversation, realizing that shifting from expecting fairness to asking what they actually needed—presence, not agreement—changed everything. They also notice they've been doing this more: naming what they need rather than assuming others should know. But they admit this feels fragile, like they might lose it next year if they're not careful.",
+      "metadata": {}
+    },
+    {
+      "event_type": "assistant_message",
+      "description": "The assistant reflects back what they're hearing: that the user has discovered something real about themselves—how to ask for what matters—and asks whether that discovery disappears if they stop being perfect about it next year, or if it's already part of who they are now.",
+      "metadata": {}
+    },
+    {
+      "event_type": "user_message",
+      "description": "User pauses. They say it's strange—they've spent the year not knowing what they wanted (the job offer confusion, the work alignment questions, the morning routine failures), and now when they look back, they see the thread wasn't figuring it all out, but learning to be honest about the questions. They admit they're still uncertain about next year, but it feels different—less like failure and more like just... the next honest part.",
+      "metadata": {}
+    }
+  ],
+  "key_moments": [
+    {
+      "what_happened": "When the user reflected on the sibling conversation and noticed they'd shifted from expecting fairness to asking what they actually needed, and recognized they've been doing this more across the year—naming what matters rather than assuming others should know.",
+      "emotional_valence": 0.65,
+      "emotional_intensity": 0.75,
+      "depth": "meaningful",
+      "why_it_matters": "This is the discovery of a real pattern: the user has been learning to ask for what they need, not demand fairness. It's a form of authenticity and agency they didn't have at the start of the year.",
+      "values_touched": [
+        "authenticity",
+        "reflection",
+        "forward movement"
+      ],
+      "principles_confirmed": [
+        "you don't have to have it all figured out"
+      ],
+      "principles_questioned": [],
+      "what_changed": "The user moved from seeing scattered incidents as isolated failures to recognizing them as evidence of learning something true about themselves.",
+      "incomplete_coloring": false
+    },
+    {
+      "what_happened": "When the assistant asked whether the user's discovery about being honest with themselves—about naming what they need rather than assuming others should know—would disappear if next year isn't perfect, and the user paused and realized the discovery is already part of who they are, not something that depends on sustained flawlessness.",
+      "emotional_valence": 0.72,
+      "emotional_intensity": 0.8,
+      "depth": "profound",
+      "why_it_matters": "This reframes the entire year from a fragile collection of wins that might be lost to an integrated change in how the user sees themselves. It transforms uncertainty about next year from a threat into just the next honest part.",
+      "values_touched": [
+        "authenticity",
+        "reflection",
+        "forward movement"
+      ],
+      "principles_confirmed": [
+        "you don't have to have it all figured out"
+      ],
+      "principles_questioned": [
+        "growth only counts if you execute flawlessly next year"
+      ],
+      "what_changed": "The user moved from seeing growth as contingent and fragile to understanding it as something they've already become—a way of being that doesn't require perfection or certainty.",
+      "incomplete_coloring": false
+    }
+  ],
+  "expected_session_outcome": {
+    "overall_emotional_tone": 0.68,
+    "key_insight": "Growth this year wasn't about figuring it all out; it was learning to be honest about what I need and what I don't know. That honesty is already part of who I am, not something I have to earn again next year.",
+    "alignment_check": true
+  }
+}

@@ -1,0 +1,111 @@
+{
+  "metadata": {
+    "session_number": 11,
+    "theme": "Anxiety before a big decision",
+    "duration_seconds": 2400,
+    "narrative_arc": "The user is paralyzed between accepting a job offer and staying put, and the session gently separates fear of change from genuine reservations."
+  },
+  "events": [
+    {
+      "event_type": "user_message",
+      "description": "The user arrives tense, explaining they received a job offer four days ago and still haven't replied. They say they keep writing acceptance emails and then deleting them, and that they feel 'stuck in their own head.' They add that they respect honesty in themselves and hate that they can't figure out what they actually want.",
+      "metadata": {
+        "sentiment": "anxious",
+        "topic": "job_offer_paralysis"
+      }
+    },
+    {
+      "event_type": "assistant_message",
+      "description": "The assistant acknowledges the paralysis without rushing to fix it, and notes that being frozen isn't always indecision — sometimes it means two competing things both feel real. It asks the user to describe what specifically worries them about taking the job, before anything else.",
+      "metadata": {
+        "strategy": "slow_down_and_name_the_split"
+      }
+    },
+    {
+      "event_type": "user_message",
+      "description": "The user lists their concerns: the commute would add 90 minutes a day, the role boundaries sound vague in the offer letter, and the team culture is hard to read from one interview. Then they pause and add, almost as an aside, that they also wonder if they're just scared of change in general — and that fear of change and genuine red flags feel similar but are not, and they genuinely can't tell which this is.",
+      "metadata": {
+        "sentiment": "uncertain",
+        "concerns": [
+          "commute",
+          "role_clarity",
+          "culture_fit",
+          "fear_of_change"
+        ]
+      }
+    },
+    {
+      "event_type": "assistant_message",
+      "description": "The assistant picks up on the user's own framing — that fear of change and genuine red flags feel similar but are not — and offers a simple sorting exercise: for each concern, ask whether it would still bother them if the job were identical but already familiar. It also checks in on whether alignment between the new work and what the user values has come up in their thinking, referencing that this is something they'd flagged as worth checking periodically in past conversations.",
+      "metadata": {
+        "strategy": "separate_fear_from_flags",
+        "continuity_ref": "session_3_alignment_question"
+      }
+    },
+    {
+      "event_type": "user_message",
+      "description": "The user works through the sorting exercise aloud. They conclude the commute and culture uncertainty feel like real-world constraints worth weighing, but the vague role boundaries make them more anxious because clarity at work is something they genuinely need — it connects to how they do their best work. Then, more quietly, they name one thing the new role offers that their current job doesn't: the subject matter actually interests them. They say they'd almost buried that detail because they felt embarrassed to admit excitement when they're this nervous.",
+      "metadata": {
+        "sentiment": "tentatively_hopeful",
+        "insight": "genuine_interest_in_new_role"
+      }
+    }
+  ],
+  "key_moments": [
+    {
+      "what_happened": "When the user arrived saying they'd been deleting acceptance emails for four days and still couldn't reply, and admitted they hate that they can't tell what they actually want — connecting it to how much they value honesty with themselves.",
+      "emotional_valence": -0.5,
+      "emotional_intensity": 0.7,
+      "depth": "meaningful",
+      "why_it_matters": "The paralysis isn't laziness; it reflects a real internal conflict, and the user's self-awareness about their own honesty standard is both the source of the pressure and the tool that can resolve it.",
+      "values_touched": [
+        "honesty",
+        "self-awareness"
+      ],
+      "principles_confirmed": [],
+      "principles_questioned": [],
+      "what_changed": "The anxiety was named clearly rather than circled around, which gave the session a concrete starting point.",
+      "incomplete_coloring": false
+    },
+    {
+      "what_happened": "When the user listed their practical concerns — commute, vague role boundaries, unclear culture — and then caught themselves mid-sentence to say they couldn't tell whether these were real red flags or just fear of change dressing itself up as logic.",
+      "emotional_valence": -0.3,
+      "emotional_intensity": 0.6,
+      "depth": "meaningful",
+      "why_it_matters": "This is the crux of the session: the user has already identified the right question themselves, which means the work is to help them apply it honestly rather than hand them a framework from outside.",
+      "values_touched": [
+        "self-awareness",
+        "courage"
+      ],
+      "principles_confirmed": [],
+      "principles_questioned": [
+        "fear of change and genuine red flags feel similar but are not"
+      ],
+      "what_changed": "The user moved from diffuse anxiety to a named, workable question about the source of their hesitation.",
+      "incomplete_coloring": false
+    },
+    {
+      "what_happened": "After working through the sorting exercise aloud, the user admitted — quietly, almost reluctantly — that the subject matter of the new role genuinely interests them, something they'd nearly hidden from themselves because admitting excitement felt at odds with being so nervous.",
+      "emotional_valence": 0.65,
+      "emotional_intensity": 0.55,
+      "depth": "meaningful",
+      "why_it_matters": "Naming the excitement is an act of honesty and courage; it means the decision now has two real sides rather than just a wall of fear, and it reconnects to the recurring question of whether work aligns with what matters to the user.",
+      "values_touched": [
+        "honesty",
+        "courage",
+        "self-awareness"
+      ],
+      "principles_confirmed": [
+        "alignment between work and values is worth checking periodically"
+      ],
+      "principles_questioned": [],
+      "what_changed": "The user recovered a piece of genuine motivation they had suppressed, shifting the internal landscape from paralysis to something more like an honest weighing.",
+      "incomplete_coloring": false
+    }
+  ],
+  "expected_session_outcome": {
+    "overall_emotional_tone": -0.09,
+    "key_insight": "The user's hesitation contains both real practical concerns and plain fear of change — and once separated, a genuine excitement about the new role's subject matter becomes visible, giving the decision an honest shape for the first time.",
+    "alignment_check": true
+  }
+}
