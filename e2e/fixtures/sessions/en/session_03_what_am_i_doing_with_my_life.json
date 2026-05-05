@@ -1,0 +1,102 @@
+{
+  "metadata": {
+    "session_number": 3,
+    "theme": "What am I doing with my life?",
+    "duration_seconds": 2400,
+    "narrative_arc": "Prompted by a friend's unexpected career pivot, the user reflects on whether their own work still aligns with their values, moving through mild envy and growing unease before landing on honest, unresolved questions."
+  },
+  "events": [
+    {
+      "event_type": "user_message",
+      "description": "User opens by mentioning that a close friend just quit a stable job to retrain as a nurse. Says they found out over the weekend and can't stop thinking about it.",
+      "metadata": {
+        "mood_hint": "unsettled, curious"
+      }
+    },
+    {
+      "event_type": "assistant_message",
+      "description": "Assistant acknowledges how disorienting it can be when someone close makes a big move — not because their choice is a judgment on yours, but because it holds a mirror up. Asks what it is about the news that keeps pulling at the user's attention.",
+      "metadata": {}
+    },
+    {
+      "event_type": "user_message",
+      "description": "User says they're not sure — maybe a little envy, maybe just confusion. Adds that they've been in the same role for four years and haven't asked themselves whether it still fits. Wonders aloud if alignment between work and values is even worth checking periodically, or if that kind of question is just 'a luxury for people with options'.",
+      "metadata": {
+        "mood_hint": "ambivalent, slightly defensive"
+      }
+    },
+    {
+      "event_type": "assistant_message",
+      "description": "Assistant gently pushes back on the 'luxury' framing — noting that discomfort like this tends to signal something worth examining, even when nothing is immediately broken. Reflects back what the user said: four years, no check-in. Asks what their work actually felt like at the start versus now, inviting honest comparison rather than a verdict.",
+      "metadata": {}
+    },
+    {
+      "event_type": "user_message",
+      "description": "User admits that at the start the job felt like it mattered — they were learning fast and felt useful. Now it mostly feels like going through motions. Says they don't know if that's the job, or them, or just how work feels after a while. Ends with: 'I don't think I'm ready to do anything about it. I just needed to say it out loud.'",
+      "metadata": {
+        "mood_hint": "subdued, honest, slightly relieved"
+      }
+    }
+  ],
+  "key_moments": [
+    {
+      "what_happened": "When the user revealed they felt a pull of envy toward their friend's pivot and admitted they hadn't checked whether their own work still fits them — not in four years — something shifted from idle chat to real self-examination.",
+      "emotional_valence": 0.1,
+      "emotional_intensity": 0.6,
+      "depth": "meaningful",
+      "why_it_matters": "This is the first honest look inward. The user is touching the gap between how life is going and how they think it should feel, which connects directly to honesty and self-awareness as values they care about.",
+      "values_touched": [
+        "self-awareness",
+        "honesty",
+        "curiosity"
+      ],
+      "principles_confirmed": [],
+      "principles_questioned": [
+        "alignment between work and values is worth checking periodically"
+      ],
+      "what_changed": "The user moved from reporting a news item about a friend to recognising it as a question about themselves.",
+      "incomplete_coloring": false
+    },
+    {
+      "what_happened": "After the assistant reflected back the four-year gap and invited honest comparison, the user said plainly that the job no longer feels like it matters — that it has become going through motions — and couldn't say whether the fault lies with the role, themselves, or just the nature of time.",
+      "emotional_valence": -0.45,
+      "emotional_intensity": 0.85,
+      "depth": "profound",
+      "why_it_matters": "Naming this out loud — without a plan, without a fix — is an act of real honesty. The uncertainty is uncomfortable, and sitting in it without forcing a resolution takes self-awareness. The feeling that work should carry meaning connects to a deeper value the user hasn't fully articulated yet.",
+      "values_touched": [
+        "honesty",
+        "self-awareness"
+      ],
+      "principles_confirmed": [
+        "discomfort signals something worth examining"
+      ],
+      "principles_questioned": [],
+      "what_changed": "The user stopped protecting the status quo with qualifiers and stated the dissonance clearly, even if they have no answer for it.",
+      "incomplete_coloring": false
+    },
+    {
+      "what_happened": "The user closed by saying they're not ready to act — they just needed to say it out loud. Rather than pushing toward a plan or resolution, the moment was allowed to stay open.",
+      "emotional_valence": 0.25,
+      "emotional_intensity": 0.55,
+      "depth": "meaningful",
+      "why_it_matters": "Choosing to hold the question rather than rush to an answer is itself a form of self-awareness and intellectual honesty. It echoes the session-two recognition that sitting with something ordinary — or uncomfortable — has its own value.",
+      "values_touched": [
+        "self-awareness",
+        "honesty",
+        "curiosity"
+      ],
+      "principles_confirmed": [
+        "alignment between work and values is worth checking periodically",
+        "discomfort signals something worth examining"
+      ],
+      "principles_questioned": [],
+      "what_changed": "The user accepted that having more questions than answers at the end of this conversation is enough — for now.",
+      "incomplete_coloring": false
+    }
+  ],
+  "expected_session_outcome": {
+    "overall_emotional_tone": -0.19,
+    "key_insight": "The user hasn't checked whether their work still fits their values in four years, and saying that out loud — without needing to fix it immediately — was the honest, self-aware act the session called for.",
+    "alignment_check": true
+  }
+}
