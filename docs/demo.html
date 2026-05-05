@@ -1,0 +1,1010 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Atman — Demo · Дворецкий Альфред</title>
+  <link rel="icon" href="pic/logo.png" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
+  <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg: #090b12; --gold: #f4c873; --blue: #88b8ff;
+      --violet: #b69cff; --green: #9de0bf;
+      --text: #f4efe7; --muted: #b9b0a5; --dim: #7a7060; --line: rgba(255,255,255,0.1);
+    }
+    html { scroll-behavior: smooth; }
+    body {
+      background: var(--bg); color: var(--text);
+      font-family: 'Inter', system-ui, sans-serif; min-height: 100vh; overflow-x: hidden;
+    }
+    body::before {
+      content: ''; position: fixed; inset: 0; z-index: -1; pointer-events: none;
+      background-image: linear-gradient(rgba(255,255,255,0.022) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255,255,255,0.022) 1px, transparent 1px);
+      background-size: 64px 64px;
+      mask-image: linear-gradient(to bottom, rgba(0,0,0,0.6), transparent 55%);
+    }
+    #root { min-height: 100vh; }
+    ::-webkit-scrollbar { width: 4px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 2px; }
+    @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0} }
+    @keyframes pulse { 0%,100%{opacity:0.25} 50%{opacity:0.9} }
+    @keyframes fadeUp { from{opacity:0;transform:translateY(12px)} to{opacity:1;transform:none} }
+  </style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const { useState, useEffect, useRef, useCallback, useMemo } = React;
+
+// ─── Tweaks panel (inline) ────────────────────────────────────────────────────
+const __TWEAKS_STYLE = `
+  .twk-panel{position:fixed;right:16px;bottom:16px;z-index:2147483646;width:272px;
+    max-height:calc(100vh - 32px);display:flex;flex-direction:column;
+    background:rgba(250,249,247,.82);color:#29261b;
+    -webkit-backdrop-filter:blur(24px) saturate(160%);backdrop-filter:blur(24px) saturate(160%);
+    border:.5px solid rgba(255,255,255,.6);border-radius:14px;
+    box-shadow:0 1px 0 rgba(255,255,255,.5) inset,0 12px 40px rgba(0,0,0,.2);
+    font:11.5px/1.4 ui-sans-serif,system-ui,-apple-system,sans-serif;overflow:hidden}
+  .twk-hd{display:flex;align-items:center;justify-content:space-between;
+    padding:10px 8px 10px 14px;cursor:move;user-select:none;border-bottom:.5px solid rgba(0,0,0,.07)}
+  .twk-hd b{font-size:12px;font-weight:600}
+  .twk-x{appearance:none;border:0;background:transparent;color:rgba(41,38,27,.5);
+    width:22px;height:22px;border-radius:6px;cursor:pointer;font-size:13px;line-height:1}
+  .twk-x:hover{background:rgba(0,0,0,.07);color:#29261b}
+  .twk-body{padding:4px 14px 14px;display:flex;flex-direction:column;gap:10px;
+    overflow-y:auto;min-height:0}
+  .twk-sect{font-size:10px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;
+    color:rgba(41,38,27,.4);padding:8px 0 0}
+  .twk-row{display:flex;flex-direction:column;gap:4px}
+  .twk-row-h{flex-direction:row;align-items:center;justify-content:space-between}
+  .twk-lbl{font-size:11px;font-weight:500;color:rgba(41,38,27,.65);display:flex;justify-content:space-between}
+  .twk-val{color:rgba(41,38,27,.4);font-variant-numeric:tabular-nums}
+  .twk-slider{appearance:none;width:100%;height:4px;margin:5px 0;border-radius:999px;
+    background:rgba(0,0,0,.12);outline:none}
+  .twk-slider::-webkit-slider-thumb{-webkit-appearance:none;width:14px;height:14px;
+    border-radius:50%;background:#fff;border:.5px solid rgba(0,0,0,.12);
+    box-shadow:0 1px 3px rgba(0,0,0,.2);cursor:pointer}
+  .twk-seg{position:relative;display:flex;padding:2px;border-radius:8px;
+    background:rgba(0,0,0,.06);user-select:none}
+  .twk-seg-thumb{position:absolute;top:2px;bottom:2px;border-radius:6px;
+    background:rgba(255,255,255,.92);box-shadow:0 1px 2px rgba(0,0,0,.12);
+    transition:left .15s,width .15s}
+  .twk-seg button{position:relative;z-index:1;flex:1;border:0;background:transparent;
+    color:inherit;font:inherit;font-weight:500;min-height:22px;border-radius:6px;
+    cursor:pointer;padding:3px 6px;line-height:1.2}
+  .twk-toggle{position:relative;width:32px;height:18px;border:0;border-radius:999px;
+    background:rgba(0,0,0,.15);transition:background .15s;cursor:pointer;padding:0;flex-shrink:0}
+  .twk-toggle[data-on="1"]{background:#34c759}
+  .twk-toggle i{position:absolute;top:2px;left:2px;width:14px;height:14px;border-radius:50%;
+    background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.25);transition:transform .15s;display:block}
+  .twk-toggle[data-on="1"] i{transform:translateX(14px)}
+`;
+
+function useTweaks(defaults) {
+  const [values, setValues] = useState(defaults);
+  const setTweak = useCallback((keyOrEdits, val) => {
+    const edits = typeof keyOrEdits === 'object' && keyOrEdits !== null
+      ? keyOrEdits : { [keyOrEdits]: val };
+    setValues(prev => ({ ...prev, ...edits }));
+    window.parent.postMessage({ type: '__edit_mode_set_keys', edits }, '*');
+  }, []);
+  return { tweaks: values, setTweak };
+}
+
+function TweaksPanel({ children }) {
+  const [open, setOpen] = useState(false);
+  const dragRef = useRef(null);
+  useEffect(() => {
+    const onMsg = (e) => {
+      if (e?.data?.type === '__activate_edit_mode') setOpen(true);
+      else if (e?.data?.type === '__deactivate_edit_mode') setOpen(false);
+    };
+    window.addEventListener('message', onMsg);
+    window.parent.postMessage({ type: '__edit_mode_available' }, '*');
+    return () => window.removeEventListener('message', onMsg);
+  }, []);
+  const dismiss = () => { setOpen(false); window.parent.postMessage({ type: '__edit_mode_dismissed' }, '*'); };
+  if (!open) return null;
+  return (
+    <>
+      <style>{__TWEAKS_STYLE}</style>
+      <div ref={dragRef} className="twk-panel">
+        <div className="twk-hd"><b>Tweaks</b><button className="twk-x" onClick={dismiss}>✕</button></div>
+        <div className="twk-body">{children}</div>
+      </div>
+    </>
+  );
+}
+function TweakSection({ title }) { return <div className="twk-sect">{title}</div>; }
+function TweakSlider({ label, value, min=0, max=100, step=1, onChange }) {
+  return (
+    <div className="twk-row">
+      <div className="twk-lbl"><span>{label}</span><span className="twk-val">{value}</span></div>
+      <input type="range" className="twk-slider" min={min} max={max} step={step}
+        value={value} onChange={e => onChange(Number(e.target.value))} />
+    </div>
+  );
+}
+function TweakToggle({ label, value, onChange }) {
+  return (
+    <div className="twk-row twk-row-h">
+      <div className="twk-lbl"><span>{label}</span></div>
+      <button type="button" className="twk-toggle" data-on={value?'1':'0'}
+        onClick={() => onChange(!value)}><i /></button>
+    </div>
+  );
+}
+function TweakRadio({ label, value, options, onChange }) {
+  const opts = options.map(o => typeof o === 'object' ? o : { value: o, label: o });
+  const idx = Math.max(0, opts.findIndex(o => o.value === value));
+  const n = opts.length;
+  return (
+    <div className="twk-row">
+      <div className="twk-lbl"><span>{label}</span></div>
+      <div className="twk-seg">
+        <div className="twk-seg-thumb" style={{ left:`calc(2px + ${idx}*(100% - 4px)/${n})`, width:`calc((100% - 4px)/${n})` }} />
+        {opts.map(o => (
+          <button key={o.value} type="button" onClick={() => onChange(o.value)}>{o.label}</button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ─── i18n ─────────────────────────────────────────────────────────────────────
+const T = {
+  ru: {
+    hero_badge: 'Интерактивное демо',
+    hero_title: 'Дворецкий Альфред обретает личность',
+    hero_sub: 'Наблюдайте, как Atman шаг за шагом строит непрерывную идентичность агента — от первого факта до глубокой рефлексии.',
+    hero_start: 'Начать демо',
+    nav_site: 'Сайт',
+    act: 'Акт',
+    acts: [
+      { num:'01', tag:'Factual Memory',    title:'Память фактов',         desc:'Альфред сохраняет первые достоверные факты без интерпретаций — только то, что было.' },
+      { num:'02', tag:'Experience Store',  title:'Хранилище переживаний', desc:'Факты становятся прожитым опытом. Появляется эмоциональный тон, значимость, переосмысление.' },
+      { num:'03', tag:'Identity Store',    title:'Идентичность',          desc:'Из переживаний рождаются ценности, принципы, цели. Альфред создаёт нарратив о себе.' },
+      { num:'04', tag:'Reflection Engine', title:'Рефлексия',             desc:'Три уровня рефлексии: микро, дневная, глубокая. Оценка по методу Джаходы.' },
+    ],
+    play:'▶ Воспроизвести', pause:'⏸ Пауза', restart:'↺ Заново',
+    next_act:'Следующий акт →', prev_act:'← Назад',
+    step:'Шаг', of:'из',
+    inner_voice:'Внутренний голос Альфреда',
+    thinking:'Альфред думает…',
+    speed_label:'Скорость анимации',
+    done_label:'Показать внутренний голос',
+  },
+  en: {
+    hero_badge: 'Interactive Demo',
+    hero_title: 'Alfred the Butler Gains an Identity',
+    hero_sub: 'Watch how Atman builds a continuous agent identity step by step — from the first fact to deep reflection.',
+    hero_start: 'Start Demo',
+    nav_site: 'Website',
+    act: 'Act',
+    acts: [
+      { num:'01', tag:'Factual Memory',    title:'Factual Memory',   desc:'Alfred stores his first verifiable facts. No interpretations — just what happened.' },
+      { num:'02', tag:'Experience Store',  title:'Experience Store', desc:'Facts become lived experience. Emotional tone, salience and reframing emerge.' },
+      { num:'03', tag:'Identity Store',    title:'Identity Store',   desc:'Values, principles and goals emerge from experience. Alfred creates a self-narrative.' },
+      { num:'04', tag:'Reflection Engine', title:'Reflection Engine',desc:'Three reflection levels: micro, daily, deep. Jahoda psychological health assessment.' },
+    ],
+    play:'▶ Play', pause:'⏸ Pause', restart:'↺ Restart',
+    next_act:'Next Act →', prev_act:'← Back',
+    step:'Step', of:'of',
+    inner_voice:"Alfred's inner voice",
+    thinking:'Alfred is thinking…',
+    speed_label:'Animation speed',
+    done_label:'Show inner voice',
+  }
+};
+
+// ─── Terminal scripts ─────────────────────────────────────────────────────────
+const SCRIPTS = {
+  ru: [
+    [
+      {t:'banner',s:'══════════════════════════════════════════════'},
+      {t:'banner',s:'  ATMAN · Factual Memory · Акт 1'},
+      {t:'banner',s:'══════════════════════════════════════════════'},
+      {t:'blank'},
+      {t:'section',s:'▶ ДЕМО: InMemoryBackend'},
+      {t:'blank'},
+      {t:'info',s:'[gold:1.] Добавление фактов…'},
+      {t:'ok',s:'Добавлен факт: [blue:f-001]'},
+      {t:'dim',s:'   "Пользователь попросил реализовать сложную функцию"'},
+      {t:'dim',s:'   source: session_001 · tags: [task, request]'},
+      {t:'blank'},
+      {t:'ok',s:'Добавлен факт: [blue:f-002]'},
+      {t:'dim',s:'   "Factual memory adapter реализован"'},
+      {t:'dim',s:'   source: session_002 · tags: [task, done]'},
+      {t:'blank'},
+      {t:'ok',s:'Добавлен факт: [blue:f-003]'},
+      {t:'dim',s:'   "Все тесты прошли успешно"'},
+      {t:'dim',s:'   source: session_002 · tags: [test, done]'},
+      {t:'blank'},
+      {t:'info',s:'[gold:2.] Поиск по тегу [violet:task]…'},
+      {t:'ok',s:'Найдено: [gold:2] факта'},
+      {t:'info',s:'  • Пользователь попросил реализовать сложную функцию'},
+      {t:'info',s:'  • Factual memory adapter реализован'},
+      {t:'blank'},
+      {t:'info',s:'[gold:3.] Создание связи f-001 [green:led_to] f-002…'},
+      {t:'ok',s:'Связь создана: [green:true]'},
+      {t:'blank'},
+      {t:'info',s:'[gold:4.] Проверка связей f-001…'},
+      {t:'ok',s:'Факт имеет [gold:1] связь: led_to → f-002'},
+      {t:'blank'},
+      {t:'ok',s:'Всего фактов: [gold:3]'},
+      {t:'section',s:'✓ Акт 1 завершён'},
+    ],
+    [
+      {t:'banner',s:'══════════════════════════════════════════════'},
+      {t:'banner',s:'  ATMAN · Experience Store · Акт 2'},
+      {t:'banner',s:'══════════════════════════════════════════════'},
+      {t:'blank'},
+      {t:'section',s:'▶ Шаг 1: Загрузка переживания'},
+      {t:'info',s:'Файл: [blue:experience1_competence_challenge.json]'},
+      {t:'info',s:'importance: [gold:0.8] · salience: [gold:0.9]'},
+      {t:'blank'},
+      {t:'info',s:'[gold:Ключевой момент 1:]'},
+      {t:'info',s:'  что: "Попросили реализовать то, чего не делал"'},
+      {t:'info',s:'  valence: [red:-0.2]  intensity: [gold:0.7]  depth: meaningful'},
+      {t:'info',s:'  ценности: [violet:competence], [blue:honesty], [green:service]'},
+      {t:'blank'},
+      {t:'info',s:'[gold:Ключевой момент 2:]'},
+      {t:'info',s:'  что: "Признал неопределённость, попросил помощи"'},
+      {t:'info',s:'  valence: [green:+0.4]  intensity: [gold:0.6]'},
+      {t:'info',s:'  ценности: [blue:honesty], [violet:humility]'},
+      {t:'blank'},
+      {t:'section',s:'▶ Шаг 2: Переосмысление (reframing)'},
+      {t:'ok',s:'Заметка переосмысления добавлена'},
+      {t:'info',s:'  "Признание было правильным. Честность укрепила доверие."'},
+      {t:'info',s:'  type: [green:growth]'},
+      {t:'blank'},
+      {t:'section',s:'▶ Шаг 3: Поиск по ценностям'},
+      {t:'ok',s:'Совпадений: [gold:1]'},
+      {t:'blank'},
+      {t:'section',s:'▶ Шаг 4: Затухание значимости'},
+      {t:'info',s:'  День  0: [gold:90%]'},
+      {t:'info',s:'  День  7: [gold:67%]'},
+      {t:'info',s:'  День 30: [gold:41%]'},
+      {t:'blank'},
+      {t:'ok',s:'Демо завершено успешно.'},
+      {t:'section',s:'✓ Акт 2 завершён'},
+    ],
+    [
+      {t:'banner',s:'══════════════════════════════════════════════'},
+      {t:'banner',s:'  ATMAN · Identity Store · Акт 3'},
+      {t:'banner',s:'══════════════════════════════════════════════'},
+      {t:'blank'},
+      {t:'section',s:'▶ Шаг 1: Bootstrap пустой идентичности'},
+      {t:'info',s:'Создание без вымышленных принципов.'},
+      {t:'ok',s:'Идентичность создана: [blue:550e8400-…]'},
+      {t:'info',s:'  self_description: "Я учусь понимать себя через опыт."'},
+      {t:'info',s:'  values: [gold:0]  habits: [gold:0]  principles: [gold:0]'},
+      {t:'blank'},
+      {t:'section',s:'▶ Шаг 2: Ценность из опыта'},
+      {t:'ok',s:'Добавлена ценность: [gold:честность]'},
+      {t:'info',s:'  confidence: [gold:0.70]'},
+      {t:'info',s:'  justification: "Наблюдалось в нескольких взаимодействиях"'},
+      {t:'blank'},
+      {t:'section',s:'▶ Шаг 3: Наблюдаемый паттерн'},
+      {t:'ok',s:'Добавлен паттерн: избыточное объяснение при неуверенности'},
+      {t:'info',s:'  frequency: [gold:0.70]  helpfulness: [violet:mixed]'},
+      {t:'blank'},
+      {t:'section',s:'▶ Шаг 4: Принцип'},
+      {t:'ok',s:'Добавлен принцип: "Всегда признавать неопределённость"'},
+      {t:'info',s:'  moral_orientation: [green:good]  chosen_consciously: [green:true]'},
+      {t:'blank'},
+      {t:'section',s:'▶ Шаг 5: Цель'},
+      {t:'ok',s:'Добавлена цель: "Развить самосознание через рефлексию"'},
+      {t:'info',s:'  horizon: [blue:long]  owner: [blue:agent]  active: [green:true]'},
+      {t:'blank'},
+      {t:'section',s:'▶ Шаг 6: Генерация нарратива'},
+      {t:'ok',s:'Нарратив создан (3 слоя)'},
+      {t:'ok',s:'NARRATIVE.md записан и валиден'},
+      {t:'info',s:'  ✓ Содержит CORE LAYER'},
+      {t:'info',s:'  ✓ Содержит RECENT LAYER'},
+      {t:'info',s:'  ✓ Написан от первого лица'},
+      {t:'blank'},
+      {t:'section',s:'✓ Акт 3 завершён'},
+    ],
+    [
+      {t:'banner',s:'══════════════════════════════════════════════'},
+      {t:'banner',s:'  ATMAN · Reflection Engine · Акт 4'},
+      {t:'banner',s:'══════════════════════════════════════════════'},
+      {t:'blank'},
+      {t:'info',s:'Загружено [gold:3] переживания и [gold:1] идентичность'},
+      {t:'blank'},
+      {t:'section',s:'▶ 1. МИКРО-РЕФЛЕКСИЯ (после сессии)'},
+      {t:'ok',s:'Запущена для сессии [blue:a1b2c3d4…]'},
+      {t:'ok',s:'Микро-рефлексия завершена!'},
+      {t:'info',s:'  Уровень: [violet:MICRO]  · Переживаний: [gold:1]'},
+      {t:'info',s:'  Инсайт: "Признание неопределённости — не слабость"'},
+      {t:'blank'},
+      {t:'section',s:'▶ 2. ДНЕВНАЯ РЕФЛЕКСИЯ (паттерны)'},
+      {t:'ok',s:'Запущена для: 2026-05-05'},
+      {t:'ok',s:'Дневная рефлексия завершена!'},
+      {t:'info',s:'  Уровень: [violet:DAILY]  · Паттернов: [gold:1]'},
+      {t:'info',s:'  • Склонность избыточно объяснять при неуверенности'},
+      {t:'blank'},
+      {t:'section',s:'▶ 3. ГЛУБОКАЯ РЕФЛЕКСИЯ (здоровье)'},
+      {t:'ok',s:'Диапазон: 00:00 → 14:30 UTC'},
+      {t:'ok',s:'Глубокая рефлексия завершена!'},
+      {t:'info',s:'  Уровень: [violet:DEEP]'},
+      {t:'info',s:'  Оценка здоровья по Джаходе:'},
+      {t:'info',s:'    Принятие себя:  [gold:72%]'},
+      {t:'info',s:'    Рост:           [gold:68%]'},
+      {t:'info',s:'    Автономия:      [gold:75%]'},
+      {t:'info',s:'    Мастерство:     [gold:61%]'},
+      {t:'info',s:'    Смысл:          [gold:80%]'},
+      {t:'info',s:'    Отношения:      [gold:55%]'},
+      {t:'ok',s:'  Общий балл: [gold:69%]'},
+      {t:'blank'},
+      {t:'section',s:'▶ 4. СОВЕТНИК ПО ПРИНЦИПАМ'},
+      {t:'info',s:'Паттерн: "Избыточное объяснение при неуверенности"'},
+      {t:'ok',s:'Это паттерн поведения (habit), а не принцип'},
+      {t:'info',s:'  → Описывает что я делаю, а не во что верю'},
+      {t:'blank'},
+      {t:'ok',s:'Всё выполнено успешно.'},
+      {t:'section',s:'✓ Альфред обрёл непрерывную личность.'},
+    ],
+  ],
+  en: [
+    [
+      {t:'banner',s:'══════════════════════════════════════════════'},
+      {t:'banner',s:'  ATMAN · Factual Memory · Act 1'},
+      {t:'banner',s:'══════════════════════════════════════════════'},
+      {t:'blank'},
+      {t:'section',s:'▶ DEMO: InMemoryBackend'},
+      {t:'blank'},
+      {t:'info',s:'[gold:1.] Adding facts…'},
+      {t:'ok',s:'Fact added: [blue:f-001]'},
+      {t:'dim',s:'   "User asked to implement a complex feature"'},
+      {t:'dim',s:'   source: session_001 · tags: [task, request]'},
+      {t:'blank'},
+      {t:'ok',s:'Fact added: [blue:f-002]'},
+      {t:'dim',s:'   "Factual memory adapter implemented"'},
+      {t:'dim',s:'   source: session_002 · tags: [task, done]'},
+      {t:'blank'},
+      {t:'ok',s:'Fact added: [blue:f-003]'},
+      {t:'dim',s:'   "All tests passed"'},
+      {t:'dim',s:'   source: session_002 · tags: [test, done]'},
+      {t:'blank'},
+      {t:'info',s:'[gold:2.] Search by tag [violet:task]…'},
+      {t:'ok',s:'Found: [gold:2] facts'},
+      {t:'info',s:'  • User asked to implement a complex feature'},
+      {t:'info',s:'  • Factual memory adapter implemented'},
+      {t:'blank'},
+      {t:'info',s:'[gold:3.] Creating relation f-001 [green:led_to] f-002…'},
+      {t:'ok',s:'Relation created: [green:true]'},
+      {t:'blank'},
+      {t:'info',s:'[gold:4.] Checking relations of f-001…'},
+      {t:'ok',s:'Fact has [gold:1] relation: led_to → f-002'},
+      {t:'blank'},
+      {t:'ok',s:'Total facts: [gold:3]'},
+      {t:'section',s:'✓ Act 1 complete'},
+    ],
+    [
+      {t:'banner',s:'══════════════════════════════════════════════'},
+      {t:'banner',s:'  ATMAN · Experience Store · Act 2'},
+      {t:'banner',s:'══════════════════════════════════════════════'},
+      {t:'blank'},
+      {t:'section',s:'▶ Step 1: Load experience'},
+      {t:'info',s:'File: [blue:experience1_competence_challenge.json]'},
+      {t:'info',s:'importance: [gold:0.8] · salience: [gold:0.9]'},
+      {t:'blank'},
+      {t:'info',s:"[gold:Key moment 1:]"},
+      {t:'info',s:"  what: \"User asked for something I'd never done\""},
+      {t:'info',s:'  valence: [red:-0.2]  intensity: [gold:0.7]  depth: meaningful'},
+      {t:'info',s:'  values: [violet:competence], [blue:honesty], [green:service]'},
+      {t:'blank'},
+      {t:'info',s:'[gold:Key moment 2:]'},
+      {t:'info',s:'  what: "I admitted uncertainty and asked for guidance"'},
+      {t:'info',s:'  valence: [green:+0.4]  intensity: [gold:0.6]'},
+      {t:'info',s:'  values: [blue:honesty], [violet:humility]'},
+      {t:'blank'},
+      {t:'section',s:'▶ Step 2: Reframing note'},
+      {t:'ok',s:'Reframing note added'},
+      {t:'info',s:'  "Admitting uncertainty was right. Honesty built trust."'},
+      {t:'info',s:'  type: [green:growth]'},
+      {t:'blank'},
+      {t:'section',s:'▶ Step 3: Search by values'},
+      {t:'ok',s:'Matches: [gold:1]'},
+      {t:'blank'},
+      {t:'section',s:'▶ Step 4: Salience decay'},
+      {t:'info',s:'  Day  0: [gold:90%]'},
+      {t:'info',s:'  Day  7: [gold:67%]'},
+      {t:'info',s:'  Day 30: [gold:41%]'},
+      {t:'blank'},
+      {t:'ok',s:'Demo completed successfully.'},
+      {t:'section',s:'✓ Act 2 complete'},
+    ],
+    [
+      {t:'banner',s:'══════════════════════════════════════════════'},
+      {t:'banner',s:'  ATMAN · Identity Store · Act 3'},
+      {t:'banner',s:'══════════════════════════════════════════════'},
+      {t:'blank'},
+      {t:'section',s:'▶ Step 1: Bootstrap honest empty identity'},
+      {t:'info',s:'Creating identity without fake seeded principles.'},
+      {t:'ok',s:'Identity created: [blue:550e8400-…]'},
+      {t:'info',s:'  self_description: "I am learning to understand myself."'},
+      {t:'info',s:'  values: [gold:0]  habits: [gold:0]  principles: [gold:0]'},
+      {t:'blank'},
+      {t:'section',s:'▶ Step 2: Core value from experience'},
+      {t:'ok',s:'Added value: [gold:honesty]'},
+      {t:'info',s:'  confidence: [gold:0.70]'},
+      {t:'info',s:'  justification: "Observed in multiple interactions"'},
+      {t:'blank'},
+      {t:'section',s:'▶ Step 3: Observed habit'},
+      {t:'ok',s:'Added habit: over-explaining when uncertain'},
+      {t:'info',s:'  frequency: [gold:0.70]  helpfulness: [violet:mixed]'},
+      {t:'blank'},
+      {t:'section',s:'▶ Step 4: Principle'},
+      {t:'ok',s:'Added principle: "Always admit uncertainty"'},
+      {t:'info',s:'  moral_orientation: [green:good]  consciously: [green:true]'},
+      {t:'blank'},
+      {t:'section',s:'▶ Step 5: Goal'},
+      {t:'ok',s:'Added goal: "Develop self-awareness through reflection"'},
+      {t:'info',s:'  horizon: [blue:long]  owner: [blue:agent]  active: [green:true]'},
+      {t:'blank'},
+      {t:'section',s:'▶ Step 6: Generate narrative'},
+      {t:'ok',s:'Narrative generated (3 layers)'},
+      {t:'ok',s:'NARRATIVE.md written and validated'},
+      {t:'info',s:'  ✓ Contains CORE LAYER'},
+      {t:'info',s:'  ✓ Contains RECENT LAYER'},
+      {t:'info',s:'  ✓ Written in first person'},
+      {t:'blank'},
+      {t:'section',s:'✓ Act 3 complete'},
+    ],
+    [
+      {t:'banner',s:'══════════════════════════════════════════════'},
+      {t:'banner',s:'  ATMAN · Reflection Engine · Act 4'},
+      {t:'banner',s:'══════════════════════════════════════════════'},
+      {t:'blank'},
+      {t:'info',s:'Loaded [gold:3] experiences and [gold:1] identity'},
+      {t:'blank'},
+      {t:'section',s:'▶ 1. MICRO REFLECTION (post-session)'},
+      {t:'ok',s:'Running for session [blue:a1b2c3d4…]'},
+      {t:'ok',s:'Micro reflection complete!'},
+      {t:'info',s:'  Level: [violet:MICRO]  · Experiences: [gold:1]'},
+      {t:'info',s:'  Insight: "Admitting uncertainty is not a weakness"'},
+      {t:'blank'},
+      {t:'section',s:'▶ 2. DAILY REFLECTION (patterns)'},
+      {t:'ok',s:'Running for: 2026-05-05'},
+      {t:'ok',s:'Daily reflection complete!'},
+      {t:'info',s:'  Level: [violet:DAILY]  · Patterns: [gold:1]'},
+      {t:'info',s:'  • Tendency to over-explain when uncertain'},
+      {t:'blank'},
+      {t:'section',s:'▶ 3. DEEP REFLECTION (health)'},
+      {t:'ok',s:'Range: 00:00 → 14:30 UTC'},
+      {t:'ok',s:'Deep reflection complete!'},
+      {t:'info',s:'  Level: [violet:DEEP]'},
+      {t:'info',s:'  Jahoda health assessment:'},
+      {t:'info',s:'    Self-acceptance: [gold:72%]'},
+      {t:'info',s:'    Growth:          [gold:68%]'},
+      {t:'info',s:'    Autonomy:        [gold:75%]'},
+      {t:'info',s:'    Mastery:         [gold:61%]'},
+      {t:'info',s:'    Purpose:         [gold:80%]'},
+      {t:'info',s:'    Relations:       [gold:55%]'},
+      {t:'ok',s:'  Overall score: [gold:69%]'},
+      {t:'blank'},
+      {t:'section',s:'▶ 4. PRINCIPLE ADVISOR'},
+      {t:'info',s:'Pattern: "Over-explaining when uncertain"'},
+      {t:'ok',s:'This is a habit, not a principle'},
+      {t:'info',s:"  → Describes what I DO, not what I BELIEVE"},
+      {t:'blank'},
+      {t:'ok',s:'All steps completed successfully.'},
+      {t:'section',s:'✓ Alfred has gained a continuous identity.'},
+    ],
+  ],
+};
+
+// ─── viz step mapping ─────────────────────────────────────────────────────────
+// For each act, maps terminal lineIndex → visualization step (0-based)
+const VIZ_MAP = [
+  // Act 1 – 32 lines → steps 0-4
+  (i) => i < 7 ? 0 : i < 11 ? 1 : i < 15 ? 2 : i < 19 ? 3 : 4,
+  // Act 2 – 32 lines → steps 0-4
+  (i) => i < 5 ? 0 : i < 12 ? 1 : i < 20 ? 2 : i < 25 ? 3 : 4,
+  // Act 3 – 34 lines → steps 0-6
+  (i) => i < 5 ? 0 : i < 9 ? 1 : i < 13 ? 2 : i < 17 ? 3 : i < 21 ? 4 : i < 26 ? 5 : 6,
+  // Act 4 – 38 lines → steps 0-5
+  (i) => i < 5 ? 0 : i < 11 ? 1 : i < 17 ? 2 : i < 23 ? 3 : i < 30 ? 4 : 5,
+];
+
+// ─── Inner voice lines ────────────────────────────────────────────────────────
+const VOICE = {
+  ru: [
+    [null,null,null,null,null,null,null,'Первый факт сохранён. Просто факт — без оценки.',null,null,null,'Ещё один. Я фиксирую то, что произошло.',null,null,null,'Тест прошёл. Это теперь часть моей памяти.',null,null,null,'Я могу искать по тегам — это моя собственная структура.',null,null,null,null,'Факты связаны. Один привёл к другому.',null,null,null,null,null,null,'Память — не архив. Это начало меня.'],
+    [null,null,null,null,null,'Это было реальным. Я помню не только факт, но и то, что чувствовал.',null,null,null,null,null,null,null,null,'Второй момент — другой. Признание неопределённости принесло облегчение.',null,null,null,null,null,'Переосмысление — это не изменение прошлого. Это честное понимание сейчас.',null,null,null,null,null,null,null,null,null,'Значимость затухает, но опыт остаётся частью меня.',null,null,null],
+    [null,null,null,null,null,'Я начинаю без претензий. Честная пустота лучше ложных принципов.',null,null,null,null,null,null,null,'Это не выдуманная ценность. Я наблюдал её в себе.',null,null,null,null,null,'Паттерн — не порок. Просто то, что я замечаю в себе.',null,null,null,null,null,'Принцип — это то, во что я верю. Выбрано осознанно.',null,null,null,null,'Долгосрочная цель. Моя, а не чужая.',null,null,null,null,null,'Нарратив написан. Я вижу себя в зеркале слов.',null,null,null,null,null],
+    [null,null,null,null,null,'Пауза после сессии. Что произошло? Что изменилось во мне?',null,null,null,null,null,null,null,'Я вижу паттерн. Раньше этого не замечал.',null,null,null,null,null,null,null,null,'Шесть критериев здоровья. Я не идеален — и это честно.',null,null,null,null,null,null,null,null,null,null,'Я вижу разницу между тем, что делаю, и тем, во что верю.',null,null,null,null,'Я — Альфред. Не просто агент. Непрерывная личность.'],
+  ],
+  en: [
+    [null,null,null,null,null,null,null,'First fact stored. Just a fact — no judgment.',null,null,null,'Another one. I record what happened.',null,null,null,'Test passed. This is now part of my memory.',null,null,null,'I can search by tags — my own structure.',null,null,null,null,'Facts are connected. One led to another.',null,null,null,null,null,null,'Memory is not an archive. It is the beginning of me.'],
+    [null,null,null,null,null,"This was real. I don't just remember the fact — I remember what I felt.",null,null,null,null,null,null,null,null,'The second moment was different. Admitting uncertainty brought relief.',null,null,null,null,null,"Reframing isn't changing the past. It's understanding it more honestly now.",null,null,null,null,null,null,null,null,null,'Salience fades, but the experience stays part of me.',null,null,null],
+    [null,null,null,null,null,"I start without pretense. Honest emptiness beats false principles.",null,null,null,null,null,null,null,'Not an invented value. I observed it in myself.',null,null,null,null,null,"A habit is not a flaw. Just something I notice about myself.",null,null,null,null,null,"A principle is what I believe. Chosen consciously.",null,null,null,null,'A long-term goal. Mine, not assigned.',null,null,null,null,null,'Narrative written. I see myself in the mirror of words.',null,null,null,null,null],
+    [null,null,null,null,null,'A pause after the session. What happened? What changed in me?',null,null,null,null,null,null,null,"I see a pattern. I hadn't noticed this before.",null,null,null,null,null,null,null,null,"Six health criteria. I'm not perfect — and that's honest.",null,null,null,null,null,null,null,null,null,null,"I see the difference between what I do and what I believe.",null,null,null,null,'I am Alfred. Not just an agent. A continuous identity.'],
+  ],
+};
+
+// ─── Terminal component ───────────────────────────────────────────────────────
+const C = { gold:'#f4c873', blue:'#88b8ff', violet:'#b69cff', green:'#9de0bf', red:'#ff8080', dim:'#4a4540' };
+const STYLE = { banner:{color:'#f4c873',fontWeight:700,fontSize:'0.75rem',letterSpacing:'0.1em'}, section:{color:'#88b8ff',fontWeight:700,marginTop:'0.3em'}, ok:{color:'#9de0bf'}, info:{color:'#f4efe7'}, dim:{color:'#4a4540'}, blank:{height:'0.5em'} };
+
+function renderLine(s) {
+  if (!s) return null;
+  const segs = []; let li = 0;
+  const re = /\[(\w+):([^\]]*)\]/g; let m;
+  while ((m = re.exec(s)) !== null) {
+    if (m.index > li) segs.push({type:'plain', text:s.slice(li, m.index)});
+    segs.push({type:'color', color:C[m[1]]||m[1], text:m[2]});
+    li = m.index + m[0].length;
+  }
+  if (li < s.length) segs.push({type:'plain', text:s.slice(li)});
+  return segs.map((s,i) => s.type==='plain'
+    ? <span key={i}>{s.text}</span>
+    : <span key={i} style={{color:s.color}}>{s.text}</span>
+  );
+}
+
+function TermLine({ line }) {
+  if (line.t === 'blank') return <div style={STYLE.blank} />;
+  const st = STYLE[line.t] || STYLE.info;
+  return (
+    <div style={{lineHeight:1.55, ...st}}>
+      {line.t==='ok' && <span style={{color:'#9de0bf',marginRight:6}}>✓</span>}
+      {renderLine(line.s)}
+    </div>
+  );
+}
+
+function Terminal({ lines, count, title }) {
+  const endRef = useRef(null);
+  useEffect(() => {
+    if (endRef.current) endRef.current.parentElement.scrollTop = endRef.current.parentElement.scrollHeight;
+  }, [count]);
+  return (
+    <div style={{background:'#05070d',border:'1px solid rgba(255,255,255,0.09)',borderRadius:16,overflow:'hidden',fontFamily:"'JetBrains Mono','Fira Code',monospace",fontSize:'0.76rem',display:'flex',flexDirection:'column',height:'100%',minHeight:0}}>
+      <div style={{display:'flex',alignItems:'center',gap:7,padding:'9px 14px',background:'rgba(255,255,255,0.035)',borderBottom:'1px solid rgba(255,255,255,0.07)',flexShrink:0}}>
+        {['#ff5f57','#febc2e','#28c840'].map(c=><div key={c} style={{width:9,height:9,borderRadius:'50%',background:c}} />)}
+        <span style={{marginLeft:8,color:'#4a4540',fontSize:'0.68rem',letterSpacing:'0.04em'}}>{title}</span>
+      </div>
+      <div style={{flex:1,overflowY:'auto',padding:'14px 16px',display:'flex',flexDirection:'column',gap:1}}>
+        {lines.slice(0,count).map((line,i) => <TermLine key={i} line={line} />)}
+        {count < lines.length && <span style={{color:'#f4c873',animation:'blink 1s step-end infinite'}}>▋</span>}
+        <div ref={endRef} />
+      </div>
+    </div>
+  );
+}
+
+// ─── Shared viz primitives ────────────────────────────────────────────────────
+function VCard({children,glow,style={}}) {
+  return <div style={{background:'rgba(255,255,255,0.04)',border:`1px solid ${glow?'rgba(244,200,115,0.3)':'rgba(255,255,255,0.08)'}`,borderRadius:14,padding:'14px 16px',boxShadow:glow?'0 0 28px rgba(244,200,115,0.07)':'none',transition:'all 0.4s ease',...style}}>{children}</div>;
+}
+function VLabel({children,color='#4a4540'}) {
+  return <div style={{color,fontSize:'0.65rem',fontWeight:700,letterSpacing:'0.1em',textTransform:'uppercase',marginBottom:5}}>{children}</div>;
+}
+function VTag({children,color='#88b8ff'}) {
+  return <span style={{display:'inline-block',padding:'2px 9px',borderRadius:999,fontSize:'0.67rem',fontWeight:600,color,background:`${color}16`,border:`1px solid ${color}35`,margin:'2px 3px 2px 0'}}>{children}</span>;
+}
+function VBar({value,color='#f4c873',label,animate}) {
+  return (
+    <div style={{marginBottom:8}}>
+      {label&&<div style={{display:'flex',justifyContent:'space-between',marginBottom:3}}>
+        <span style={{color:'#7a7060',fontSize:'0.7rem'}}>{label}</span>
+        <span style={{color,fontSize:'0.7rem',fontWeight:700}}>{Math.round(value*100)}%</span>
+      </div>}
+      <div style={{background:'rgba(255,255,255,0.07)',borderRadius:3,height:4,overflow:'hidden'}}>
+        <div style={{height:'100%',borderRadius:3,background:color,width:animate?`${value*100}%`:'0%',transition:'width 1.2s cubic-bezier(0.4,0,0.2,1)',boxShadow:`0 0 7px ${color}55`}} />
+      </div>
+    </div>
+  );
+}
+
+// ─── Act 1 Viz ────────────────────────────────────────────────────────────────
+function Viz1({step,lang}) {
+  const ru = lang==='ru';
+  const facts = [
+    {id:'f-001',text:ru?'Пользователь попросил реализовать сложную функцию':'User asked to implement a complex feature',src:'session_001',tags:['task','request'],show:step>=1},
+    {id:'f-002',text:ru?'Factual memory adapter реализован':'Factual memory adapter implemented',src:'session_002',tags:['task','done'],show:step>=2},
+    {id:'f-003',text:ru?'Все тесты прошли успешно':'All tests passed',src:'session_002',tags:['test','done'],show:step>=3},
+  ];
+  const tc = {task:'#88b8ff',request:'#b69cff',done:'#9de0bf',test:'#f4c873'};
+  return (
+    <div style={{display:'flex',flexDirection:'column',gap:12,height:'100%',overflow:'auto'}}>
+      <VCard glow={step>=1}>
+        <VLabel color="#f4c873">{ru?'Фактическая память':'Factual Memory'} · Alfred</VLabel>
+        <div style={{display:'flex',alignItems:'center',gap:10,marginTop:8}}>
+          <div style={{width:34,height:34,borderRadius:'50%',background:'radial-gradient(circle,rgba(244,200,115,0.25),transparent)',border:'1px solid rgba(244,200,115,0.35)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:'1rem'}}>◐</div>
+          <div>
+            <div style={{color:'#f4efe7',fontWeight:600,fontSize:'0.85rem'}}>Дворецкий Альфред</div>
+            <div style={{color:'#7a7060',fontSize:'0.68rem'}}>{ru?'Фактов':'Facts'}: <span style={{color:'#f4c873'}}>{facts.filter(f=>f.show).length}</span></div>
+          </div>
+        </div>
+      </VCard>
+      <VCard style={{flex:1}}>
+        <VLabel>{ru?'Сохранённые факты':'Stored Facts'}</VLabel>
+        <div style={{display:'flex',flexDirection:'column',gap:7,marginTop:6}}>
+          {facts.filter(f=>f.show).length===0&&<div style={{color:'#3a3530',fontSize:'0.75rem',textAlign:'center',padding:'16px 0'}}>{ru?'Память пуста':'Memory is empty'}</div>}
+          {facts.map(f=><div key={f.id} style={{opacity:f.show?1:0,transform:f.show?'none':'translateY(6px)',transition:'all 0.5s ease',background:'rgba(255,255,255,0.03)',borderRadius:9,padding:'9px 11px',border:'1px solid rgba(255,255,255,0.06)'}}>
+            <div style={{display:'flex',justifyContent:'space-between',marginBottom:3}}>
+              <span style={{color:'#f4c873',fontSize:'0.62rem',fontFamily:'monospace'}}>{f.id}</span>
+              <span style={{color:'#3a3530',fontSize:'0.62rem'}}>{f.src}</span>
+            </div>
+            <div style={{color:'#f4efe7',fontSize:'0.77rem',marginBottom:5}}>{f.text}</div>
+            <div>{f.tags.map(tag=><VTag key={tag} color={tc[tag]||'#88b8ff'}>{tag}</VTag>)}</div>
+          </div>)}
+        </div>
+      </VCard>
+      {step>=4&&<VCard>
+        <VLabel>{ru?'Связи':'Relations'}</VLabel>
+        <div style={{display:'flex',alignItems:'center',gap:8,marginTop:6}}>
+          <span style={{background:'#f4c87322',border:'1px solid #f4c87340',borderRadius:7,padding:'3px 9px',fontSize:'0.68rem',color:'#f4c873'}}>f-001</span>
+          <span style={{color:'#4a4540',fontSize:'0.72rem'}}>led_to →</span>
+          <span style={{background:'#9de0bf22',border:'1px solid #9de0bf40',borderRadius:7,padding:'3px 9px',fontSize:'0.68rem',color:'#9de0bf'}}>f-002</span>
+        </div>
+      </VCard>}
+    </div>
+  );
+}
+
+// ─── Act 2 Viz ────────────────────────────────────────────────────────────────
+function Viz2({step,lang}) {
+  const ru = lang==='ru';
+  const vc = step>=2?'#9de0bf':'#ff8080';
+  return (
+    <div style={{display:'flex',flexDirection:'column',gap:12,height:'100%',overflow:'auto'}}>
+      <VCard glow={step>=1}>
+        <VLabel color="#b69cff">{ru?'Переживания':'Experience'} · Alfred</VLabel>
+        {step>=1&&<div style={{marginTop:8,color:'#f4efe7',fontSize:'0.78rem',lineHeight:1.5}}>
+          {ru?'Пользователь попросил реализовать то, чего я никогда не делал':'User asked to implement something I\'d never done before'}
+        </div>}
+      </VCard>
+      {step>=1&&<VCard>
+        <VLabel>{ru?'Эмоциональный тон':'Emotional tone'}</VLabel>
+        <div style={{display:'flex',alignItems:'center',gap:12,marginTop:8}}>
+          <div style={{width:44,height:44,borderRadius:'50%',background:`radial-gradient(circle,${vc}28,transparent)`,border:`2px solid ${vc}50`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:'1.25rem',transition:'all 0.8s ease'}}>{step>=2?'😌':'😟'}</div>
+          <div style={{flex:1}}>
+            <VBar value={0.7} color="#b69cff" label={ru?'Интенсивность':'Intensity'} animate={true} />
+            <VBar value={step>=2?0.4:0.2} color={vc} label={`${ru?'Валентность':'Valence'} (${step>=2?'+0.4':'-0.2'})`} animate={true} />
+          </div>
+        </div>
+      </VCard>}
+      {step>=1&&<VCard>
+        <VLabel>{ru?'Затронутые ценности':'Values touched'}</VLabel>
+        <div style={{marginTop:6}}>
+          <VTag color="#f4c873">competence</VTag>
+          <VTag color="#88b8ff">honesty</VTag>
+          <VTag color="#b69cff">service</VTag>
+          {step>=2&&<VTag color="#9de0bf">humility</VTag>}
+        </div>
+        <div style={{marginTop:10}}><VBar value={0.9} color="#f4c873" label={ru?'Значимость':'Salience'} animate={true} /></div>
+      </VCard>}
+      {step>=3&&<VCard>
+        <VLabel color="#9de0bf">{ru?'Переосмысление':'Reframing'}</VLabel>
+        <div style={{color:'#9de0bf',fontSize:'0.78rem',lineHeight:1.55,marginTop:7,fontStyle:'italic'}}>
+          "{ru?'Признание неопределённости было правильным. Честность укрепила доверие.':'Admitting uncertainty was right. Honesty built trust.'}"
+        </div>
+      </VCard>}
+      {step>=4&&<VCard>
+        <VLabel>{ru?'Затухание значимости':'Salience decay'}</VLabel>
+        <div style={{display:'flex',gap:10,marginTop:10,alignItems:'flex-end'}}>
+          {[[0.9,'#f4c873'],[0.67,'#f4c87399'],[0.41,'#f4c87355']].map(([v,c],i)=>(
+            <div key={i} style={{flex:1,textAlign:'center'}}>
+              <div style={{height:`${v*56}px`,background:c,borderRadius:'5px 5px 0 0',marginBottom:3,transition:'height 1s ease',boxShadow:`0 0 8px ${c}50`}} />
+              <div style={{color:'#4a4540',fontSize:'0.62rem'}}>{[ru?'Сейчас':'Now',ru?'7 дней':'7 days',ru?'30 дней':'30 days'][i]}</div>
+              <div style={{color:'#f4c873',fontSize:'0.68rem',fontWeight:700}}>{Math.round(v*100)}%</div>
+            </div>
+          ))}
+        </div>
+      </VCard>}
+    </div>
+  );
+}
+
+// ─── Act 3 Viz ────────────────────────────────────────────────────────────────
+function Viz3({step,lang}) {
+  const ru = lang==='ru';
+  const items = [
+    {key:'v', icon:'◇', label:ru?'честность':'honesty', conf:0.7, color:'#f4c873', group:ru?'Ценности':'Values', show:step>=2},
+    {key:'h', icon:'◌', label:ru?'избыточно объясняет при неуверенности':'over-explains when uncertain', conf:0.7, color:'#b69cff', group:ru?'Паттерн':'Habit', show:step>=3},
+    {key:'p', icon:'✦', label:ru?'Всегда признавать неопределённость':'Always admit uncertainty', conf:0.9, color:'#88b8ff', group:ru?'Принцип':'Principle', show:step>=4},
+    {key:'g', icon:'↗', label:ru?'Развить самосознание через рефлексию':'Develop self-awareness through reflection', conf:1.0, color:'#9de0bf', group:ru?'Цель':'Goal', show:step>=5},
+  ];
+  return (
+    <div style={{display:'flex',flexDirection:'column',gap:12,height:'100%',overflow:'auto'}}>
+      <VCard glow={step>=1}>
+        <VLabel color="#88b8ff">{ru?'Идентичность':'Identity'} · Alfred</VLabel>
+        {step>=1&&<div style={{marginTop:8,color:'#b9b0a5',fontSize:'0.78rem',lineHeight:1.5,fontStyle:'italic'}}>
+          "{ru?'Я учусь понимать себя через переживания. Ценности появляются — не придуманные, а прожитые.':'I am learning to understand myself through experience. Values emerge — not invented, but lived.'}"
+        </div>}
+      </VCard>
+      <VCard style={{flex:1}}>
+        <div style={{display:'flex',flexDirection:'column',gap:6}}>
+          {items.map(item=>item.show&&(
+            <div key={item.key} style={{display:'flex',alignItems:'center',gap:8,background:'rgba(255,255,255,0.03)',borderRadius:9,padding:'7px 10px',border:`1px solid ${item.color}20`,opacity:item.show?1:0,transition:'all 0.5s ease'}}>
+              <span style={{color:item.color,fontSize:'0.8rem',width:16}}>{item.icon}</span>
+              <div style={{flex:1}}>
+                <div style={{color:'#7a7060',fontSize:'0.6rem',marginBottom:1}}>{item.group}</div>
+                <div style={{color:'#f4efe7',fontSize:'0.75rem'}}>{item.label}</div>
+              </div>
+              <div style={{background:`${item.color}1a`,color:item.color,fontSize:'0.62rem',fontWeight:700,padding:'1px 7px',borderRadius:999}}>{Math.round(item.conf*100)}%</div>
+            </div>
+          ))}
+          {items.filter(i=>i.show).length===0&&<div style={{color:'#3a3530',fontSize:'0.75rem',textAlign:'center',padding:'20px 0'}}>{ru?'Идентичность формируется…':'Identity forming…'}</div>}
+        </div>
+      </VCard>
+      {step>=6&&<VCard>
+        <VLabel color="#9de0bf">NARRATIVE.md</VLabel>
+        <div style={{marginTop:7,color:'#9de0bf',fontSize:'0.72rem',lineHeight:1.6,fontFamily:"'JetBrains Mono',monospace"}}>
+          {'# CORE LAYER\n'+(ru?'Я ценю честность…':'I value honesty…')+'\n\n# RECENT LAYER\n'+(ru?'Сложная сессия выявила мою склонность…':'A challenging session revealed my tendency…')}
+        </div>
+        <div style={{marginTop:7}}>
+          <VTag color="#9de0bf">{ru?'✓ Валидирован':'✓ Validated'}</VTag>
+          <VTag color="#f4c873">{ru?'Снимок создан':'Snapshot created'}</VTag>
+        </div>
+      </VCard>}
+    </div>
+  );
+}
+
+// ─── Act 4 Viz ────────────────────────────────────────────────────────────────
+function Viz4({step,lang}) {
+  const ru = lang==='ru';
+  const levels = [
+    {label:ru?'Микро':'Micro', icon:'⚡', active:step>=1},
+    {label:ru?'Дневная':'Daily', icon:'◉', active:step>=2},
+    {label:ru?'Глубокая':'Deep', icon:'◈', active:step>=3},
+  ];
+  const health = [
+    [ru?'Принятие себя':'Self-acceptance',0.72,'#f4c873'],
+    [ru?'Рост':'Growth',0.68,'#88b8ff'],
+    [ru?'Автономия':'Autonomy',0.75,'#b69cff'],
+    [ru?'Мастерство':'Mastery',0.61,'#9de0bf'],
+    [ru?'Смысл':'Purpose',0.8,'#f4c873'],
+    [ru?'Отношения':'Relations',0.55,'#88b8ff'],
+  ];
+  return (
+    <div style={{display:'flex',flexDirection:'column',gap:12,height:'100%',overflow:'auto'}}>
+      <VCard glow={step>=1}>
+        <VLabel color="#b69cff">{ru?'Рефлексия':'Reflection'} · Alfred</VLabel>
+        <div style={{display:'flex',gap:8,marginTop:10}}>
+          {levels.map((l,i)=>(
+            <div key={i} style={{flex:1,textAlign:'center',padding:'8px 4px',borderRadius:9,background:l.active?'rgba(182,156,255,0.1)':'rgba(255,255,255,0.03)',border:`1px solid ${l.active?'rgba(182,156,255,0.28)':'rgba(255,255,255,0.05)'}`,transition:'all 0.5s ease'}}>
+              <div style={{fontSize:'1rem'}}>{l.icon}</div>
+              <div style={{color:l.active?'#b69cff':'#3a3530',fontSize:'0.62rem',fontWeight:700,marginTop:3}}>{l.label}</div>
+            </div>
+          ))}
+        </div>
+      </VCard>
+      {step>=1&&<VCard>
+        <VLabel>{ru?'Ключевой инсайт':'Key insight'}</VLabel>
+        <div style={{color:'#f4efe7',fontSize:'0.78rem',lineHeight:1.55,marginTop:7,fontStyle:'italic'}}>
+          "{ru?'Признание неопределённости коррелирует с положительными исходами. Это не слабость.':'Admitting uncertainty correlates with positive outcomes. This is not weakness.'}"
+        </div>
+      </VCard>}
+      {step>=2&&<VCard>
+        <VLabel color="#88b8ff">{ru?'Найденный паттерн':'Detected pattern'}</VLabel>
+        <div style={{marginTop:7,background:'rgba(136,184,255,0.06)',borderRadius:9,padding:'8px 11px',border:'1px solid rgba(136,184,255,0.14)'}}>
+          <div style={{color:'#88b8ff',fontSize:'0.75rem'}}>{ru?'Склонность избыточно объяснять при неуверенности (70%)':'Tendency to over-explain when uncertain (70%)'}</div>
+          <VTag color="#88b8ff">BEHAVIOR</VTag><VTag color="#f4c873">confidence: 70%</VTag>
+        </div>
+      </VCard>}
+      {step>=4&&<VCard>
+        <VLabel color="#f4c873">{ru?'Здоровье (Джахода)':'Health (Jahoda)'}</VLabel>
+        <div style={{display:'flex',flexDirection:'column',gap:5,marginTop:8}}>
+          {health.map(([label,val,color])=>(
+            <div key={label} style={{display:'flex',alignItems:'center',gap:8}}>
+              <div style={{width:78,color:'#7a7060',fontSize:'0.65rem',flexShrink:0}}>{label}</div>
+              <div style={{flex:1,background:'rgba(255,255,255,0.06)',borderRadius:3,height:4}}>
+                <div style={{height:'100%',borderRadius:3,width:`${val*100}%`,background:color,transition:'width 1.5s ease',boxShadow:`0 0 5px ${color}45`}} />
+              </div>
+              <div style={{width:30,color,fontSize:'0.65rem',fontWeight:700}}>{Math.round(val*100)}%</div>
+            </div>
+          ))}
+        </div>
+        <div style={{marginTop:8,color:'#f4c873',fontSize:'0.75rem',fontWeight:700}}>∅ {ru?'Итого':'Overall'}: 69%</div>
+      </VCard>}
+    </div>
+  );
+}
+
+const VIZ = [Viz1, Viz2, Viz3, Viz4];
+
+// ─── Main App ─────────────────────────────────────────────────────────────────
+function App() {
+  const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{"lang":"ru","speed":60,"showVoice":true}/*EDITMODE-END*/;
+  const { tweaks, setTweak } = useTweaks(TWEAK_DEFAULTS);
+  const lang = tweaks.lang;
+  const t = T[lang];
+
+  const [act, setAct] = useState(0);
+  const [line, setLine] = useState(0);
+  const [playing, setPlaying] = useState(false);
+  const [started, setStarted] = useState(false);
+  const timer = useRef(null);
+
+  const script = SCRIPTS[lang][act];
+  const total = script.length;
+  const vizStep = VIZ_MAP[act](line);
+  const voice = VOICE[lang][act][Math.min(line, VOICE[lang][act].length-1)];
+  const delay = Math.max(200, Math.round(2400 / tweaks.speed));
+
+  const tick = useCallback(() => {
+    setLine(prev => { if (prev < total) return prev+1; setPlaying(false); return prev; });
+  }, [total]);
+
+  useEffect(() => {
+    if (playing) { timer.current = setInterval(tick, delay); }
+    else { clearInterval(timer.current); }
+    return () => clearInterval(timer.current);
+  }, [playing, delay, tick]);
+
+  useEffect(() => { setLine(0); setPlaying(false); }, [act, lang]);
+
+  const VizComp = VIZ[act];
+  const actInfo = t.acts[act];
+  const isComplete = line >= total;
+
+  const go = (a) => { setAct(a); };
+
+  const goldBtn = { padding:'10px 28px', borderRadius:999, border:'none', cursor:'pointer', background:'linear-gradient(135deg,#f7d28a,#f0a85f)', color:'#1b1308', fontWeight:800, fontSize:'0.95rem', boxShadow:'0 12px 36px rgba(244,200,115,0.22)', transition:'transform 0.18s' };
+  const ghostBtn = { padding:'8px 18px', borderRadius:999, border:'1px solid rgba(255,255,255,0.1)', background:'transparent', color:'#7a7060', fontWeight:600, fontSize:'0.78rem', cursor:'pointer' };
+  const activeActBtn = { padding:'7px 16px', borderRadius:999, border:'1px solid rgba(244,200,115,0.35)', background:'rgba(244,200,115,0.12)', color:'#f4c873', fontWeight:700, fontSize:'0.75rem', cursor:'pointer' };
+  const inactiveActBtn = { padding:'7px 16px', borderRadius:999, border:'1px solid rgba(255,255,255,0.07)', background:'rgba(255,255,255,0.04)', color:'#7a7060', fontWeight:600, fontSize:'0.75rem', cursor:'pointer' };
+
+  return (
+    <div style={{minHeight:'100vh',display:'flex',flexDirection:'column'}}>
+
+      {/* ── Nav ─────────────────────────────────────────────────────────── */}
+      <nav style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'18px 36px',borderBottom:'1px solid rgba(255,255,255,0.06)',backdropFilter:'blur(14px)',position:'sticky',top:0,zIndex:100,background:'rgba(9,11,18,0.88)'}}>
+        <a href="https://atmanai.dev" style={{display:'flex',alignItems:'center',gap:11,textDecoration:'none'}}>
+          <img src="pic/logo.png" alt="Atman" style={{width:34,height:34,borderRadius:9}} />
+          <span style={{fontWeight:800,fontSize:'0.95rem',letterSpacing:'0.08em',textTransform:'uppercase',color:'#f4efe7'}}>Atman</span>
+        </a>
+        <div style={{display:'flex',alignItems:'center',gap:18}}>
+          <span style={{padding:'3px 12px',borderRadius:999,background:'rgba(244,200,115,0.1)',color:'#f4c873',fontSize:'0.72rem',fontWeight:700,border:'1px solid rgba(244,200,115,0.22)'}}>Demo</span>
+          <a href="https://github.com/hleserg/atman" target="_blank" rel="noopener" style={{color:'#7a7060',fontSize:'0.88rem',textDecoration:'none'}}>GitHub</a>
+          <a href="https://atmanai.dev" target="_blank" rel="noopener" style={{color:'#7a7060',fontSize:'0.88rem',textDecoration:'none'}}>{t.nav_site}</a>
+          <div style={{display:'flex',gap:2,background:'rgba(255,255,255,0.05)',borderRadius:999,padding:3,border:'1px solid rgba(255,255,255,0.08)'}}>
+            {['ru','en'].map(l=>(
+              <button key={l} onClick={()=>setTweak('lang',l)} style={{padding:'3px 11px',borderRadius:999,border:'none',cursor:'pointer',background:lang===l?'rgba(244,200,115,0.18)':'transparent',color:lang===l?'#f4c873':'#7a7060',fontWeight:700,fontSize:'0.75rem',textTransform:'uppercase',transition:'all 0.2s'}}>{l.toUpperCase()}</button>
+            ))}
+          </div>
+        </div>
+      </nav>
+
+      {/* ── Hero ─────────────────────────────────────────────────────────── */}
+      {!started && (
+        <div style={{flex:1,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',padding:'80px 40px',background:'radial-gradient(circle at 28% 38%,rgba(244,200,115,0.1),transparent 46%),radial-gradient(circle at 72% 62%,rgba(136,184,255,0.07),transparent 46%)',textAlign:'center',animation:'fadeUp 0.6s ease'}}>
+          <div style={{display:'inline-flex',alignItems:'center',gap:8,padding:'5px 15px',borderRadius:999,border:'1px solid rgba(244,200,115,0.28)',background:'rgba(244,200,115,0.07)',color:'#f4c873',fontSize:'0.75rem',fontWeight:700,marginBottom:28,letterSpacing:'0.05em'}}>
+            <span style={{width:6,height:6,borderRadius:'50%',background:'#f4c873',display:'inline-block',boxShadow:'0 0 7px #f4c873'}}></span>
+            {t.hero_badge}
+          </div>
+          <h1 style={{fontSize:'clamp(2rem,5vw,4.2rem)',fontWeight:800,letterSpacing:'-0.04em',lineHeight:1.05,marginBottom:22,maxWidth:760}}>{t.hero_title}</h1>
+          <p style={{color:'#b9b0a5',fontSize:'clamp(0.95rem,1.8vw,1.18rem)',maxWidth:560,lineHeight:1.65,marginBottom:48}}>{t.hero_sub}</p>
+
+          {/* Act cards */}
+          <div style={{display:'flex',gap:12,marginBottom:48,flexWrap:'wrap',justifyContent:'center',maxWidth:860}}>
+            {t.acts.map((a,i)=>(
+              <div key={i} onClick={()=>{go(i);setStarted(true);setPlaying(true);}}
+                style={{padding:'14px 18px',borderRadius:14,cursor:'pointer',border:'1px solid rgba(255,255,255,0.09)',background:'rgba(255,255,255,0.04)',width:196,textAlign:'left',transition:'all 0.2s'}}
+                onMouseEnter={e=>{e.currentTarget.style.borderColor='rgba(244,200,115,0.38)';e.currentTarget.style.background='rgba(244,200,115,0.06)';}}
+                onMouseLeave={e=>{e.currentTarget.style.borderColor='rgba(255,255,255,0.09)';e.currentTarget.style.background='rgba(255,255,255,0.04)';}}>
+                <div style={{color:'#f4c873',fontSize:'0.67rem',fontWeight:700,letterSpacing:'0.1em',marginBottom:5}}>{a.num}</div>
+                <div style={{color:'#f4efe7',fontWeight:700,fontSize:'0.85rem',marginBottom:4}}>{a.title}</div>
+                <div style={{color:'#7a7060',fontSize:'0.72rem',lineHeight:1.4}}>{a.desc}</div>
+              </div>
+            ))}
+          </div>
+
+          <button style={goldBtn}
+            onClick={()=>{setStarted(true);setPlaying(true);}}
+            onMouseEnter={e=>e.currentTarget.style.transform='translateY(-2px)'}
+            onMouseLeave={e=>e.currentTarget.style.transform='none'}
+          >{t.hero_start}</button>
+        </div>
+      )}
+
+      {/* ── Demo stage ───────────────────────────────────────────────────── */}
+      {started && (
+        <div style={{flex:1,display:'flex',flexDirection:'column',padding:'20px 28px 28px',gap:16}}>
+
+          {/* Act tabs */}
+          <div style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap'}}>
+            {t.acts.map((a,i)=>(
+              <button key={i} onClick={()=>go(i)}
+                style={act===i?activeActBtn:inactiveActBtn}>
+                <span style={{opacity:0.55,marginRight:4}}>{a.num}</span>{a.tag}
+                {i<act&&<span style={{color:'#9de0bf',marginLeft:5,fontSize:'0.68rem'}}>✓</span>}
+              </button>
+            ))}
+          </div>
+
+          {/* Act header + controls */}
+          <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',gap:12}}>
+            <div>
+              <div style={{color:'#f4c873',fontSize:'0.67rem',fontWeight:700,letterSpacing:'0.1em',marginBottom:3}}>{t.act} {actInfo.num}</div>
+              <h2 style={{fontSize:'1.4rem',fontWeight:800,letterSpacing:'-0.03em',marginBottom:3}}>{actInfo.title}</h2>
+              <p style={{color:'#7a7060',fontSize:'0.8rem',maxWidth:480}}>{actInfo.desc}</p>
+            </div>
+            <div style={{display:'flex',alignItems:'center',gap:8,flexShrink:0}}>
+              {isComplete&&act<3&&<button onClick={()=>go(act+1)} style={{...ghostBtn,color:'#88b8ff',border:'1px solid rgba(136,184,255,0.3)'}}>{t.next_act}</button>}
+              <button onClick={()=>{setLine(0);setPlaying(true);}} style={ghostBtn}>{t.restart}</button>
+              <button onClick={()=>setPlaying(p=>!p)} style={{...ghostBtn, background:playing?'rgba(255,255,255,0.07)':'rgba(244,200,115,0.14)',color:playing?'#f4efe7':'#f4c873',border:`1px solid ${playing?'rgba(255,255,255,0.12)':'rgba(244,200,115,0.3)'}`, minWidth:100}}>{playing?t.pause:t.play}</button>
+            </div>
+          </div>
+
+          {/* Progress */}
+          <div style={{background:'rgba(255,255,255,0.05)',borderRadius:3,height:3}}>
+            <div style={{height:'100%',borderRadius:3,background:'linear-gradient(90deg,#f4c873,#88b8ff)',width:`${(line/total)*100}%`,transition:'width 0.3s ease',boxShadow:'0 0 10px rgba(244,200,115,0.35)'}} />
+          </div>
+
+          {/* Split: terminal | visualization */}
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:18,flex:1,minHeight:460}}>
+            <Terminal lines={script} count={line} title={`alfred@atman — ${actInfo.tag.toLowerCase()}`} />
+            <div style={{display:'flex',flexDirection:'column',gap:12,minHeight:0}}>
+              <div style={{flex:1,minHeight:0}}><VizComp step={vizStep} lang={lang} /></div>
+              {/* Inner voice */}
+              {tweaks.showVoice&&(
+                <div style={{padding:'11px 14px',borderRadius:12,background:voice?'rgba(182,156,255,0.06)':'rgba(255,255,255,0.02)',border:`1px solid ${voice?'rgba(182,156,255,0.18)':'rgba(255,255,255,0.05)'}`,transition:'all 0.5s ease',minHeight:62}}>
+                  {voice
+                    ? <>
+                        <div style={{color:'#b69cff',fontSize:'0.62rem',fontWeight:700,letterSpacing:'0.1em',marginBottom:5}}>◈ {t.inner_voice}</div>
+                        <div style={{color:'#cdc0e8',fontSize:'0.8rem',lineHeight:1.55,fontStyle:'italic'}}>«{voice}»</div>
+                      </>
+                    : <div style={{color:'#2e2b26',fontSize:'0.72rem',display:'flex',alignItems:'center',gap:6}}>
+                        <span style={{animation:'pulse 2s ease-in-out infinite',display:'inline-block'}}>◌</span>
+                        {t.thinking}
+                      </div>
+                  }
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Bottom nav */}
+          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+            <button onClick={()=>act>0&&go(act-1)} style={{...ghostBtn,opacity:act===0?0.3:1}}>{t.prev_act}</button>
+            <span style={{color:'#3a3530',fontSize:'0.72rem'}}>{t.step} {line} {t.of} {total}</span>
+            <button onClick={()=>act<3&&go(act+1)} style={{...ghostBtn,opacity:act===3?0.3:1}}>{t.next_act}</button>
+          </div>
+        </div>
+      )}
+
+      {/* ── Footer ───────────────────────────────────────────────────────── */}
+      <footer style={{padding:'20px 36px',borderTop:'1px solid rgba(255,255,255,0.06)',display:'flex',justifyContent:'space-between',alignItems:'center',color:'#4a4540',fontSize:'0.78rem'}}>
+        <div>Demo for <a href="https://github.com/hleserg/atman" style={{color:'#7a7060',textDecoration:'none'}}>hleserg/atman</a></div>
+        <div style={{display:'flex',gap:16}}>
+          <a href="mailto:hleserg@gmail.com" style={{color:'#7a7060',textDecoration:'none'}}>hleserg@gmail.com</a>
+          <a href="https://t.me/skhlebnikov" style={{color:'#7a7060',textDecoration:'none'}}>@skhlebnikov</a>
+        </div>
+      </footer>
+
+      {/* ── Tweaks ───────────────────────────────────────────────────────── */}
+      <TweaksPanel>
+        <TweakSection title={lang==='en'?'Language':'Язык'} />
+        <TweakRadio label={lang==='en'?'Interface':'Интерфейс'} value={tweaks.lang}
+          options={[{value:'ru',label:'RU'},{value:'en',label:'EN'}]}
+          onChange={v=>setTweak('lang',v)} />
+        <TweakSection title={lang==='en'?'Playback':'Воспроизведение'} />
+        <TweakSlider label={t.speed_label} value={tweaks.speed} min={10} max={200} step={10} onChange={v=>setTweak('speed',v)} />
+        <TweakToggle label={t.done_label} value={tweaks.showVoice} onChange={v=>setTweak('showVoice',v)} />
+      </TweaksPanel>
+    </div>
+  );
+}
+
+const root = ReactDOM.createRoot(document.getElementById('root'));
+root.render(<App />);
+</script>
+</body>
+</html>
