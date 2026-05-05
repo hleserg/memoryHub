@@ -5,13 +5,14 @@ Tests session lifecycle, key moment recording, and experience creation.
 """
 
 import threading
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from unittest.mock import patch
 from uuid import uuid4
 
 import pytest
 
 from atman.adapters.storage.file_state_store import FileStateStore
+from atman.core.clock_impl import FrozenClock
 from atman.core.models import (
     ActiveSessionSummary,
     CoreValue,
@@ -41,6 +42,12 @@ from atman.core.services.session_manager import deterministic_session_experience
 def temp_storage(tmp_path):
     """Create temporary file storage."""
     return FileStateStore(workspace=tmp_path / "session_test")
+
+
+@pytest.fixture
+def frozen_clock():
+    """Frozen clock for deterministic timestamps."""
+    return FrozenClock(datetime(2024, 1, 15, 12, 0, 0, tzinfo=UTC))
 
 
 @pytest.fixture
@@ -83,11 +90,11 @@ def test_narrative(test_identity):
 
 
 @pytest.fixture
-def session_manager(temp_storage, test_identity, test_narrative):
-    """Create session manager with test data."""
+def session_manager(temp_storage, test_identity, test_narrative, frozen_clock):
+    """Create session manager with test data and frozen clock."""
     temp_storage.save_identity(test_identity)
     temp_storage.save_narrative(test_narrative)
-    return SessionManager(temp_storage), test_identity.id
+    return SessionManager(temp_storage, clock=frozen_clock), test_identity.id
 
 
 def test_start_session_returns_context_with_identity_and_narrative(session_manager):
@@ -293,22 +300,40 @@ def test_record_event_does_not_mutate_caller_event(session_manager):
     assert active.events[0].session_id == context.session_id
 
 
-def test_key_moment_when_uses_recorded_at_before_finish(session_manager):
-    """KeyMoment.when follows KeyMomentInput.recorded_at (temporal order vs session end)."""
-    manager, agent_id = session_manager
-    context = manager.start_session(agent_id)
-    past = datetime.now(UTC) - timedelta(hours=1)
+def test_key_moment_when_uses_recorded_at_before_finish(
+    temp_storage, test_identity, test_narrative
+):
+    """KeyMoment.when follows Clock time when recorded (temporal consistency)."""
+    temp_storage.save_identity(test_identity)
+    temp_storage.save_narrative(test_narrative)
+
+    # Start session with clock at T0
+    clock_t0 = FrozenClock(datetime(2024, 1, 15, 12, 0, 0, tzinfo=UTC))
+    manager_t0 = SessionManager(temp_storage, clock=clock_t0)
+    context = manager_t0.start_session(test_identity.id)
+
+    # Record key moment at T0
     moment = KeyMomentInput(
         what_happened="Earlier moment",
-        recorded_at=past,
         emotional_valence=0.1,
         emotional_intensity=0.5,
         depth=EmotionalDepth.SURFACE,
         why_it_matters="Order matters",
     )
-    manager.record_key_moment(context.session_id, moment)
-    result = manager.finish_session(context.session_id)
-    assert result.key_moments[0].when == past
+    manager_t0.record_key_moment(context.session_id, moment)
+
+    # Finish session at T1 (later time) using new clock
+    clock_t1 = FrozenClock(datetime(2024, 1, 15, 13, 0, 0, tzinfo=UTC))
+    # Transfer active session to new manager with advanced clock
+    manager_t1 = SessionManager(temp_storage, clock=clock_t1)
+    manager_t1._active_sessions = manager_t0._active_sessions
+
+    result = manager_t1.finish_session(context.session_id)
+
+    # Key moment timestamp should be from T0 (when recorded)
+    assert result.key_moments[0].when == clock_t0.now()
+    # Finish timestamp should be from T1 (later)
+    assert result.finished_at == clock_t1.now()
     assert result.key_moments[0].when < result.finished_at
 
 

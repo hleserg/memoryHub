@@ -18,9 +18,9 @@ Critical design principle:
 from __future__ import annotations
 
 import threading
-from datetime import UTC, datetime
 from uuid import UUID, uuid5
 
+from atman.core.clock_impl import SystemClock
 from atman.core.exceptions import (
     SessionAlreadyFinishedError,
     SessionNotFoundError,
@@ -36,6 +36,7 @@ from atman.core.models import (
     SessionExperience,
     SessionResult,
 )
+from atman.core.ports.clock import ClockPort
 from atman.core.ports.state_store import StateStore
 
 # Cap for eigenstate list fields; order is insertion-derived until salience ranking exists.
@@ -63,16 +64,23 @@ class SessionManager:
     - finish_session: creates SessionExperience + Eigenstate
     """
 
-    def __init__(self, state_store: StateStore, max_active_sessions: int | None = None) -> None:
+    def __init__(
+        self,
+        state_store: StateStore,
+        max_active_sessions: int | None = None,
+        clock: ClockPort | None = None,
+    ) -> None:
         """
         Initialize Session Manager.
 
         Args:
             state_store: Storage for identity, narrative, experience, eigenstate
             max_active_sessions: If set, ``start_session`` raises when this many sessions are active.
+            clock: Clock for reproducible timestamps (defaults to SystemClock)
         """
         self._state_store = state_store
         self._max_active_sessions = max_active_sessions
+        self._clock = clock or SystemClock()
         self._active_sessions: dict[UUID, SessionResult] = {}
         self._lock = threading.Lock()
 
@@ -212,7 +220,9 @@ class SessionManager:
                     "If coloring couldn't be captured, set incomplete_coloring=True"
                 )
 
-            key_moment = moment.to_key_moment()
+            # Fix recorded_at to Clock time for reproducible timestamps in tests
+            moment_with_time = moment.model_copy(update={"recorded_at": self._clock.now()})
+            key_moment = moment_with_time.to_key_moment()
 
             if moment.incomplete_coloring:
                 session_result.incomplete_coloring = True
@@ -277,7 +287,7 @@ class SessionManager:
             # If persistence fails, we rollback this flag in except
             session_result.is_finished = True
 
-        session_result.finished_at = datetime.now(UTC)
+        session_result.finished_at = self._clock.now()
         session_result.overall_emotional_tone = overall_emotional_tone
         session_result.key_insight = key_insight
         session_result.alignment_check = alignment_check
