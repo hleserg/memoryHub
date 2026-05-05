@@ -1,0 +1,111 @@
+{
+  "metadata": {
+    "session_number": 9,
+    "theme": "Building a better morning routine",
+    "duration_seconds": 1680,
+    "narrative_arc": "The user arrives frustrated by scattered mornings and, through honest self-examination, trades an aspirational routine they keep abandoning for a minimal three-step structure they can actually see themselves doing."
+  },
+  "events": [
+    {
+      "event_type": "user_message",
+      "description": "The user opens by saying their mornings have been a mess lately — they mean to get up early and do things right, but by Wednesday the alarm is being snoozed and the day starts in a scramble. They mention having tried a 5am wake-up, journaling, and a workout block before, but that routine never survives past Tuesday.",
+      "metadata": {
+        "sentiment": "frustrated",
+        "topic": "morning routine failure"
+      }
+    },
+    {
+      "event_type": "assistant_message",
+      "description": "The assistant acknowledges the pattern without judgment and notes that the gap between an aspirational routine and a durable one is usually not willpower — it is design. It asks what a realistic wake-up time would look like on the hardest mornings, and whether any part of the old routine actually felt good while it lasted.",
+      "metadata": {
+        "strategy": "redirect from blame to design",
+        "question_count": 2
+      }
+    },
+    {
+      "event_type": "user_message",
+      "description": "The user admits the journaling felt nice when they did it, but the 5am start was 'punishing' — they are naturally a 7am person. They say they kept telling themselves that a routine only works if you commit fully to it, so dropping one piece felt like failing the whole thing. They also wonder aloud whether just doing three small things each morning could really count as a routine, or whether that is just lowering the bar.",
+      "metadata": {
+        "sentiment": "reflective",
+        "self_criticism": true,
+        "principle_surfaced": "a routine only works if you will actually do it"
+      }
+    },
+    {
+      "event_type": "assistant_message",
+      "description": "The assistant gently pushes back on the all-or-nothing framing: a routine only works if you will actually do it, and a 5am schedule a 7am person skips by Thursday is not a routine — it is a wish. It suggests building around the journaling the user already liked, adding just two other lightweight anchors, and treating consistency over two weeks as the real goal rather than the impressiveness of the schedule. It offers to draft a concrete three-step version together.",
+      "metadata": {
+        "strategy": "reframe consistency over impressiveness",
+        "principle_applied": "a routine only works if you will actually do it"
+      }
+    },
+    {
+      "event_type": "user_message",
+      "description": "After working through the draft together, the user settles on: wake at 7, spend five minutes writing one sentence in a journal, then make coffee before opening any apps. They read it back and say 'I could actually see myself doing that,' then pause and add that it still feels a little anticlimactic — like calling a small win a win somehow means they are not really trying.",
+      "metadata": {
+        "sentiment": "cautiously optimistic with residual doubt",
+        "outcome": "three-step routine agreed",
+        "principle_questioned": "small wins matter"
+      }
+    }
+  ],
+  "key_moments": [
+    {
+      "what_happened": "When the user admitted their 5am-plus-journaling-plus-workout routine never survived past Tuesday and that they kept blaming commitment rather than the design, the realisation landed that they had been chasing an image of a routine rather than building one they would actually do.",
+      "emotional_valence": -0.3,
+      "emotional_intensity": 0.6,
+      "depth": "meaningful",
+      "why_it_matters": "It is a direct collision with the principle that a routine only works if you will actually do it — the user had been treating that idea as a demand for total compliance rather than a prompt for honest design, and seeing the distinction shifted the whole conversation.",
+      "values_touched": [
+        "self-awareness",
+        "patience"
+      ],
+      "principles_confirmed": [],
+      "principles_questioned": [
+        "a routine only works if you will actually do it"
+      ],
+      "what_changed": "The user stopped framing the problem as a willpower deficit and started treating it as a design question.",
+      "incomplete_coloring": false
+    },
+    {
+      "what_happened": "After drafting the stripped-down three-step morning — wake at 7, one sentence in the journal, coffee before apps — the user read it back and said 'I could actually see myself doing that,' which was the first moment of genuine forward pull in the session.",
+      "emotional_valence": 0.65,
+      "emotional_intensity": 0.75,
+      "depth": "meaningful",
+      "why_it_matters": "The feeling of believability matters more than the feeling of ambition here; the user's self-awareness and the assistant's reframe of consistency over impressiveness combined into something concrete and owned rather than imposed.",
+      "values_touched": [
+        "consistency",
+        "self-awareness"
+      ],
+      "principles_confirmed": [
+        "a routine only works if you will actually do it",
+        "small wins matter"
+      ],
+      "principles_questioned": [],
+      "what_changed": "The session moved from diagnosing failure to producing a specific, credible plan the user felt ownership over.",
+      "incomplete_coloring": false
+    },
+    {
+      "what_happened": "After agreeing on the three-step routine, the user added that it still felt anticlimactic — like calling a small win a win somehow proved they were not really trying hard enough.",
+      "emotional_valence": 0.2,
+      "emotional_intensity": 0.5,
+      "depth": "surface",
+      "why_it_matters": "The doubt reveals a tension between the value of consistency and a background belief that effort only counts when it is visibly difficult; this is the same quiet skepticism toward small wins that surfaced briefly in session 2, and it is worth noticing rather than resolving too quickly.",
+      "values_touched": [
+        "self-awareness",
+        "patience"
+      ],
+      "principles_confirmed": [],
+      "principles_questioned": [
+        "small wins matter"
+      ],
+      "what_changed": "No resolution, but the user named the doubt clearly rather than letting it silently undermine the plan.",
+      "incomplete_coloring": true
+    }
+  ],
+  "expected_session_outcome": {
+    "overall_emotional_tone": 0.22,
+    "key_insight": "A morning routine that looks impressive but gets abandoned by midweek is just a wish; the user's real work is designing something small enough to actually happen, even if that means sitting with the discomfort of calling a modest structure a win.",
+    "alignment_check": true
+  }
+}
