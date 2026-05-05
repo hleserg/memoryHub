@@ -850,6 +850,47 @@ def test_get_active_session_returns_detached_snapshot(session_manager):
     assert len(active1.events) == 0
 
 
+def test_finish_session_retry_skips_duplicate_narrative_after_post_narrative_failure(
+    session_manager, temp_storage
+):
+    """If narrative persisted then a simulated failure fires, retry must not append twice."""
+    manager, agent_id = session_manager
+    context = manager.start_session(agent_id)
+    manager.record_key_moment(
+        context.session_id,
+        KeyMomentInput(
+            what_happened="narrative idempotency",
+            emotional_valence=0.2,
+            emotional_intensity=0.3,
+            depth=EmotionalDepth.SURFACE,
+            why_it_matters="x",
+            values_touched=["honesty"],
+        ),
+    )
+    insight = "Unique insight for idempotent narrative retry"
+    real_save = manager._save_session_narrative_update
+    first = {"done": False}
+
+    def flaky_save(sr: SessionResult) -> None:
+        real_save(sr)
+        if not first["done"]:
+            first["done"] = True
+            raise RuntimeError("post-narrative failure")
+
+    with (
+        patch.object(manager, "_save_session_narrative_update", side_effect=flaky_save),
+        pytest.raises(RuntimeError, match="post-narrative"),
+    ):
+        manager.finish_session(context.session_id, key_insight=insight)
+
+    assert manager.get_active_session(context.session_id) is not None
+    manager.finish_session(context.session_id, key_insight=insight)
+
+    narrative = temp_storage.load_narrative(agent_id)
+    assert narrative is not None
+    assert narrative.recent_layer.content.count(insight) == 1
+
+
 def test_finish_session_retry_after_eigenstate_failure_does_not_duplicate_experience(
     session_manager, temp_storage
 ):

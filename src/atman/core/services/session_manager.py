@@ -48,6 +48,11 @@ _SESSION_EXPERIENCE_ID_NS = UUID("018e5a2b-7c3d-7b2a-9f01-2a3b4c5d6e7f")
 _NARRATIVE_SAVE_RETRIES = 5
 
 
+def _session_finish_marker(session_id: UUID) -> str:
+    """Hidden marker so a successful narrative write is not duplicated on finish retry."""
+    return f"<!-- atman:session-finish:{session_id} -->"
+
+
 def deterministic_session_experience_id(session_id: UUID) -> UUID:
     """Return the canonical ExperienceRecord id for a finished session."""
     return uuid5(_SESSION_EXPERIENCE_ID_NS, str(session_id))
@@ -336,14 +341,14 @@ class SessionManager:
         with self._lock:
             self._active_sessions.pop(session_id, None)
 
-        return session_result
+        return session_result.model_copy(deep=True)
 
     def _save_session_narrative_update(self, session_result: SessionResult) -> None:
         """Append session summary to recent narrative with optimistic concurrency."""
         if session_result.identity_id is None:
             return
         identity_id = session_result.identity_id
-        update_text = self._build_narrative_update(session_result)
+        marker = _session_finish_marker(session_result.session_id)
         last_err: BaseException | None = None
         for _ in range(_NARRATIVE_SAVE_RETRIES):
             narrative = self._state_store.load_narrative(identity_id)
@@ -353,6 +358,9 @@ class SessionManager:
                     "session experience/eigenstate saved but narrative not updated. "
                     "This breaks the session lifecycle contract."
                 )
+            if marker in narrative.recent_layer.content:
+                return
+            update_text = f"{self._build_narrative_update(session_result)}\n{marker}"
             expected_at = narrative.updated_at
             narrative.update_recent_layer(update_text)
             try:
@@ -436,11 +444,12 @@ class SessionManager:
         n_events = len(session_result.events)
         cognitive_load = min(1.0, float(n_events) / 10.0)
 
-        open_threads = [
+        open_threads_raw = [
             e.description
             for e in session_result.events
             if e.event_type in ("unfinished", "open_question", "pending")
         ]
+        open_threads = list(dict.fromkeys(open_threads_raw))
 
         dominant_flat = [
             value for moment in session_result.key_moments for value in moment.values_touched
