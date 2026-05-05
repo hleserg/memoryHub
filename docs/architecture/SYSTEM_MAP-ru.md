@@ -331,6 +331,7 @@ PrincipleRevisionAdvisor — пересмотр принципов
 | `28a2285` | Артефакты GitHub Pages | закрыто |
 | `b530f36` | Сохранение связей в `FileBackend` — добавлен regression-тест | покрыто (`tests/test_file_backend.py`) |
 | `e48a060`, `83df039` | Правки ruff lint/format/type | в основном закрыто |
+| `6a9f28f` | `SessionManager.finish_session` заменял recent narrative вместо добавления summary, теряя контекст | покрыто (`tests/test_session_manager.py::test_finish_session_appends_to_recent_narrative_without_erasing_existing_context`) |
 
 ### 5.2. Из инспекции кода
 

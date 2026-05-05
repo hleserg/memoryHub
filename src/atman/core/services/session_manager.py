@@ -361,8 +361,12 @@ class SessionManager:
             if marker in narrative.recent_layer.content:
                 return
             update_text = f"{self._build_narrative_update(session_result)}\n{marker}"
+            existing_content = narrative.recent_layer.content.strip()
+            next_content = (
+                f"{existing_content}\n\n{update_text}" if existing_content else update_text
+            )
             expected_at = narrative.updated_at
-            narrative.update_recent_layer(update_text)
+            narrative.update_recent_layer(next_content)
             try:
                 self._state_store.save_narrative(
                     narrative,

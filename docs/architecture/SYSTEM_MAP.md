@@ -328,6 +328,7 @@ Files: `docs/features/session-manager/`, `src/demo_session_manager.py`, `tests/t
 | `28a2285` | GitHub Pages artifacts | closed |
 | `b530f36` | Relation persistence in `FileBackend` — regression test added | covered (`tests/test_file_backend.py`) |
 | `e48a060`, `83df039` | ruff lint/format/type fixes | mostly closed |
+| `6a9f28f` | Session Manager recent narrative update replaced the whole recent layer instead of appending; regression test added | covered (`tests/test_session_manager.py::test_finish_session_appends_to_recent_narrative_without_erasing_existing_context`) |
 
 ### 5.2. From code inspection
 

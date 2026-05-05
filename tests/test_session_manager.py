@@ -821,6 +821,7 @@ def test_finish_session_updates_recent_narrative(session_manager, temp_storage):
 
     # Recent layer should be updated
     assert recent_content_after != recent_content_before
+    assert recent_content_before in recent_content_after
     assert "Successfully delivered complex work" in recent_content_after
     assert "competence" in recent_content_after or "growth" in recent_content_after
     assert "positive" in recent_content_after  # Overall tone was 0.6
@@ -829,6 +830,43 @@ def test_finish_session_updates_recent_narrative(session_manager, temp_storage):
     context2 = manager.start_session(agent_id)
     assert context2.narrative.recent_layer.content == recent_content_after
     assert "Successfully delivered complex work" in context2.narrative.recent_layer.content
+
+
+def test_finish_session_appends_to_recent_narrative_without_erasing_existing_context(
+    session_manager, temp_storage
+):
+    """Session finish must not discard recent narrative context from earlier lifecycle steps."""
+    manager, agent_id = session_manager
+    context = manager.start_session(agent_id)
+    existing_context = "Recent narrative"
+
+    manager.record_key_moment(
+        context.session_id,
+        KeyMomentInput(
+            what_happened="Preserve narrative context",
+            emotional_valence=0.4,
+            emotional_intensity=0.5,
+            depth=EmotionalDepth.MEANINGFUL,
+            why_it_matters="Losing this layer loses continuity",
+            values_touched=["continuity"],
+        ),
+    )
+
+    manager.finish_session(
+        session_id=context.session_id,
+        overall_emotional_tone=0.4,
+        key_insight="Added new session summary",
+    )
+
+    narrative_after = temp_storage.load_narrative(agent_id)
+    assert narrative_after is not None
+    recent_content_after = narrative_after.recent_layer.content
+
+    assert existing_context in recent_content_after
+    assert "Added new session summary" in recent_content_after
+    assert recent_content_after.index(existing_context) < recent_content_after.index(
+        "Added new session summary"
+    )
 
 
 def test_get_active_session_returns_detached_snapshot(session_manager):
