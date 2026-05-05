@@ -7,7 +7,7 @@ Default: 20 English + 20 Russian sessions under ``en/`` and ``ru/`` (parallel AP
 
 Usage::
 
-    python -m e2e.generate_fixtures --model claude-sonnet-4-6
+    python -m e2e.generate_fixtures --model claude-haiku-4-5
     python -m e2e.generate_fixtures --count-en 5 --count-ru 5 --no-parallel-locales
     python -m e2e.generate_fixtures --count 5   # legacy: English only → en/
 
@@ -22,6 +22,7 @@ import sys
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
+from e2e.llm import CorpusPolicy
 from e2e.models import SessionFixtureDocument
 from e2e.prompts import Locale
 
@@ -31,7 +32,13 @@ def _repo_root() -> Path:
 
 
 def _generate_one_locale(
-    model: str, count: int, locale: Locale, output_dir: Path
+    model: str,
+    count: int,
+    locale: Locale,
+    output_dir: Path,
+    *,
+    corpus_policy: CorpusPolicy,
+    max_corpus_regen: int,
 ) -> tuple[Locale, list[SessionFixtureDocument]]:
     from e2e.llm import anthropic_client, generate_corpus_with_retries
 
@@ -39,7 +46,15 @@ def _generate_one_locale(
         return locale, []
     print(f"[{locale}] start generation for {count} sessions", flush=True)
     client = anthropic_client()
-    fixtures = generate_corpus_with_retries(client, model, count, locale, output_dir=output_dir)
+    fixtures = generate_corpus_with_retries(
+        client,
+        model,
+        count,
+        locale,
+        output_dir=output_dir,
+        corpus_policy=corpus_policy,
+        max_corpus_regen_sessions=max_corpus_regen,
+    )
     print(f"[{locale}] generation complete", flush=True)
     return locale, fixtures
 
@@ -48,8 +63,8 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Generate session fixtures via LLM (issue #141).")
     parser.add_argument(
         "--model",
-        default="claude-sonnet-4-6",
-        help="Anthropic model id (default: claude-sonnet-4-6)",
+        default="claude-haiku-4-5",
+        help="Anthropic model id (default: claude-haiku-4-5)",
     )
     parser.add_argument(
         "--count-en",
@@ -84,6 +99,21 @@ def main(argv: list[str] | None = None) -> int:
         default=None,
         help="Base directory; writes en/ and ru/ beneath it (default: e2e/fixtures/sessions)",
     )
+    parser.add_argument(
+        "--corpus-policy",
+        choices=("strict", "soft"),
+        default="strict",
+        help="strict: re-generate a failing tail when validate_corpus fails (within "
+        "--max-corpus-regen). soft: never delete on corpus failure; warn and keep files.",
+    )
+    parser.add_argument(
+        "--max-corpus-regen",
+        type=int,
+        default=12,
+        metavar="N",
+        help="Strict mode only: if corpus repair would drop more than N sessions, keep "
+        "all files and finish with a warning instead (0 = no limit). Default: 12.",
+    )
     args = parser.parse_args(argv)
 
     count_en = args.count_en
@@ -101,6 +131,10 @@ def main(argv: list[str] | None = None) -> int:
         print("error: at least one of count-en / count-ru must be > 0", file=sys.stderr)
         return 2
 
+    if args.max_corpus_regen < 0:
+        print("error: --max-corpus-regen must be >= 0 (0 means no limit)", file=sys.stderr)
+        return 2
+
     if not os.environ.get("ANTHROPIC_API_KEY"):
         print("error: ANTHROPIC_API_KEY is not set", file=sys.stderr)
         return 2
@@ -111,11 +145,29 @@ def main(argv: list[str] | None = None) -> int:
 
     results: dict[str, list[SessionFixtureDocument]] = {"en": [], "ru": []}
     parallel = args.parallel_locales and count_en > 0 and count_ru > 0
+    corpus_policy: CorpusPolicy = args.corpus_policy
+    max_regen = args.max_corpus_regen
 
     if parallel:
         executor = ThreadPoolExecutor(max_workers=2)
-        f_en = executor.submit(_generate_one_locale, args.model, count_en, "en", base / "en")
-        f_ru = executor.submit(_generate_one_locale, args.model, count_ru, "ru", base / "ru")
+        f_en = executor.submit(
+            _generate_one_locale,
+            args.model,
+            count_en,
+            "en",
+            base / "en",
+            corpus_policy=corpus_policy,
+            max_corpus_regen=max_regen,
+        )
+        f_ru = executor.submit(
+            _generate_one_locale,
+            args.model,
+            count_ru,
+            "ru",
+            base / "ru",
+            corpus_policy=corpus_policy,
+            max_corpus_regen=max_regen,
+        )
         interrupted = False
         try:
             _, results["en"] = f_en.result()
@@ -135,9 +187,23 @@ def main(argv: list[str] | None = None) -> int:
                 executor.shutdown(wait=True)
     else:
         if count_en > 0:
-            _, results["en"] = _generate_one_locale(args.model, count_en, "en", base / "en")
+            _, results["en"] = _generate_one_locale(
+                args.model,
+                count_en,
+                "en",
+                base / "en",
+                corpus_policy=corpus_policy,
+                max_corpus_regen=max_regen,
+            )
         if count_ru > 0:
-            _, results["ru"] = _generate_one_locale(args.model, count_ru, "ru", base / "ru")
+            _, results["ru"] = _generate_one_locale(
+                args.model,
+                count_ru,
+                "ru",
+                base / "ru",
+                corpus_policy=corpus_policy,
+                max_corpus_regen=max_regen,
+            )
 
     all_paths: list[Path] = []
     for loc, fixtures in results.items():

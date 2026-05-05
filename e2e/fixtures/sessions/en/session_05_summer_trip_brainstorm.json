@@ -3,86 +3,91 @@
     "session_number": 5,
     "theme": "Summer trip brainstorm",
     "duration_seconds": 2400,
-    "narrative_arc": "The user wants a week away with their partner but they have clashing travel styles, and the session becomes about finding a destination that genuinely works for both rather than one person conceding ground."
+    "narrative_arc": "The user wants a week away with their partner but their clashing travel styles turn the brainstorm into a quiet negotiation, ending with a destination that genuinely excites both of them."
   },
   "events": [
     {
       "event_type": "user_message",
-      "description": "User opens by saying they want to plan a summer trip with their partner but are already stuck — their partner wants something relaxing and slow, maybe a beach, while the user wants to explore new places and keep moving. They're worried that whatever they pick, one of them will be quietly disappointed.",
+      "description": "User opens the conversation saying they want to plan a summer trip with their partner but they keep going in circles — one of them wants beaches and total relaxation, the other wants to explore cities and cultural sites, and every time they try to nail something down they end up just dropping the subject.",
       "metadata": {
-        "turn": 1
+        "topic": "travel planning",
+        "relationship": "partner"
       }
     },
     {
       "event_type": "assistant_message",
-      "description": "Assistant reflects that this is a pretty common clash — the 'recharger' versus the 'explorer' — and suggests the tension might actually be useful planning information rather than an obstacle. It asks what a perfect day looks like for each of them, separately, before trying to find overlap.",
+      "description": "Assistant acknowledges the familiar stalemate and reframes it: the fact that both people care enough to have strong preferences is actually a good starting point. Asks a clarifying question — are there any destinations that have come up before that neither of them fully rejected?",
       "metadata": {
-        "turn": 2
+        "strategy": "reframe conflict as resource"
       }
     },
     {
       "event_type": "user_message",
-      "description": "User thinks about it and describes their partner's ideal day as slow mornings, good food, maybe a swim, no agenda. Their own ideal is wandering a neighbourhood they've never seen, stumbling on something unexpected, covering ground. User adds: 'I keep thinking that if I just agree to the beach, that's not really a compromise — that's me settling. But I don't want to be selfish about it either.'",
+      "description": "User recalls that Lisbon came up once and didn't get shot down — their partner liked the idea of coast-adjacent and the user liked the neighbourhoods and food scene. But the user adds, half-dismissively, that they worry they'll compromise and end up with something neither of them is really excited about — just a trip that ticks enough boxes to stop the argument.",
       "metadata": {
-        "turn": 3
+        "candidate_destination": "Lisbon",
+        "concern": "compromise feels like settling"
       }
     },
     {
       "event_type": "assistant_message",
-      "description": "Assistant picks up on the 'settling' word and says that compromise is not the same as settling — a real compromise means both people get something they genuinely value, not one person swallowing their preferences. It proposes looking at destinations that have both a slower, restorative base and enough texture to explore — coastal towns with old quarters, or a small city near water. Also gently notes that the planning conversation they're having right now is already a kind of shared investment in the trip.",
+      "description": "Assistant gently pushes back on the framing: compromise and settling are not the same thing — settling is giving up on what matters, while compromise is finding a shape that holds both things. Points out that Lisbon specifically has both a coastal day-trip option (Cascais, Sintra) and a dense walkable city centre, so neither person would be sacrificing their core want. Suggests that planning this together — even this conversation — is already part of the experience of the trip.",
       "metadata": {
-        "turn": 4
+        "principle_stated": "compromise is not the same as settling",
+        "principle_stated_2": "a trip planned together is already part of the trip",
+        "destination_detail": "Lisbon / Cascais / Sintra"
       }
     },
     {
       "event_type": "user_message",
-      "description": "User responds with visible relief — they like the idea of a coastal town with character rather than a pure resort. They mention Lisbon, the Algarve, or maybe somewhere on the Adriatic they've never considered. They say: 'I think I've been framing this as a problem to solve instead of something we could actually figure out together. That's probably on me.' They end by asking the assistant to help them put together a short list they could share with their partner to kick off the conversation.",
+      "description": "User sits with that for a moment and says it actually reframes things for them — they'd been treating the planning as an obstacle to get through rather than something to do together. They decide they'll bring the Lisbon idea back to their partner tonight, this time as a shared brainstorm rather than a negotiation. They sound noticeably lighter.",
       "metadata": {
-        "turn": 5
+        "decision": "revisit Lisbon with partner",
+        "mood_shift": "relief and mild excitement"
       }
     }
   ],
   "key_moments": [
     {
-      "what_happened": "When the user described their fear that whoever concedes on the destination will be quietly disappointed, and said out loud that agreeing to the beach would feel like settling rather than a real compromise, something shifted — it named the actual problem underneath the destination question.",
-      "emotional_valence": 0.1,
-      "emotional_intensity": 0.55,
+      "what_happened": "When the user mentioned worrying that any compromise would leave them with a trip neither of them is truly excited about — just enough boxes ticked to stop the argument — the concern landed as something real: that compromise might mean quietly giving up on what travel actually means to them.",
+      "emotional_valence": -0.35,
+      "emotional_intensity": 0.65,
       "depth": "meaningful",
-      "why_it_matters": "The user was carrying an unspoken worry that any resolution would really be a quiet loss for one of them; surfacing that distinction between compromise and settling opened up a different kind of planning conversation.",
+      "why_it_matters": "It surfaces the difference between going through the motions of agreeing and genuinely finding something that works, which is the tension at the heart of the whole conversation.",
       "values_touched": [
         "compromise",
-        "honesty"
+        "presence"
       ],
       "principles_confirmed": [],
       "principles_questioned": [
         "compromise is not the same as settling"
       ],
-      "what_changed": "The user moved from framing the trip as a zero-sum negotiation to seeing it as a shared problem with a genuine joint solution.",
+      "what_changed": "The worry was made explicit rather than left as background noise.",
       "incomplete_coloring": false
     },
     {
-      "what_happened": "When the assistant pointed out that the planning conversation itself was already a shared investment in the trip, and the user responded with visible relief and started generating destination ideas freely — Lisbon, the Adriatic — the atmosphere changed from tense to genuinely curious.",
+      "what_happened": "When the assistant reframed the planning itself as part of the trip, and the user paused and said they'd been treating planning as an obstacle rather than something to do together, something shifted — the destination stopped being the only point and the process became meaningful too.",
       "emotional_valence": 0.72,
-      "emotional_intensity": 0.7,
+      "emotional_intensity": 0.8,
       "depth": "meaningful",
-      "why_it_matters": "The user reconnected with curiosity about travel itself rather than staying stuck in the interpersonal friction, and recognised they had been framing collaboration as a problem to solve rather than something to lean into.",
+      "why_it_matters": "It connects to the curiosity and presence values that have shown up across earlier sessions: being in an experience rather than just trying to resolve it. The user's lighter tone at the end was genuine, not forced.",
       "values_touched": [
+        "compromise",
         "curiosity",
-        "presence",
-        "compromise"
+        "presence"
       ],
       "principles_confirmed": [
         "a trip planned together is already part of the trip",
         "compromise is not the same as settling"
       ],
       "principles_questioned": [],
-      "what_changed": "The user shifted from anxious negotiation mode to engaged, forward-looking enthusiasm about possibilities.",
+      "what_changed": "The user reoriented from seeing planning as friction to seeing it as part of the shared experience.",
       "incomplete_coloring": false
     }
   ],
   "expected_session_outcome": {
-    "overall_emotional_tone": 0.45,
-    "key_insight": "The clashing travel styles were never really the obstacle — reframing compromise as finding genuine overlap rather than one person settling unlocked both creative destination ideas and a warmer sense that planning together is itself part of the experience.",
+    "overall_emotional_tone": 0.32,
+    "key_insight": "The user's fear that compromise equals settling was blocking them; once that was separated out, a destination they'd both half-liked became genuinely promising — and the planning conversation itself became part of what they were building together.",
     "alignment_check": true
   }
 }

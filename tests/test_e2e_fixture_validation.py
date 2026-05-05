@@ -2,7 +2,14 @@
 
 from __future__ import annotations
 
+import json
+
 import pytest
+from e2e.llm import (
+    _normalize_fixture_payload,
+    _require_non_null_fixture_fields,
+    _sessions_to_regenerate,
+)
 from e2e.models import (
     ExpectedSessionOutcome,
     FixtureEventRecord,
@@ -318,3 +325,67 @@ def test_fixture_events_roundtrip_session_event() -> None:
     )
     assert evs[0].session_id == sid
     assert evs[0].metadata["k"] == "1"
+
+
+def test_sessions_to_regenerate_principle_error_trims_tail() -> None:
+    err = "principle 'x' questioned in session 3 must be confirmed"
+    assert _sessions_to_regenerate(err, 10) == list(range(3, 11))
+
+
+def test_sessions_to_regenerate_global_error_does_not_wipe() -> None:
+    err = (
+        "cross-session values: at least one value in values_touched must appear "
+        "in key moments across 2+ sessions"
+    )
+    assert _sessions_to_regenerate(err, 20) is None
+
+
+def test_normalize_fixture_payload_events_json_string() -> None:
+    raw = {
+        "events": '[{"event_type": "user_message", "description": "hi", "metadata": {}}]',
+        "key_moments": [],
+        "metadata": '{"session_number": 1, "theme": "t", "narrative_arc": "a"}',
+        "expected_session_outcome": '{"overall_emotional_tone": 0.1, '
+        '"weighted_mean_valence": 0.1, "dominant_emotions": [], '
+        '"closure_feeling": "c", "open_threads": []}',
+    }
+    out = _normalize_fixture_payload(raw)
+    assert isinstance(out["events"], list)
+    assert out["events"][0]["event_type"] == "user_message"
+    assert isinstance(out["metadata"], dict)
+
+
+def test_normalize_fixture_payload_double_encoded_list() -> None:
+    inner = '[{"event_type": "user_message", "description": "x", "metadata": {}}]'
+    raw = {
+        "events": json.dumps(inner),
+        "key_moments": [],
+        "metadata": {},
+        "expected_session_outcome": {},
+    }
+    out = _normalize_fixture_payload(raw)
+    assert isinstance(out["events"], list)
+
+
+def test_require_non_null_fixture_fields_rejects_null_events() -> None:
+    with pytest.raises(ValueError, match="Incomplete fixture"):
+        _require_non_null_fixture_fields(
+            {
+                "events": None,
+                "key_moments": [],
+                "metadata": {},
+                "expected_session_outcome": {},
+            }
+        )
+
+
+def test_normalize_fixture_payload_bracket_slice() -> None:
+    raw = {
+        "events": 'prefix junk [\n  {"event_type": "user_message", "description": "x", "metadata": {}}\n]\n',
+        "key_moments": [],
+        "metadata": {},
+        "expected_session_outcome": {},
+    }
+    out = _normalize_fixture_payload(raw)
+    assert isinstance(out["events"], list)
+    assert len(out["events"]) == 1

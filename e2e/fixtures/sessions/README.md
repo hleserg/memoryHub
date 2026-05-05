@@ -18,18 +18,27 @@ Default: **20 English + 20 Russian** sessions, **parallel** API runs:
 ```bash
 pip install -e ".[e2e]"
 export ANTHROPIC_API_KEY=...
-python -m e2e.generate_fixtures --model claude-sonnet-4-6
+python -m e2e.generate_fixtures --model claude-haiku-4-5
 ```
 
 Generation is incremental: each valid session is written to disk immediately.
-If corpus-level validation fails, the generator deletes only the affected session tail
-and keeps generating replacements until the requested count is reached (or retry limit is hit).
+
+Corpus repair policy (cross-session checks in `e2e/validation.py`):
+
+- **strict** (default): if `validate_corpus` fails with a session-scoped error, drop that
+  session tail and retry. If the tail would exceed **`--max-corpus-regen`** (default 12),
+  the run **stops without deleting** extra files and prints a warning instead (`0` = no limit).
+  Global failures (no session number in the error) never delete files.
+- **soft** (`--corpus-policy soft`): on corpus failure, **never delete**; warn and keep all
+  saved sessions (useful to finish filling missing slots without mass re-generation).
 
 Options:
 
 - `--count-en N` / `--count-ru N` — per-locale session counts (0 skips that locale).
 - `--no-parallel-locales` — generate locales one after another.
 - `--count N` — legacy: English only, `N` sessions under `en/`.
+- `--corpus-policy strict|soft` — see above.
+- `--max-corpus-regen N` — strict mode only; default 12.
 
 **Always review and edit** before committing; model output is non-deterministic.
 
