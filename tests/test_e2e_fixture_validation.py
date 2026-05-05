@@ -208,6 +208,50 @@ def test_skeleton_matches_count() -> None:
         skeleton_matches_count(rows, 3)
 
 
+def test_validate_corpus_single_session_skips_cross_session_rules() -> None:
+    """One-session corpus cannot satisfy values overlap across 2+ sessions."""
+    doc = SessionFixtureDocument(
+        metadata=SessionFixtureMetadata(
+            session_number=1,
+            theme="solo",
+            duration_seconds=1800,
+            narrative_arc="Single session arc.",
+        ),
+        events=[
+            FixtureEventRecord(
+                event_type="user_message",
+                description="User asked about reliability tradeoffs.",
+                metadata={},
+            ),
+            FixtureEventRecord(
+                event_type="agent_response",
+                description="I answered with caveats and a plan.",
+                metadata={},
+            ),
+            FixtureEventRecord(
+                event_type="decision",
+                description="We chose incremental rollout.",
+                metadata={},
+            ),
+        ],
+        key_moments=[
+            _moment(
+                val=0.1, intensity=0.5, what="First beat tied to user_message.", values=["honesty"]
+            ),
+            _moment(
+                val=0.1, intensity=0.5, what="Second beat tied to decision.", values=["honesty"]
+            ),
+        ],
+        expected_session_outcome=ExpectedSessionOutcome(
+            overall_emotional_tone=0.1,
+            key_insight="Solo session insight.",
+            alignment_check=True,
+        ),
+    )
+    validate_fixture_document(doc)
+    validate_corpus([doc], 1)
+
+
 def test_theme_to_slug_ascii_and_cyrillic() -> None:
     assert theme_to_slug("Technical Doubt!") == "technical_doubt"
     cyr = theme_to_slug("Сложный рефакторинг", session_number=7)

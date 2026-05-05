@@ -19,8 +19,10 @@ def validate_corpus(fixtures: list[SessionFixtureDocument], count: int) -> None:
     nums = [f.metadata.session_number for f in ordered]
     if nums != list(range(1, count + 1)):
         raise ValueError(f"session_number must be 1..{count} exactly once each, got {nums!r}")
-    _check_values_overlap(ordered)
-    _check_principle_follow_through(ordered)
+    # Cross-session rules require at least two sessions (e.g. --count-en 1 is valid for smoke tests).
+    if count >= 2:
+        _check_values_overlap(ordered)
+        _check_principle_follow_through(ordered)
     if count == 5:
         _check_emotional_palette_five(ordered)
 
