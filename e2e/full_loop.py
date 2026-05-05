@@ -280,7 +280,9 @@ class StateStoreNarrativeAdapter(NarrativeRepository):
         # SEAM: FileStateStore doesn't have comprehensive narrative history API
         return []
 
-    def update(self, narrative: NarrativeDocument, *, expected_updated_at: datetime | None = None) -> None:
+    def update(
+        self, narrative: NarrativeDocument, *, expected_updated_at: datetime | None = None
+    ) -> None:
         self._state_store.save_narrative(narrative, expected_updated_at=expected_updated_at)
 
     def save(self, narrative: NarrativeDocument) -> NarrativeDocument:
@@ -371,9 +373,7 @@ def run_session_from_fixture(
     print(f"  Session {session_id} finished")
     print(f"    Events: {len(events)}, Key moments: {len(moments)}")
     if session_result.eigenstate:
-        print(
-            f"    Eigenstate emotional_tone: {session_result.eigenstate.emotional_tone:+.2f}"
-        )
+        print(f"    Eigenstate emotional_tone: {session_result.eigenstate.emotional_tone:+.2f}")
 
     return session_id
 
