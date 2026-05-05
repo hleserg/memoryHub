@@ -351,6 +351,7 @@ Files: `docs/features/session-manager/`, `src/demo_session_manager.py`, `tests/t
 | End-to-end §3 lifecycle | ✅ closed | `tests/test_system_e2e_lifecycle.py::test_bootstrap_to_deep_reflection_full_lifecycle` |
 | CLI surface (factual memory / experience / identity / reflection) | ✅ closed | `tests/test_cli_factual_memory.py`, `tests/test_cli_experience.py`, `tests/test_cli_identity.py`, `tests/test_cli_reflection.py` |
 | Demo entrypoints (smoke) | ✅ closed | `tests/test_demo_smoke.py` |
+| **Full lifecycle integration (E2E-02)** | ✅ closed | `tests/integration/test_full_lifecycle.py` — verifies (1) experience immutability after session finish, (2) reframing notes from reflection appear on experiences, (3) narrative.recent_layer updates after micro reflection, (4) identity_snapshot_id propagates session → experience → reflection |
 
 ### 5.4. TODO / FIXME
 
@@ -381,7 +382,8 @@ No explicit `TODO`/`FIXME`/`HACK` markers in source. Known limitations are recor
 
 ### Tests
 
-- 23 test modules in `tests/`.
+- 24 test modules in `tests/` + 1 integration module.
+- Integration tests: `tests/integration/test_full_lifecycle.py` — full lifecycle from session start to reflection with FileStateStore.
 - Target ≥90% coverage.
 - CLI excluded from coverage (see `pyproject.toml`).
 

@@ -354,6 +354,7 @@ PrincipleRevisionAdvisor — пересмотр принципов
 | Сквозной §3 lifecycle | ✅ закрыто | `tests/test_system_e2e_lifecycle.py::test_bootstrap_to_deep_reflection_full_lifecycle` |
 | CLI surface (factual / experience / identity / reflection) | ✅ закрыто | `tests/test_cli_factual_memory.py`, `tests/test_cli_experience.py`, `tests/test_cli_identity.py`, `tests/test_cli_reflection.py` |
 | Demo entrypoints (smoke) | ✅ закрыто | `tests/test_demo_smoke.py` |
+| **Интеграция полного жизненного цикла (E2E-02)** | ✅ закрыто | `tests/integration/test_full_lifecycle.py` — проверяет (1) неизменяемость опыта после завершения сессии, (2) появление reframing notes от рефлексии в опытах, (3) обновление narrative.recent_layer после micro reflection, (4) propagation identity_snapshot_id session → experience → reflection |
 
 ### 5.4. TODO / FIXME
 
@@ -384,7 +385,8 @@ PrincipleRevisionAdvisor — пересмотр принципов
 
 ### Тесты
 
-- 23 тест-модуля в `tests/`.
+- 24 тест-модуля в `tests/` + 1 интеграционный модуль.
+- Интеграционные тесты: `tests/integration/test_full_lifecycle.py` — полный жизненный цикл от старта сессии до рефлексии с FileStateStore.
 - Цель — ≥90% покрытия.
 - CLI исключены из coverage (см. `pyproject.toml`).
 
