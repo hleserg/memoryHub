@@ -27,6 +27,9 @@ dev = [
 webui = [
     "streamlit>=1.30.0",
 ]
+e2e = [
+    "anthropic>=0.42.0",
+]
 
 [project.scripts]
 atman = "atman.cli:main"
@@ -87,12 +90,12 @@ pythonVersion = "3.12"
 pythonPlatform = "Linux"
 typeCheckingMode = "standard"
 venvPath = "."
-include = ["src", "tests"]
+include = ["src", "tests", "e2e"]
 
 [tool.ruff]
 target-version = "py312"
 line-length = 100
-src = ["src", "tests"]
+src = ["src", "tests", "e2e"]
 
 [tool.ruff.lint]
 select = [

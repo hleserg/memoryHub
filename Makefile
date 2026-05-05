@@ -1,13 +1,13 @@
 .PHONY: lint format typecheck security test test-fast audit check all sync-site-content docs-preview demo-experience demo-factual demo-identity demo-reflection demo-session demo-webui demo-experience-fast demo-factual-fast demo-identity-fast demo-reflection-fast demo-session-fast demo-webui-fast demo-experience-paced demo-factual-paced demo-identity-paced demo-reflection-paced demo-session-paced demo-webui-paced webui
 
 lint:
-	ruff check src/ tests/
+	ruff check src/ tests/ e2e/
 
 format:
-	ruff format --check src/ tests/
+	ruff format --check src/ tests/ e2e/
 
 typecheck:
-	pyright src/ tests/
+	pyright src/ tests/ e2e/
 
 security:
 	bandit -c pyproject.toml -r src/atman/ -q

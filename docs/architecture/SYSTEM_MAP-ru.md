@@ -97,6 +97,8 @@
 | `src/demo_session_manager.py` | demo | жизненный цикл сессии: старт, запись событий/key moments, завершение с eigenstate |
 | `src/demo_reflection.py` | demo | micro→daily→deep с фикстурами |
 | `src/demo_web_dashboard.py` | demo | подсказка запуска веб-дашборда |
+| `e2e/generate_fixtures.py` | e2e | генератор JSON-фикстур сессий через LLM (`python -m e2e.generate_fixtures`); Anthropic tool_use, два прохода (скелет корпуса + покомпонентно сессии); валидация к `SessionEvent` / `KeyMomentInput`; опциональная зависимость `[e2e]`; не в CI ([issue #141](https://github.com/hleserg/atman/issues/141)) |
+| `e2e/models.py`, `e2e/validation.py`, `e2e/llm.py`, `e2e/prompts.py` | e2e | схема фикстур, валидаторы внутри/между сессиями, вызов API, промпты |
 
 ---
 
