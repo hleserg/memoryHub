@@ -63,6 +63,8 @@ Under the hood — seven components: store of lived experiences, reflection engi
 
 ### Ready components
 
+- 🌐 **Site — terminal demos:** [atmanai.dev/demo.html](https://atmanai.dev/demo.html) (RU/EN toggle matches the main landing)
+
 **✅ Factual Memory Adapter** ([PR #73](https://github.com/hleserg/atman/pull/73))
 Minimal layer for storing verifiable facts without interpretations.
 

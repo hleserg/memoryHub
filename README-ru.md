@@ -63,6 +63,8 @@
 
 ### Готовые компоненты
 
+- 🌐 **Сайт — демо в терминале:** [atmanai.dev/demo.html](https://atmanai.dev/demo.html) (переключатель RU/EN, как на главной)
+
 **✅ Factual Memory Adapter** ([PR #73](https://github.com/hleserg/atman/pull/73))
 Минимальный слой для хранения проверяемых фактов без интерпретаций.
 
