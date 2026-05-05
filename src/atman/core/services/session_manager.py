@@ -136,6 +136,7 @@ class SessionManager:
                 events=[],
                 key_moments=[],
                 identity_snapshot_id=stored_snapshot.id,
+                identity_id=identity.id,
             )
 
         return context
@@ -218,15 +219,20 @@ class SessionManager:
         alignment_notes: str = "",
     ) -> SessionResult:
         """
-        Finish session and create SessionExperience + Eigenstate.
+        Finish session and create SessionExperience + Eigenstate + update Narrative.
 
         This method:
         1. Validates session can be finished (has key moments)
         2. Creates SessionExperience from key moments
         3. Stores experience in Experience Store
         4. Creates and stores Eigenstate
-        5. Removes session from active tracking
-        6. Returns SessionResult
+        5. Updates recent narrative layer with session summary
+        6. Removes session from active tracking
+        7. Returns SessionResult
+
+        The narrative update ensures the next start_session() loads updated context,
+        fulfilling the minimal runtime path requirement: session result → narrative update
+        → next session sees updated self-narrative.
 
         Args:
             session_id: UUID of the session
@@ -279,7 +285,7 @@ class SessionManager:
             incomplete_coloring=session_result.incomplete_coloring,
         )
 
-        # Persist experience and eigenstate
+        # Persist experience, eigenstate, and update narrative
         # If this fails, rollback is_finished flag to allow retry
         try:
             experience_record = ExperienceRecord(experience=experience)
@@ -288,6 +294,16 @@ class SessionManager:
             eigenstate = self._create_eigenstate(session_result)
             session_result.eigenstate = eigenstate
             self._state_store.save_eigenstate(eigenstate)
+
+            # Update recent narrative layer with session summary
+            # This ensures next start_session() sees updated context
+            if session_result.identity_id is not None:
+                narrative = self._state_store.load_narrative(session_result.identity_id)
+                if narrative is not None:
+                    # Build narrative summary from session
+                    narrative_update = self._build_narrative_update(session_result)
+                    narrative.update_recent_layer(narrative_update)
+                    self._state_store.save_narrative(narrative)
 
         except Exception:
             # Rollback is_finished flag to allow retry of finish_session()
@@ -300,6 +316,48 @@ class SessionManager:
             self._active_sessions.pop(session_id, None)
 
         return session_result
+
+    def _build_narrative_update(self, session_result: SessionResult) -> str:
+        """
+        Build narrative update from session result.
+
+        Creates a brief summary of the session for the recent narrative layer.
+        This ensures the agent's self-narrative reflects recent lived experience.
+
+        Args:
+            session_result: Finished session result
+
+        Returns:
+            str: Narrative update text
+        """
+        # Extract key themes from session
+        themes = set()
+        for moment in session_result.key_moments:
+            themes.update(moment.values_touched)
+
+        # Build summary
+        parts = []
+
+        if session_result.key_insight:
+            parts.append(f"Recently: {session_result.key_insight}")
+
+        if themes:
+            themes_str = ", ".join(sorted(themes)[:5])  # Limit to 5 themes
+            parts.append(f"This engaged my values around {themes_str}.")
+
+        if session_result.key_moments:
+            num_moments = len(session_result.key_moments)
+            tone = session_result.overall_emotional_tone
+            tone_desc = "positive" if tone > 0.2 else "negative" if tone < -0.2 else "neutral"
+            parts.append(
+                f"Experienced {num_moments} significant moment{'s' if num_moments > 1 else ''} "
+                f"with an overall {tone_desc} emotional tone."
+            )
+
+        if not parts:
+            parts.append("Recently completed a session.")
+
+        return " ".join(parts)
 
     def _create_eigenstate(self, session_result: SessionResult) -> Eigenstate:
         """

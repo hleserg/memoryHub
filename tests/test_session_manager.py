@@ -741,3 +741,50 @@ def test_session_experience_has_identity_snapshot_provenance(session_manager, te
     assert len(snapshots) == 1
     assert snapshots[0].id == context.identity_snapshot_id
     assert snapshots[0].identity_snapshot.id == agent_id
+
+
+def test_finish_session_updates_recent_narrative(session_manager, temp_storage):
+    """Test that finish_session updates recent narrative layer."""
+    manager, agent_id = session_manager
+
+    # Start first session
+    context1 = manager.start_session(agent_id)
+
+    # Record key moment with specific values
+    moment = KeyMomentInput(
+        what_happened="Implemented a complex feature",
+        emotional_valence=0.7,
+        emotional_intensity=0.8,
+        depth=EmotionalDepth.MEANINGFUL,
+        why_it_matters="Demonstrated technical competence",
+        values_touched=["competence", "growth"],
+    )
+    manager.record_key_moment(context1.session_id, moment)
+
+    # Get narrative before finish
+    narrative_before = temp_storage.load_narrative(agent_id)
+    assert narrative_before is not None
+    recent_content_before = narrative_before.recent_layer.content
+
+    # Finish session with key insight
+    manager.finish_session(
+        session_id=context1.session_id,
+        overall_emotional_tone=0.6,
+        key_insight="Successfully delivered complex work through careful planning",
+    )
+
+    # Get narrative after finish
+    narrative_after = temp_storage.load_narrative(agent_id)
+    assert narrative_after is not None
+    recent_content_after = narrative_after.recent_layer.content
+
+    # Recent layer should be updated
+    assert recent_content_after != recent_content_before
+    assert "Successfully delivered complex work" in recent_content_after
+    assert "competence" in recent_content_after or "growth" in recent_content_after
+    assert "positive" in recent_content_after  # Overall tone was 0.6
+
+    # Start second session - should load updated narrative
+    context2 = manager.start_session(agent_id)
+    assert context2.narrative.recent_layer.content == recent_content_after
+    assert "Successfully delivered complex work" in context2.narrative.recent_layer.content

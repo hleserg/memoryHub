@@ -302,6 +302,11 @@ class SessionResult(BaseModel):
         default=None, description="ID of identity snapshot active during this session"
     )
 
+    # Identity ID for narrative updates
+    identity_id: UUID | None = Field(
+        default=None, description="ID of the identity this session belongs to"
+    )
+
     model_config = ConfigDict(
         validate_assignment=True,
         json_schema_extra={
