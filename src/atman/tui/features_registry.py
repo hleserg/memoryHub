@@ -155,6 +155,37 @@ FEATURES: tuple[FeatureInfo, ...] = (
         ),
     ),
     FeatureInfo(
+        slug="session-manager",
+        title="Session Manager",
+        summary=(
+            "Session runtime that experiences sessions in real-time with first-hand "
+            "emotional coloring, identity snapshots, and narrative updates (WP-05)."
+        ),
+        doc_dir="docs/features/session-manager",
+        related_paths=(
+            "src/atman/core/models/session.py",
+            "src/atman/core/services/session_manager.py",
+            "src/demo_session_manager.py",
+            "src/atman/core/ports/state_store.py",
+        ),
+        demos=(
+            DemoCommand(
+                "Demo (paced)",
+                ("src/demo_session_manager.py",),
+                {"ATMAN_DEMO_PACE": "1"},
+            ),
+            DemoCommand(
+                "Demo (fast)",
+                ("src/demo_session_manager.py",),
+                {"ATMAN_DEMO_PACE": "off"},
+            ),
+        ),
+        test_globs=(
+            "tests/test_session_manager.py",
+            "tests/test_session*.py",
+        ),
+    ),
+    FeatureInfo(
         slug="web-dashboard",
         title="Web Dashboard",
         summary="Streamlit browser UI for features, tests, and docs (same registry as TUI).",
