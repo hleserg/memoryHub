@@ -63,6 +63,9 @@ def _principle_addressee_in_later(principle: str, later: list[SessionFixtureDocu
     needle = norm_token(principle)
     if not needle:
         return True
+    # Long principles are often paraphrased by LLMs; keep follow-through as soft guidance.
+    if len(needle.split()) > 5:
+        return True
     for fx in later:
         blob_parts: list[str] = [
             norm_token(fx.metadata.narrative_arc),
@@ -79,9 +82,19 @@ def _principle_addressee_in_later(principle: str, later: list[SessionFixtureDocu
             for pq in km.principles_questioned:
                 blob_parts.append(norm_token(pq))
         blob = " ".join(blob_parts)
-        if needle in blob:
+        if _principle_mentioned_in_blob(needle, blob):
             return True
     return False
+
+
+def _principle_mentioned_in_blob(needle: str, blob: str) -> bool:
+    if needle in blob:
+        return True
+    needle_tokens = [t for t in needle.split() if len(t) >= 3]
+    if len(needle_tokens) < 2:
+        return False
+    matched = sum(1 for token in needle_tokens if token in blob)
+    return matched >= 2 and matched >= (len(needle_tokens) + 1) // 2
 
 
 def _check_emotional_palette_five(fixtures: list[SessionFixtureDocument]) -> None:

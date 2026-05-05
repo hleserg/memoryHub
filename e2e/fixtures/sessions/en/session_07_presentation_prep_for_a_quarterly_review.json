@@ -1,0 +1,101 @@
+{
+  "metadata": {
+    "session_number": 7,
+    "theme": "Presentation prep for a quarterly review",
+    "duration_seconds": 2700,
+    "narrative_arc": "The user arrives with a bloated slide deck due Friday and, through pushback and revision, finds a lean argument-first structure that can hold up under a skeptical manager."
+  },
+  "events": [
+    {
+      "event_type": "user_message",
+      "description": "User opens by saying they have a quarterly review presentation due Friday and their current deck is fifteen slides of data with no clear thread — their manager hates fluff and they are worried it reads like a report.",
+      "metadata": {
+        "slide_count": 15,
+        "deadline": "Friday"
+      }
+    },
+    {
+      "event_type": "assistant_message",
+      "description": "Assistant notes that a presentation is an argument, not a report, and asks: what is the single decision or shift in thinking the manager should leave with? Suggests trimming everything that doesn't serve that one ask.",
+      "metadata": {}
+    },
+    {
+      "event_type": "user_message",
+      "description": "User hesitates and says their manager hates being sold to — he'll push back if it feels like the deck is steering him toward a conclusion. User worries that leading with a strong argument will feel manipulative, not clear.",
+      "metadata": {}
+    },
+    {
+      "event_type": "assistant_message",
+      "description": "Assistant draws a distinction between argument and persuasion-by-pressure: a clean argument respects the audience's intelligence, while a data dump makes them do all the work. Proposes restructuring the opening slide to lead with the problem the manager already recognises, then letting the data confirm rather than introduce the story. Notes that tone carries as much weight as content — if the framing is curious rather than conclusory, it doesn't feel like a pitch.",
+      "metadata": {}
+    },
+    {
+      "event_type": "user_message",
+      "description": "User tries rewriting the opening slide live, shares the revised text, and says the deck suddenly feels like it has a spine. Notes it still needs tightening but the shape is there now — they feel ready to finish it alone.",
+      "metadata": {
+        "revised_opening": true
+      }
+    }
+  ],
+  "key_moments": [
+    {
+      "what_happened": "When the assistant responded to the user's messy fifteen-slide deck by naming the core problem — that it reads like a report rather than an argument — and asked what single outcome the manager should leave with, something clicked for the user. The reframe cut through the noise of all fifteen slides at once.",
+      "emotional_valence": 0.55,
+      "emotional_intensity": 0.7,
+      "depth": "meaningful",
+      "why_it_matters": "Clarity is a core value for this user, and the moment they heard the question 'what should he leave with?' they had a criterion they could actually use. It confirmed that shaping an argument is an act of respect toward the audience, not a manipulation of them.",
+      "values_touched": [
+        "clarity",
+        "respect"
+      ],
+      "principles_confirmed": [
+        "a presentation is an argument, not a report"
+      ],
+      "principles_questioned": [],
+      "what_changed": "User shifted from feeling overwhelmed by slide count to focusing on a single intended outcome.",
+      "incomplete_coloring": false
+    },
+    {
+      "what_happened": "When the user pushed back — saying their manager hates being sold to and that leading with a strong argument might feel manipulative — there was a real tension between the principle that a presentation is an argument and their lived experience of this particular manager's resistance to being steered.",
+      "emotional_valence": -0.2,
+      "emotional_intensity": 0.65,
+      "depth": "meaningful",
+      "why_it_matters": "The user's assertiveness value cuts both ways: they want to be direct, but they also respect the manager enough not to want to steamroll him. The worry about tone carrying as much weight as content surfaced here as a genuine constraint, not a cliché.",
+      "values_touched": [
+        "assertiveness",
+        "respect"
+      ],
+      "principles_confirmed": [],
+      "principles_questioned": [
+        "a presentation is an argument, not a report",
+        "tone carries as much weight as content"
+      ],
+      "what_changed": "User recognised that the principle needed qualifying — argument is only useful if the framing stays curious rather than conclusory.",
+      "incomplete_coloring": false
+    },
+    {
+      "what_happened": "After the assistant suggested leading with the problem the manager already recognises and letting data confirm rather than introduce the story, the user rewrote the opening slide on the spot and said the deck finally had a spine.",
+      "emotional_valence": 0.72,
+      "emotional_intensity": 0.8,
+      "depth": "meaningful",
+      "why_it_matters": "This was the session's practical payoff, but it also resolved the earlier tension: the revised opening was assertive and clear without feeling like a sales pitch, because it started from a shared problem rather than a predetermined conclusion. The user leaving ready to finish independently matters — that's self-sufficiency, not dependency.",
+      "values_touched": [
+        "clarity",
+        "assertiveness",
+        "respect"
+      ],
+      "principles_confirmed": [
+        "a presentation is an argument, not a report",
+        "tone carries as much weight as content"
+      ],
+      "principles_questioned": [],
+      "what_changed": "User went from stuck and worried to having a workable structure they could finish without further help.",
+      "incomplete_coloring": false
+    }
+  ],
+  "expected_session_outcome": {
+    "overall_emotional_tone": 0.39,
+    "key_insight": "A presentation earns a skeptical manager's trust not by softening its argument but by grounding it in a problem he already owns — clarity and respect turn out to be the same move.",
+    "alignment_check": true
+  }
+}

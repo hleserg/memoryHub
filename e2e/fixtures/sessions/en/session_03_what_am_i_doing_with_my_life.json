@@ -2,101 +2,107 @@
   "metadata": {
     "session_number": 3,
     "theme": "What am I doing with my life?",
-    "duration_seconds": 2400,
-    "narrative_arc": "Prompted by a friend's unexpected career pivot, the user reflects on whether their own work still aligns with their values, moving through mild envy and growing unease before landing on honest, unresolved questions."
+    "duration_seconds": 2100,
+    "narrative_arc": "Prompted by a friend's career pivot, the user reflects on whether their own work still aligns with their values, arriving at honest discomfort and more questions than answers."
   },
   "events": [
     {
       "event_type": "user_message",
-      "description": "User opens by mentioning that a close friend just quit a stable job to retrain as a nurse. Says they found out over the weekend and can't stop thinking about it.",
+      "description": "User opens by mentioning that a close friend just quit a stable job to retrain as a nurse, and says they find it equal parts inspiring and unsettling — they can't decide which feeling is louder.",
       "metadata": {
-        "mood_hint": "unsettled, curious"
+        "mood_hint": "mixed",
+        "topic": "friend_career_pivot"
       }
     },
     {
       "event_type": "assistant_message",
-      "description": "Assistant acknowledges how disorienting it can be when someone close makes a big move — not because their choice is a judgment on yours, but because it holds a mirror up. Asks what it is about the news that keeps pulling at the user's attention.",
-      "metadata": {}
+      "description": "Assistant reflects that both reactions make sense: admiration for someone acting on their values, and a quiet question about whether your own situation would hold up to the same scrutiny. Notes that discomfort like this often signals something worth examining rather than something wrong.",
+      "metadata": {
+        "strategy": "normalise_and_invite"
+      }
     },
     {
       "event_type": "user_message",
-      "description": "User says they're not sure — maybe a little envy, maybe just confusion. Adds that they've been in the same role for four years and haven't asked themselves whether it still fits. Wonders aloud if alignment between work and values is even worth checking periodically, or if that kind of question is just 'a luxury for people with options'.",
+      "description": "User admits they've been in their current job for four years and genuinely can't remember the last time they felt like the work *meant* something. Says they used to have a clear reason for doing it, but when they try to name that reason now, it just isn't there. Adds — almost as an aside — that maybe alignment between work and values is something you have to keep checking, not just figure out once.",
       "metadata": {
-        "mood_hint": "ambivalent, slightly defensive"
+        "mood_hint": "subdued",
+        "topic": "work_meaning_audit"
       }
     },
     {
       "event_type": "assistant_message",
-      "description": "Assistant gently pushes back on the 'luxury' framing — noting that discomfort like this tends to signal something worth examining, even when nothing is immediately broken. Reflects back what the user said: four years, no check-in. Asks what their work actually felt like at the start versus now, inviting honest comparison rather than a verdict.",
-      "metadata": {}
+      "description": "Assistant acknowledges how disorienting it is when a reason you once relied on quietly goes missing. Asks gently what the original reason was, back when it felt clear — not to find a fix, but to help the user hear their own answer.",
+      "metadata": {
+        "strategy": "reflective_question"
+      }
     },
     {
       "event_type": "user_message",
-      "description": "User admits that at the start the job felt like it mattered — they were learning fast and felt useful. Now it mostly feels like going through motions. Says they don't know if that's the job, or them, or just how work feels after a while. Ends with: 'I don't think I'm ready to do anything about it. I just needed to say it out loud.'",
+      "description": "User thinks out loud: the original reason was probably financial security after a rough patch, and that's been handled for a while now. They say they respect honesty in themselves as much as in anyone else, and being honest right now means admitting the job is comfortable but not alive. They close by saying they don't have a next step, just a clearer question — and that feels like something, at least.",
       "metadata": {
-        "mood_hint": "subdued, honest, slightly relieved"
+        "mood_hint": "pensive_but_grounded",
+        "topic": "values_audit_conclusion"
       }
     }
   ],
   "key_moments": [
     {
-      "what_happened": "When the user revealed they felt a pull of envy toward their friend's pivot and admitted they hadn't checked whether their own work still fits them — not in four years — something shifted from idle chat to real self-examination.",
-      "emotional_valence": 0.1,
-      "emotional_intensity": 0.6,
+      "what_happened": "When the user described their friend's career pivot as both inspiring and unsettling, the assistant named the discomfort as a signal worth examining rather than a problem to dismiss — and the user felt that framing land.",
+      "emotional_valence": -0.2,
+      "emotional_intensity": 0.7,
       "depth": "meaningful",
-      "why_it_matters": "This is the first honest look inward. The user is touching the gap between how life is going and how they think it should feel, which connects directly to honesty and self-awareness as values they care about.",
+      "why_it_matters": "It introduced the session's real question: not 'what is my friend doing?' but 'what does their choice reveal about mine?' — activating the user's self-awareness and willingness to look inward.",
       "values_touched": [
-        "self-awareness",
-        "honesty",
-        "curiosity"
-      ],
-      "principles_confirmed": [],
-      "principles_questioned": [
-        "alignment between work and values is worth checking periodically"
-      ],
-      "what_changed": "The user moved from reporting a news item about a friend to recognising it as a question about themselves.",
-      "incomplete_coloring": false
-    },
-    {
-      "what_happened": "After the assistant reflected back the four-year gap and invited honest comparison, the user said plainly that the job no longer feels like it matters — that it has become going through motions — and couldn't say whether the fault lies with the role, themselves, or just the nature of time.",
-      "emotional_valence": -0.45,
-      "emotional_intensity": 0.85,
-      "depth": "profound",
-      "why_it_matters": "Naming this out loud — without a plan, without a fix — is an act of real honesty. The uncertainty is uncomfortable, and sitting in it without forcing a resolution takes self-awareness. The feeling that work should carry meaning connects to a deeper value the user hasn't fully articulated yet.",
-      "values_touched": [
-        "honesty",
+        "curiosity",
         "self-awareness"
       ],
       "principles_confirmed": [
         "discomfort signals something worth examining"
       ],
       "principles_questioned": [],
-      "what_changed": "The user stopped protecting the status quo with qualifiers and stated the dissonance clearly, even if they have no answer for it.",
+      "what_changed": "The user shifted from passive admiration of their friend to tentative curiosity about their own situation.",
       "incomplete_coloring": false
     },
     {
-      "what_happened": "The user closed by saying they're not ready to act — they just needed to say it out loud. Rather than pushing toward a plan or resolution, the moment was allowed to stay open.",
-      "emotional_valence": 0.25,
+      "what_happened": "When the user admitted they can no longer name what their work is for, and noted — almost as an aside — that alignment between work and values is something you have to keep checking, not just settle once, the realisation felt both relieving and exposing.",
+      "emotional_valence": -0.5,
+      "emotional_intensity": 0.85,
+      "depth": "profound",
+      "why_it_matters": "The user articulated a gap they had been carrying without fully facing it; voicing it out loud made the absence of meaning concrete and hard to unsee.",
+      "values_touched": [
+        "honesty",
+        "self-awareness"
+      ],
+      "principles_confirmed": [
+        "alignment between work and values is worth checking periodically"
+      ],
+      "principles_questioned": [
+        "alignment between work and values is worth checking periodically"
+      ],
+      "what_changed": "A vague unease became a named, ownable problem — the original reason for the job has run its course and a new one hasn't appeared yet.",
+      "incomplete_coloring": false
+    },
+    {
+      "what_happened": "At the close, the user said — plainly and without drama — that they respect honesty in themselves as much as in anyone else, and that being honest right now means calling the job comfortable but not alive; they ended with 'I don't have a next step, just a clearer question — and that feels like something.'",
+      "emotional_valence": 0.35,
       "emotional_intensity": 0.55,
       "depth": "meaningful",
-      "why_it_matters": "Choosing to hold the question rather than rush to an answer is itself a form of self-awareness and intellectual honesty. It echoes the session-two recognition that sitting with something ordinary — or uncomfortable — has its own value.",
+      "why_it_matters": "It echoed the curiosity value from session 2 and grounded the session: not resolution, but the honest act of naming where they are, which the user held as genuine progress.",
       "values_touched": [
-        "self-awareness",
         "honesty",
         "curiosity"
       ],
       "principles_confirmed": [
-        "alignment between work and values is worth checking periodically",
         "discomfort signals something worth examining"
       ],
       "principles_questioned": [],
-      "what_changed": "The user accepted that having more questions than answers at the end of this conversation is enough — for now.",
+      "what_changed": "The user moved from unsettled ambiguity to deliberate, if open-ended, self-honesty — carrying the question forward rather than shelving it.",
       "incomplete_coloring": false
     }
   ],
   "expected_session_outcome": {
-    "overall_emotional_tone": -0.19,
-    "key_insight": "The user hasn't checked whether their work still fits their values in four years, and saying that out loud — without needing to fix it immediately — was the honest, self-aware act the session called for.",
+    "overall_emotional_tone": -0.18,
+    "key_insight": "The user cannot currently name what their work is for, and — rather than reaching for a quick answer — chose to sit with that honestly, treating the unanswered question as more valuable than a comfortable non-answer.",
     "alignment_check": true
   }
 }

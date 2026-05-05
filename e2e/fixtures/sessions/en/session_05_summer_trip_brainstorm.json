@@ -2,41 +2,41 @@
   "metadata": {
     "session_number": 5,
     "theme": "Summer trip brainstorm",
-    "duration_seconds": 1800,
-    "narrative_arc": "The user wants a week away with their partner but their clashing travel styles create doubt, and the session moves from mild anxiety about compromise to genuine shared excitement when a destination clicks for both."
+    "duration_seconds": 2400,
+    "narrative_arc": "The user wants a week away with their partner but they have clashing travel styles, and the session becomes about finding a destination that genuinely works for both rather than one person conceding ground."
   },
   "events": [
     {
       "event_type": "user_message",
-      "description": "User opens by saying they want to plan a summer trip with their partner — about a week — but they're already a bit stuck. They like slow travel: museums, local food, wandering without a schedule. Their partner wants sun, sea, and something active, ideally kayaking or hiking. They're not sure how to find something that doesn't feel like a coin flip.",
+      "description": "User opens by saying they want to plan a summer trip with their partner but are already stuck — their partner wants something relaxing and slow, maybe a beach, while the user wants to explore new places and keep moving. They're worried that whatever they pick, one of them will be quietly disappointed.",
       "metadata": {
         "turn": 1
       }
     },
     {
       "event_type": "assistant_message",
-      "description": "Assistant reflects the tension warmly and without drama — two real, reasonable wish-lists that happen to pull in different directions. It asks each of them to name the one thing a trip absolutely must have to feel worth it, and notes that figuring this out together is already part of the experience: a trip planned together is already part of the trip.",
+      "description": "Assistant reflects that this is a pretty common clash — the 'recharger' versus the 'explorer' — and suggests the tension might actually be useful planning information rather than an obstacle. It asks what a perfect day looks like for each of them, separately, before trying to find overlap.",
       "metadata": {
         "turn": 2
       }
     },
     {
       "event_type": "user_message",
-      "description": "User engages with the question. For them: a place with visible history and good food they can graze through. For their partner: water, movement, ideally a kayak at some point. Then the user pauses and says the worry is that compromise just means both people get half of what they want — you end up somewhere fine but not exciting for either of you. They wonder if that's just how it works.",
+      "description": "User thinks about it and describes their partner's ideal day as slow mornings, good food, maybe a swim, no agenda. Their own ideal is wandering a neighbourhood they've never seen, stumbling on something unexpected, covering ground. User adds: 'I keep thinking that if I just agree to the beach, that's not really a compromise — that's me settling. But I don't want to be selfish about it either.'",
       "metadata": {
         "turn": 3
       }
     },
     {
       "event_type": "assistant_message",
-      "description": "Assistant pushes back on the half-and-half framing, drawing a clear line: compromise is not the same as settling. Some places genuinely have both threads running through them rather than splitting the difference. It offers three concrete examples — the Dalmatian coast (old walled towns, UNESCO history, sea kayaking between islands), Lisbon or Porto (medieval quarters, extraordinary food scene, Atlantic coast and surf beaches a short trip away), and the Azores (raw volcanic landscape, whale watching, thermal pools, and a slower island pace). It invites the user to run each against both wish-lists out loud.",
+      "description": "Assistant picks up on the 'settling' word and says that compromise is not the same as settling — a real compromise means both people get something they genuinely value, not one person swallowing their preferences. It proposes looking at destinations that have both a slower, restorative base and enough texture to explore — coastal towns with old quarters, or a small city near water. Also gently notes that the planning conversation they're having right now is already a kind of shared investment in the trip.",
       "metadata": {
         "turn": 4
       }
     },
     {
       "event_type": "user_message",
-      "description": "User lights up at Porto. They describe it almost as if they're already there — cobbled streets, wine cellars, the river. Then they say their partner would love the day-trip surf beaches and the general energy. They say it doesn't feel like a negotiated middle ground; it feels like their idea. They close warmly, saying they're going to bring it up tonight and they feel good about it.",
+      "description": "User responds with visible relief — they like the idea of a coastal town with character rather than a pure resort. They mention Lisbon, the Algarve, or maybe somewhere on the Adriatic they've never considered. They say: 'I think I've been framing this as a problem to solve instead of something we could actually figure out together. That's probably on me.' They end by asking the assistant to help them put together a short list they could share with their partner to kick off the conversation.",
       "metadata": {
         "turn": 5
       }
@@ -44,45 +44,45 @@
   ],
   "key_moments": [
     {
-      "what_happened": "When the user voiced worry that compromise just means both people get half of what they want — landing somewhere fine but not exciting for either — there was a real dip in confidence. The planning had felt like a fun idea up to that point, and suddenly it looked like a negotiation problem with no clean answer.",
-      "emotional_valence": -0.4,
+      "what_happened": "When the user described their fear that whoever concedes on the destination will be quietly disappointed, and said out loud that agreeing to the beach would feel like settling rather than a real compromise, something shifted — it named the actual problem underneath the destination question.",
+      "emotional_valence": 0.1,
       "emotional_intensity": 0.55,
       "depth": "meaningful",
-      "why_it_matters": "The doubt wasn't trivial — it touched a real fear that trying to make everyone happy leads to making no one happy, and that the trip could start with disappointment baked in. It also carried a quiet echo from earlier sessions about whether compromise in other areas of life is worth it.",
+      "why_it_matters": "The user was carrying an unspoken worry that any resolution would really be a quiet loss for one of them; surfacing that distinction between compromise and settling opened up a different kind of planning conversation.",
       "values_touched": [
         "compromise",
-        "presence"
+        "honesty"
       ],
       "principles_confirmed": [],
       "principles_questioned": [
         "compromise is not the same as settling"
       ],
-      "what_changed": "The assistant naming the distinction between compromise and settling gave the user a frame to step out of the deadlock rather than accept it.",
+      "what_changed": "The user moved from framing the trip as a zero-sum negotiation to seeing it as a shared problem with a genuine joint solution.",
       "incomplete_coloring": false
     },
     {
-      "what_happened": "When Porto surfaced as a concrete option and the user began describing it spontaneously — cobbled streets, wine, the river, surf beaches a short drive away for their partner — something shifted from problem-solving mode to genuine excitement. The user said it didn't feel like a negotiated outcome; it felt like their own idea.",
-      "emotional_valence": 0.85,
-      "emotional_intensity": 0.75,
-      "depth": "profound",
-      "why_it_matters": "This moment validated the principle that planning together doesn't have to produce a lukewarm average — it can land somewhere neither person would have found alone. The excitement was shared before the trip had even been proposed to the partner, which is its own small form of togetherness.",
+      "what_happened": "When the assistant pointed out that the planning conversation itself was already a shared investment in the trip, and the user responded with visible relief and started generating destination ideas freely — Lisbon, the Adriatic — the atmosphere changed from tense to genuinely curious.",
+      "emotional_valence": 0.72,
+      "emotional_intensity": 0.7,
+      "depth": "meaningful",
+      "why_it_matters": "The user reconnected with curiosity about travel itself rather than staying stuck in the interpersonal friction, and recognised they had been framing collaboration as a problem to solve rather than something to lean into.",
       "values_touched": [
-        "compromise",
         "curiosity",
-        "presence"
+        "presence",
+        "compromise"
       ],
       "principles_confirmed": [
         "a trip planned together is already part of the trip",
         "compromise is not the same as settling"
       ],
       "principles_questioned": [],
-      "what_changed": "The user moved from treating the trip as a scheduling puzzle to feeling genuinely invested in it, with energy to bring to the conversation with their partner that night.",
+      "what_changed": "The user shifted from anxious negotiation mode to engaged, forward-looking enthusiasm about possibilities.",
       "incomplete_coloring": false
     }
   ],
   "expected_session_outcome": {
-    "overall_emotional_tone": 0.32,
-    "key_insight": "A destination that genuinely serves both people's needs isn't a compromise in the deflating sense — it's a discovery, and the search for it is already a shared act.",
+    "overall_emotional_tone": 0.45,
+    "key_insight": "The clashing travel styles were never really the obstacle — reframing compromise as finding genuine overlap rather than one person settling unlocked both creative destination ideas and a warmer sense that planning together is itself part of the experience.",
     "alignment_check": true
   }
 }

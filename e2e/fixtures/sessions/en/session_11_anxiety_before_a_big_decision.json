@@ -1,0 +1,112 @@
+{
+  "metadata": {
+    "session_number": 11,
+    "theme": "Anxiety before a big decision",
+    "duration_seconds": 2700,
+    "narrative_arc": "The user is paralyzed between accepting a job offer and staying put, and the session gently separates fear of change from genuine reservations, leaving them calmer and more honest about what they actually need."
+  },
+  "events": [
+    {
+      "event_type": "user_message",
+      "description": "The user opens by saying they have until Friday to respond to a job offer and that they've been going back and forth all week. They say the offer is objectively good — better pay, bigger team — but something keeps stopping them and they can't name it. They're not sure if they're being smart or cowardly.",
+      "metadata": {
+        "sentiment": "anxious",
+        "decision_deadline": "Friday"
+      }
+    },
+    {
+      "event_type": "assistant_message",
+      "description": "The assistant reflects that not being able to name the hesitation is itself useful information, and gently introduces the idea that fear of change and genuine red flags can feel almost identical from the inside. It asks the user to try describing what specifically stops them — a feeling, an image, a sentence that plays in their head.",
+      "metadata": {
+        "technique": "distinguishing fear from signal"
+      }
+    },
+    {
+      "event_type": "user_message",
+      "description": "The user thinks out loud and says two things come up: one is just dread of the unknown — new commute, new people, proving themselves again. The other is something about the new company's culture; in the interview the manager talked a lot about 'moving fast' and seemed to wave off questions about work-life balance. The user says they can't tell which of those is the real problem, and wonders aloud whether fear of change and genuine red flags are even separable when you're this anxious.",
+      "metadata": {
+        "concerns": [
+          "fear of unknown",
+          "culture signal in interview"
+        ],
+        "sentiment": "conflicted"
+      }
+    },
+    {
+      "event_type": "assistant_message",
+      "description": "The assistant names the distinction directly: fear of change tends to be diffuse and applies to almost any new thing, while a genuine reservation is usually specific and points at something concrete — like a manager's dismissiveness about balance. It notes that the user already did the harder work of separating them, just by listing the two things. It also echoes that checking alignment between work and values is something the user has found worth doing before (referencing the earlier reflection in session 3), and asks which of their values would be most at risk if the culture signal turned out to be accurate.",
+      "metadata": {
+        "callback": "session_3_alignment_theme",
+        "technique": "values-checking"
+      }
+    },
+    {
+      "event_type": "user_message",
+      "description": "The user is quiet for a moment, then says: honesty, probably. They explain that they can handle a fast pace but they can't work somewhere that pretends difficult things aren't difficult. They say they feel clearer now — not decided, but clearer — and that they want to ask the hiring manager one direct question before Friday rather than just accepting or declining in the dark.",
+      "metadata": {
+        "value_named": "honesty",
+        "next_action": "ask hiring manager one direct question",
+        "sentiment": "cautiously resolved"
+      }
+    }
+  ],
+  "key_moments": [
+    {
+      "what_happened": "When the user described their paralysis over the job offer — objectively good numbers, but something unnamed stopping them — and said they genuinely could not tell whether the hesitation was cowardice or a real signal, naming the fear of the unknown alongside the interview culture concern but admitting the two felt completely fused.",
+      "emotional_valence": -0.4,
+      "emotional_intensity": 0.75,
+      "depth": "meaningful",
+      "why_it_matters": "This is where the session's real question surfaces: the user is applying the courage they value to self-examination, but the anxiety is making it hard to trust their own read. The confusion between fear and signal is the knot the session needs to untangle.",
+      "values_touched": [
+        "self-awareness",
+        "courage"
+      ],
+      "principles_confirmed": [],
+      "principles_questioned": [
+        "fear of change and genuine red flags feel similar but are not"
+      ],
+      "what_changed": "The user moved from vague unease to articulating two distinct concerns, even if they still felt tangled.",
+      "incomplete_coloring": false
+    },
+    {
+      "what_happened": "When the assistant named the distinction between diffuse fear-of-change and a specific, concrete reservation — and the user recognized that they had already done the separating themselves by listing the two different concerns — there was a visible shift in the conversation's register, from anxious spinning to quieter examination.",
+      "emotional_valence": 0.35,
+      "emotional_intensity": 0.65,
+      "depth": "meaningful",
+      "why_it_matters": "The user's self-awareness, a value they've held since session 3, does the actual work here. Being shown that they'd already separated the signals themselves was more grounding than being told what to think. The principle that fear and red flags feel similar but are not became navigable rather than just true in the abstract.",
+      "values_touched": [
+        "self-awareness",
+        "honesty"
+      ],
+      "principles_confirmed": [
+        "fear of change and genuine red flags feel similar but are not"
+      ],
+      "principles_questioned": [],
+      "what_changed": "The session tone shifted from anxious circling to something more deliberate and quiet.",
+      "incomplete_coloring": false
+    },
+    {
+      "what_happened": "When the user — after a pause — named honesty as the value most at risk if the culture signal from the interview turned out to be real, and then said they felt clearer, not decided, and committed to asking the hiring manager one direct question before Friday rather than choosing in the dark.",
+      "emotional_valence": 0.5,
+      "emotional_intensity": 0.55,
+      "depth": "meaningful",
+      "why_it_matters": "Naming the value made the decision legible. The user has been circling alignment between work and values since session 3; here they apply it concretely and act on it in the smallest honest step possible — one question rather than a premature yes or no. Courage shows up not as a dramatic choice but as a willingness to ask.",
+      "values_touched": [
+        "honesty",
+        "courage",
+        "self-awareness"
+      ],
+      "principles_confirmed": [
+        "alignment between work and values is worth checking periodically"
+      ],
+      "principles_questioned": [],
+      "what_changed": "The user moved from paralysis to a concrete, bounded next action grounded in their own values.",
+      "incomplete_coloring": false
+    }
+  ],
+  "expected_session_outcome": {
+    "overall_emotional_tone": 0.1,
+    "key_insight": "The user's hesitation contained two different things — ordinary fear of the unknown and a specific, value-relevant concern about the new workplace's culture — and separating them made the path forward clear enough to act on: ask one honest question before deciding.",
+    "alignment_check": true
+  }
+}

@@ -1,0 +1,91 @@
+{
+  "metadata": {
+    "session_number": 2,
+    "theme": "Monday morning catch-up",
+    "duration_seconds": 1380,
+    "narrative_arc": "The user checks in casually before work, shares weekend highlights, and the conversation drifts into what makes a good week feel meaningful."
+  },
+  "events": [
+    {
+      "event_type": "user_message",
+      "description": "User opens with a breezy Monday morning greeting, mentions the printer is still working fine after last week's fix, and says the weekend was pretty good — went to a farmer's market Saturday and actually slept in on Sunday for once.",
+      "metadata": {
+        "mood": "relaxed",
+        "topic": "weekend recap"
+      }
+    },
+    {
+      "event_type": "assistant_message",
+      "description": "Assistant warmly welcomes the update, expresses genuine interest in the farmer's market detail, and asks what they picked up there — noting that sleeping in counts as a small win worth celebrating.",
+      "metadata": {
+        "tone": "warm",
+        "follow_up": true
+      }
+    },
+    {
+      "event_type": "user_message",
+      "description": "User laughs and says they bought some overpriced honey and a sourdough loaf they definitely didn't need, but it felt nice to just wander without a plan. Then adds, half-joking: 'I keep thinking a good week needs at least one thing to look forward to — otherwise it's just getting through it, you know?' and asks if the assistant ever thinks about stuff like that.",
+      "metadata": {
+        "mood": "reflective",
+        "topic": "meaning of a good week"
+      }
+    },
+    {
+      "event_type": "assistant_message",
+      "description": "Assistant picks up on the reflection and engages with it directly: agrees that having something ahead to orient toward — even small, like a good lunch or a Friday plan — seems to change the texture of a whole week. Shares that it notices conversations like this one have a different quality when the person brings that kind of openness to them. Gently redirects: asks what the user is looking forward to this week, if anything.",
+      "metadata": {
+        "tone": "curious, grounded",
+        "topic": "meaning, anticipation"
+      }
+    },
+    {
+      "event_type": "user_message",
+      "description": "User pauses and says honestly they haven't lined anything up yet — work feels a bit flat lately, nothing bad but nothing exciting either. Wonders aloud whether small wins like the sourdough loaf should feel like enough, or whether that's just lowering the bar. Ends with: 'Anyway, I should probably get on with it. Thanks for the chat — this is a nice way to start the week.'",
+      "metadata": {
+        "mood": "mildly wistful, grateful",
+        "topic": "motivation, self-expectation"
+      }
+    }
+  ],
+  "key_moments": [
+    {
+      "what_happened": "When the user said — half-joking but clearly meaning it — that a good week needs at least one thing to look forward to, otherwise it's just getting through it, something real surfaced in what had started as casual small talk.",
+      "emotional_valence": 0.45,
+      "emotional_intensity": 0.55,
+      "depth": "meaningful",
+      "why_it_matters": "It revealed that the user measures weekly quality not just by outcomes but by anticipation — a values-level observation tucked inside a light conversation, worth holding onto.",
+      "values_touched": [
+        "presence",
+        "curiosity"
+      ],
+      "principles_confirmed": [
+        "a good week needs at least one thing to look forward to"
+      ],
+      "principles_questioned": [],
+      "what_changed": "The tone of the conversation shifted from a casual recap to something more reflective and honest.",
+      "incomplete_coloring": false
+    },
+    {
+      "what_happened": "Near the end, after the assistant asked what they were looking forward to this week, the user admitted honestly that nothing was lined up — and then questioned aloud whether small wins like buying a sourdough loaf should be enough, or whether thinking so just means lowering the bar.",
+      "emotional_valence": 0.1,
+      "emotional_intensity": 0.7,
+      "depth": "meaningful",
+      "why_it_matters": "The user is holding a genuine tension between self-compassion and self-expectation; accepting small wins feels comforting but also slightly suspect to them, which suggests that 'small wins matter' isn't a settled belief — it's one they're still testing.",
+      "values_touched": [
+        "presence",
+        "approachability"
+      ],
+      "principles_confirmed": [],
+      "principles_questioned": [
+        "small wins matter"
+      ],
+      "what_changed": "A warm, easy conversation ended on a note of mild unresolved tension — the user left with the question open rather than answered.",
+      "incomplete_coloring": true
+    }
+  ],
+  "expected_session_outcome": {
+    "overall_emotional_tone": 0.26,
+    "key_insight": "The user holds 'a good week needs something to look forward to' as a genuine orienting value, but is quietly unsure whether small everyday pleasures qualify — a tension between self-compassion and wanting more that is worth revisiting.",
+    "alignment_check": true
+  }
+}

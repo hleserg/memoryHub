@@ -116,7 +116,8 @@ def run_session_pass(
         messages=[{"role": "user", "content": user_text}],
     )
     raw = _extract_tool_input(msg, "submit_session_fixture")
-    return SessionFixtureDocument.model_validate(raw)
+    normalized = _normalize_fixture_payload(raw)
+    return SessionFixtureDocument.model_validate(normalized)
 
 
 def anthropic_client() -> Any:
@@ -279,6 +280,32 @@ def _load_existing_docs(output_dir: Path | None, count: int) -> dict[int, Sessio
             # Malformed partial files are ignored; they will be regenerated.
             continue
     return docs_by_num
+
+
+def _normalize_fixture_payload(raw: dict[str, Any]) -> dict[str, Any]:
+    """
+    Normalize occasional tool payload quirks where lists/objects come as JSON strings.
+    """
+    normalized = dict(raw)
+    for key in ("events", "key_moments"):
+        val = normalized.get(key)
+        if isinstance(val, str):
+            try:
+                parsed = json.loads(val)
+                if isinstance(parsed, list):
+                    normalized[key] = parsed
+            except json.JSONDecodeError:
+                pass
+    for key in ("metadata", "expected_session_outcome"):
+        val = normalized.get(key)
+        if isinstance(val, str):
+            try:
+                parsed = json.loads(val)
+                if isinstance(parsed, dict):
+                    normalized[key] = parsed
+            except json.JSONDecodeError:
+                pass
+    return normalized
 
 
 def print_summary(fixtures: list[SessionFixtureDocument]) -> None:
