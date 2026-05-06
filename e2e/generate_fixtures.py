@@ -1,7 +1,7 @@
 """
 Generate realistic session JSON fixtures via Anthropic (two-pass: skeleton + per session).
 
-Not run in CI. Requires ``ANTHROPIC_API_KEY`` and ``pip install 'atman[e2e]'``.
+Manual/secret-gated automation only. Requires ``ANTHROPIC_API_KEY`` and ``pip install 'atman[e2e]'``.
 
 Default: 20 English + 20 Russian sessions under ``en/`` and ``ru/`` (parallel API runs).
 

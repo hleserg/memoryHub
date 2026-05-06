@@ -11,7 +11,7 @@ and `expected_session_outcome`, aligned with `SessionEvent` / `KeyMomentInput` i
 
 ## Generating fixtures
 
-One-off LLM generation (not CI). Requires `ANTHROPIC_API_KEY` and `pip install -e ".[e2e]"`.
+One-off LLM generation (manual/secret-gated automation). Requires `ANTHROPIC_API_KEY` and `pip install -e ".[e2e]"`.
 
 Default: **20 English + 20 Russian** sessions, **parallel** API runs:
 

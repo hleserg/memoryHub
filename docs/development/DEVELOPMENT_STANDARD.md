@@ -818,7 +818,7 @@ AGENTS.md          — инструкции для агентов
 .gitignore
 .gitattributes
 pyproject.toml     — конфигурация Python-пакета
-.github/           — шаблоны PR/issues (GitHub Actions в репозитории не используются)
+.github/           — шаблоны PR/issues, GitHub Actions workflows, Dependabot
 src/               — исполняемый код
 tests/             — тесты
 ```

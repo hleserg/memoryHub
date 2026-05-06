@@ -95,9 +95,9 @@ All paths are absolute relative to the repository root.
 | `src/demo_reflection.py` | demo | micro→daily→deep with fixtures |
 | `src/demo_full_corpus.py` | demo | all `e2e/fixtures/sessions/*` → SessionManager → micro/daily/deep + Rich summary ([issue #158](https://github.com/hleserg/atman/issues/158)) |
 | `src/demo_web_dashboard.py` | demo | web dashboard launch hint |
-| `e2e/generate_fixtures.py` | e2e | LLM-backed session JSON fixture generator (`python -m e2e.generate_fixtures`); default 20 `en/` + 20 `ru/` corpora with parallel locale runs; Anthropic tool_use, two-pass skeleton + per-session; `--corpus-policy strict|soft`, `--max-corpus-regen N` (strict tail cap); optional extra `[e2e]`; not CI ([issue #141](https://github.com/hleserg/atman/issues/141)) |
+| `e2e/generate_fixtures.py` | e2e | LLM-backed session JSON fixture generator (`python -m e2e.generate_fixtures`); default 20 `en/` + 20 `ru/` corpora with parallel locale runs; Anthropic tool_use, two-pass skeleton + per-session; `--corpus-policy strict|soft`, `--max-corpus-regen N` (strict tail cap); optional extra `[e2e]`; manual/secret-gated automation candidate ([issue #141](https://github.com/hleserg/atman/issues/141)) |
 | `e2e/models.py`, `e2e/validation.py`, `e2e/llm.py`, `e2e/prompts.py` | e2e | fixture schema, intra/cross-session validators, API orchestration, prompts |
-| `e2e/full_loop.py`, `e2e/__main__.py` | e2e | integration driver over WP-01..05 with session JSON fixtures (`python -m e2e`); optional/manual, not CI |
+| `e2e/full_loop.py`, `e2e/__main__.py` | e2e | integration driver over WP-01..05 with session JSON fixtures (`python -m e2e`); optional/manual and suitable for a targeted GitHub Actions smoke job |
 
 ---
 

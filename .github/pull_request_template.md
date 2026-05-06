@@ -50,6 +50,7 @@
 - [ ] `pyright src/ tests/` — 0 ошибок (N/A если PR не затрагивает код)
 - [ ] `bandit -c pyproject.toml -r src/atman/` — 0 ошибок (N/A если PR не затрагивает код)
 - [ ] `pytest tests/ -v --cov=atman --cov-fail-under=90` — тесты проходят, покрытие ≥90% (N/A если PR не затрагивает код)
+- [ ] GitHub Actions CI зелёный или локальные проверки выше объясняют, почему CI не применим
 
 ## Примечания
 

@@ -8,6 +8,7 @@ Thanks for your interest in the project. This document is the entry point for hu
 |--------|----------|
 | Vulnerability reporting, supported lines | [`SECURITY.md`](SECURITY.md) |
 | Repo layout, demos, Rich, `uv`, CI commands | [`AGENTS.md`](AGENTS.md) |
+| GitHub Actions, dependency audit, proposed automation | [`docs/development/GITHUB_AUTOMATIONS.md`](docs/development/GITHUB_AUTOMATIONS.md) |
 | Terminology, core vs adapters, Definition of Demo | [`docs/development/DEVELOPMENT_STANDARD.md`](docs/development/DEVELOPMENT_STANDARD.md) |
 | Architecture | [`docs/architecture/SYSTEM.md`](docs/architecture/SYSTEM.md) |
 | Local Cursor agents | [`.cursor/local-agent-master-prompt.md`](.cursor/local-agent-master-prompt.md) |
