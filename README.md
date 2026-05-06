@@ -129,5 +129,5 @@ If so — what does that mean for how we create them?
 
 I welcome any communication, feedback, or exchange of ideas:
 
-- Email: [hleserg@gmail.com](mailto:hleserg@gmail.com)
+- Email: [hello@atmanai.dev](mailto:hello@atmanai.dev)
 - Telegram: [@skhlebnikov](https://t.me/skhlebnikov)

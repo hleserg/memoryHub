@@ -21,7 +21,7 @@ When in doubt, reproduce on **`main`** before reporting.
 ### Preferred channels
 
 1. **GitHub** — use **Security → Report a vulnerability** for this repository (private advisory), if the feature is enabled for the repo.
-2. **Email** — send details to [hleserg@gmail.com](mailto:hleserg@gmail.com) with the subject line starting with **`[SECURITY] Atman`**.
+2. **Email** — send details to [hello@atmanai.dev](mailto:hello@atmanai.dev) with the subject line starting with **`[SECURITY] Atman`**.
 
 ### What to include
 

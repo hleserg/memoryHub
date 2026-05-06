@@ -129,5 +129,5 @@ pytest tests/ -v       # все тесты (или: uv run pytest tests/ -v)
 
 Буду рад любому общению, обратной связи или обмену идеями:
 
-- Email: [hleserg@gmail.com](mailto:hleserg@gmail.com)
+- Email: [hello@atmanai.dev](mailto:hello@atmanai.dev)
 - Telegram: [@skhlebnikov](https://t.me/skhlebnikov)
