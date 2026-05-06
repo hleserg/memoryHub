@@ -339,20 +339,22 @@ class DailyReflectionService:
             "known_habits": ", ".join(h.statement for h in identity.habits),
         }
 
-        pattern_description = self.reflection_model.detect_pattern(
-            experiences=experiences, context=context
-        )
+        detection = self.reflection_model.detect_pattern(experiences=experiences, context=context)
+        pattern_description = detection.description.strip()
 
         if not pattern_description or len(pattern_description) < 10:
             return []
 
+        conf = detection.confidence if detection.confidence is not None else 0.6
         detection_key = daily_pattern_detection_key(run_key, PatternType.BEHAVIOR.value)
         pattern = PatternCandidate(
             pattern_type=PatternType.BEHAVIOR,
             description=pattern_description,
             examples=[exp.id for exp in experiences[:3]],
             detected_by=ReflectionLevel.DAILY,
-            confidence=0.6,
+            confidence=conf,
+            potential_habit=detection.potential_habit,
+            potential_principle=detection.potential_principle,
         )
 
         stored = self.pattern_store.save_with_detection_key(detection_key, pattern)
@@ -375,14 +377,15 @@ class DailyReflectionService:
         for exp in experiences[:2]:
             context = {"patterns": ", ".join(p.description for p in patterns)}
 
-            reframing_text = self.reflection_model.generate_reframing_note(
+            reframing_out = self.reflection_model.generate_reframing_note(
                 experience=exp, context=context
             )
+            reframing_text = reframing_out.reflection.strip()
 
             if reframing_text and len(reframing_text) > 10:
                 note = ReframingNote(
                     reflection=reframing_text,
-                    reflection_type="pattern",
+                    reflection_type=reframing_out.reflection_type,
                     triggered_by=reframing_trigger_key(run_key, exp.id),
                 )
                 outcome = self.experience_repo.add_reframing_note(exp.id, note)
@@ -610,15 +613,15 @@ class DeepReflectionService:
         criteria: dict[JahodaCriterion, CriterionAssessment] = {}
 
         for criterion in JahodaCriterion:
-            score, evidence, concerns = self.reflection_model.assess_health_criterion(
+            hc = self.reflection_model.assess_health_criterion(
                 identity=identity, experiences=experiences, criterion=criterion
             )
 
             criteria[criterion] = CriterionAssessment(
                 criterion=criterion,
-                score=score,
-                evidence=evidence,
-                concerns=concerns,
+                score=hc.score,
+                evidence=hc.evidence,
+                concerns=hc.concerns,
             )
 
         overall_score = sum(c.score for c in criteria.values()) / len(criteria)
@@ -647,18 +650,22 @@ class DeepReflectionService:
                 "pattern_type": pattern_type.value,
             }
 
-            pattern_description = self.reflection_model.detect_pattern(
+            detection = self.reflection_model.detect_pattern(
                 experiences=experiences, context=context
             )
+            pattern_description = detection.description.strip()
 
             if pattern_description and len(pattern_description) > 10:
+                conf = detection.confidence if detection.confidence is not None else 0.7
                 detection_key = deep_pattern_detection_key(run_key, pattern_type.value)
                 pattern = PatternCandidate(
                     pattern_type=pattern_type,
                     description=pattern_description,
                     examples=[exp.id for exp in experiences[:5]],
                     detected_by=ReflectionLevel.DEEP,
-                    confidence=0.7,
+                    confidence=conf,
+                    potential_habit=detection.potential_habit,
+                    potential_principle=detection.potential_principle,
                 )
                 stored = self.pattern_store.save_with_detection_key(detection_key, pattern)
                 patterns.append(stored)
@@ -682,14 +689,15 @@ class DeepReflectionService:
         for exp in experiences[:3]:
             context = {"patterns": ", ".join(p.description for p in patterns)}
 
-            reframing_text = self.reflection_model.generate_reframing_note(
+            reframing_out = self.reflection_model.generate_reframing_note(
                 experience=exp, context=context
             )
+            reframing_text = reframing_out.reflection.strip()
 
             if reframing_text and len(reframing_text) > 10:
                 note = ReframingNote(
                     reflection=reframing_text,
-                    reflection_type="growth",
+                    reflection_type=reframing_out.reflection_type,
                     triggered_by=reframing_trigger_key(run_key, exp.id),
                 )
                 outcome = self.experience_repo.add_reframing_note(exp.id, note)
@@ -721,7 +729,7 @@ class DeepReflectionService:
             reflection_level=ReflectionLevel.DEEP,
         )
 
-        return proposed
+        return proposed.body
 
     def _propose_identity_revision(
         self,

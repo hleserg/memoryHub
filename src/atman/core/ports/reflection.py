@@ -20,10 +20,14 @@ from atman.core.models.identity import Identity, IdentitySnapshot
 from atman.core.models.narrative import NarrativeDocument
 from atman.core.models.reflection import (
     HealthAssessment,
+    HealthCriterionOutput,
     JahodaCriterion,
+    NarrativeUpdateOutput,
     PatternCandidate,
+    PatternDetectionOutput,
     ReflectionEvent,
     ReflectionLevel,
+    ReframingNoteOutput,
 )
 
 
@@ -348,14 +352,10 @@ class HealthAssessmentStore(ABC):
 
 class ReflectionModel(ABC):
     """
-    Port for text generation during reflection.
+    Port for structured generation during reflection (LLM or mock).
 
-    This can be implemented as:
-    - A real LLM integration (Claude, GPT, etc.)
-    - A mock/deterministic generator for testing
-    - A template-based generator
-
-    The key is that reflection logic stays separate from text generation.
+    Implementations return Pydantic DTOs so services do not depend on free-form
+    parsing (GitHub #146, MODEL-01).
     """
 
     @abstractmethod
@@ -363,7 +363,7 @@ class ReflectionModel(ABC):
         self,
         experience: SessionExperience,
         context: dict[str, str],
-    ) -> str:
+    ) -> ReframingNoteOutput:
         """
         Generate a reframing note for an experience.
 
@@ -372,7 +372,7 @@ class ReflectionModel(ABC):
             context: Additional context (identity, recent patterns, etc.)
 
         Returns:
-            Text of the reframing note
+            Structured note; empty ``reflection`` means skip persistence.
         """
         ...
 
@@ -381,7 +381,7 @@ class ReflectionModel(ABC):
         self,
         experiences: list[SessionExperience],
         context: dict[str, str],
-    ) -> str:
+    ) -> PatternDetectionOutput:
         """
         Detect and describe a pattern across experiences.
 
@@ -390,7 +390,7 @@ class ReflectionModel(ABC):
             context: Additional context (identity, known patterns, etc.)
 
         Returns:
-            Description of detected pattern
+            Structured detection; empty ``description`` means no pattern.
         """
         ...
 
@@ -400,7 +400,7 @@ class ReflectionModel(ABC):
         current_narrative: NarrativeDocument,
         recent_experiences: list[SessionExperience],
         reflection_level: ReflectionLevel,
-    ) -> str:
+    ) -> NarrativeUpdateOutput:
         """
         Propose an update to the narrative.
 
@@ -410,7 +410,7 @@ class ReflectionModel(ABC):
             reflection_level: Level of reflection being performed
 
         Returns:
-            Proposed narrative update text
+            Structured proposal; ``body`` is applied to the narrative layer.
         """
         ...
 
@@ -420,7 +420,7 @@ class ReflectionModel(ABC):
         identity: Identity,
         experiences: list[SessionExperience],
         criterion: JahodaCriterion,
-    ) -> tuple[float, list[str], list[str]]:
+    ) -> HealthCriterionOutput:
         """
         Assess one Jahoda health criterion.
 
@@ -430,6 +430,6 @@ class ReflectionModel(ABC):
             criterion: Which criterion to assess
 
         Returns:
-            Tuple of (score, evidence_list, concerns_list)
+            Structured score, evidence, and concerns.
         """
         ...

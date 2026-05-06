@@ -136,6 +136,97 @@ class PatternCandidate(BaseModel):
     )
 
 
+class ReframingNoteOutput(BaseModel):
+    """
+    Structured result from :meth:`~atman.core.ports.reflection.ReflectionModel.generate_reframing_note`.
+
+    Empty ``reflection`` means the service should not persist a note.
+    """
+
+    reflection: str = Field(
+        default="",
+        description="Main note body; whitespace-only is treated as empty",
+    )
+    reflection_type: str = Field(
+        default="insight",
+        description="Tag stored on :class:`~atman.core.models.experience.ReframingNote`",
+    )
+
+    @field_validator("reflection", "reflection_type", mode="before")
+    @classmethod
+    def strip_text(cls, v: Any) -> Any:
+        if isinstance(v, str):
+            return v.strip()
+        return v
+
+    @model_validator(mode="after")
+    def ensure_reflection_type_not_empty(self) -> Self:
+        """Ensure reflection_type is never empty after strip; use default if needed."""
+        if not self.reflection_type:
+            self.reflection_type = "insight"
+        return self
+
+
+class PatternDetectionOutput(BaseModel):
+    """
+    Structured result from :meth:`~atman.core.ports.reflection.ReflectionModel.detect_pattern`.
+
+    Empty ``description`` means no pattern; services skip persistence.
+    """
+
+    description: str = Field(default="", description="Human-readable pattern summary")
+    confidence: float | None = Field(
+        default=None,
+        ge=0.0,
+        le=1.0,
+        description="If set, used as PatternCandidate.confidence; else service picks a default",
+    )
+    potential_habit: str = Field(default="")
+    potential_principle: str = Field(default="")
+
+    @field_validator("description", "potential_habit", "potential_principle", mode="before")
+    @classmethod
+    def strip_optional(cls, v: Any) -> Any:
+        if isinstance(v, str):
+            return v.strip()
+        return v
+
+
+class NarrativeUpdateOutput(BaseModel):
+    """
+    Structured result from :meth:`~atman.core.ports.reflection.ReflectionModel.propose_narrative_update`.
+
+    ``body`` is merged into the narrative (e.g. recent layer) by :class:`NarrativeRevisionService`.
+    """
+
+    body: str = Field(
+        default="",
+        description="Proposed narrative fragment (often recent-layer replacement content)",
+    )
+
+    @field_validator("body", mode="before")
+    @classmethod
+    def strip_body(cls, v: Any) -> Any:
+        if isinstance(v, str):
+            return v.strip()
+        return v
+
+
+class HealthCriterionOutput(BaseModel):
+    """
+    Structured result from :meth:`~atman.core.ports.reflection.ReflectionModel.assess_health_criterion`.
+    """
+
+    score: float = Field(ge=0.0, le=1.0)
+    evidence: list[str] = Field(default_factory=list)
+    concerns: list[str] = Field(default_factory=list)
+
+    @field_validator("evidence", "concerns")
+    @classmethod
+    def normalize_lists(cls, v: list[str]) -> list[str]:
+        return [item.strip() for item in v if isinstance(item, str) and item.strip()]
+
+
 class JahodaCriterion(StrEnum):
     """
     Six criteria for psychological health based on Marie Jahoda's framework.

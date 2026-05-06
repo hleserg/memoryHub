@@ -55,6 +55,12 @@ from atman.core.models import (
     SessionResult,
 )
 from atman.core.models.experience import ReframingNote, ReframingNoteAppendResult, SessionExperience
+from atman.core.models.reflection import (
+    HealthCriterionOutput,
+    NarrativeUpdateOutput,
+    PatternDetectionOutput,
+    ReframingNoteOutput,
+)
 from atman.core.narrative_write_audit import NoOpNarrativeWriteAudit
 from atman.core.ports.reflection import (
     ExperienceRepository,
@@ -167,37 +173,47 @@ class DeterministicReflectionModel(ReflectionModel):
         self,
         experiences: list,
         context: dict,
-    ) -> str:
+    ) -> PatternDetectionOutput:
+        _ = context
         if len(experiences) < 2:
-            return ""
-        return f"Pattern detected: recurring theme across {len(experiences)} experiences"
+            return PatternDetectionOutput()
+        return PatternDetectionOutput(
+            description=(
+                f"Pattern detected: recurring theme across {len(experiences)} experiences"
+            ),
+            confidence=0.75,
+        )
 
     def generate_reframing_note(
         self,
         experience,
         context: dict,
-    ) -> str:
-        return f"Reframing: deeper perspective on experience {experience.id}"
+    ) -> ReframingNoteOutput:
+        return ReframingNoteOutput(
+            reflection=f"Reframing: deeper perspective on experience {experience.id}",
+            reflection_type="e2e",
+        )
 
     def propose_narrative_update(
         self,
         current_narrative,
         recent_experiences: list,
         reflection_level,
-    ) -> str:
-        return f"Narrative update proposal at {reflection_level.value} level"
+    ) -> NarrativeUpdateOutput:
+        return NarrativeUpdateOutput(
+            body=f"Narrative update proposal at {reflection_level.value} level"
+        )
 
     def assess_health_criterion(
         self,
         identity,
         experiences: list,
         criterion,
-    ) -> tuple[float, list[str], list[str]]:
-        # Return (score, evidence, concerns)
-        return (
-            0.7,
-            [f"Criterion {criterion.value} assessed"],
-            ["No major concerns"],
+    ) -> HealthCriterionOutput:
+        return HealthCriterionOutput(
+            score=0.7,
+            evidence=[f"Criterion {criterion.value} assessed"],
+            concerns=["No major concerns"],
         )
 
 

@@ -107,11 +107,12 @@ class NarrativeRevisionService:
         etag = base.updated_at
         draft = base.model_copy(deep=True)
 
-        proposed_update = self.reflection_model.propose_narrative_update(
+        proposed = self.reflection_model.propose_narrative_update(
             current_narrative=draft,
             recent_experiences=experiences,
             reflection_level=reflection_level,
         )
+        proposed_update = proposed.body
 
         draft.update_recent_layer(proposed_update)
         self._commit_narrative(

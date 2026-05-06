@@ -35,8 +35,8 @@ def test_generate_reframing_note_with_patterns() -> None:
         ],
     )
 
-    note = model.generate_reframing_note(exp, {"patterns": "test pattern"})
-    assert "pattern" in note.lower()
+    out = model.generate_reframing_note(exp, {"patterns": "test pattern"})
+    assert "pattern" in out.reflection.lower()
 
 
 def test_generate_reframing_note_without_patterns() -> None:
@@ -55,8 +55,8 @@ def test_generate_reframing_note_without_patterns() -> None:
         ],
     )
 
-    note = model.generate_reframing_note(exp, {})
-    assert len(note) > 0
+    out = model.generate_reframing_note(exp, {})
+    assert len(out.reflection) > 0
 
 
 def test_detect_pattern_positive() -> None:
@@ -94,8 +94,9 @@ def test_detect_pattern_positive() -> None:
         ),
     ]
 
-    pattern = model.detect_pattern(experiences, {})
-    assert "positive" in pattern.lower() or "curiosity" in pattern.lower()
+    detection = model.detect_pattern(experiences, {})
+    desc = detection.description
+    assert "positive" in desc.lower() or "curiosity" in desc.lower()
 
 
 def test_detect_pattern_negative() -> None:
@@ -133,8 +134,9 @@ def test_detect_pattern_negative() -> None:
         ),
     ]
 
-    pattern = model.detect_pattern(experiences, {})
-    assert "uncertain" in pattern.lower() or "concerned" in pattern.lower()
+    detection = model.detect_pattern(experiences, {})
+    desc = detection.description
+    assert "uncertain" in desc.lower() or "concerned" in desc.lower()
 
 
 def test_detect_pattern_single_experience() -> None:
@@ -154,8 +156,8 @@ def test_detect_pattern_single_experience() -> None:
         ],
     )
 
-    pattern = model.detect_pattern([exp], {})
-    assert pattern == ""
+    detection = model.detect_pattern([exp], {})
+    assert detection.description == ""
 
 
 def test_propose_narrative_update_micro() -> None:
@@ -182,8 +184,8 @@ def test_propose_narrative_update_micro() -> None:
         ],
     )
 
-    update = model.propose_narrative_update(narrative, [exp], ReflectionLevel.MICRO)
-    assert "session" in update.lower()
+    proposed = model.propose_narrative_update(narrative, [exp], ReflectionLevel.MICRO)
+    assert "session" in proposed.body.lower()
 
 
 def test_assess_health_all_criteria() -> None:
@@ -215,11 +217,11 @@ def test_assess_health_all_criteria() -> None:
     ]
 
     for criterion in JahodaCriterion:
-        score, evidence, concerns = model.assess_health_criterion(identity, experiences, criterion)
+        hc = model.assess_health_criterion(identity, experiences, criterion)
 
-        assert 0.0 <= score <= 1.0
-        assert isinstance(evidence, list)
-        assert isinstance(concerns, list)
+        assert 0.0 <= hc.score <= 1.0
+        assert isinstance(hc.evidence, list)
+        assert isinstance(hc.concerns, list)
 
 
 def test_assess_health_positive_self_attitude() -> None:
@@ -228,12 +230,10 @@ def test_assess_health_positive_self_attitude() -> None:
 
     identity = Identity(self_description="I am learning")
 
-    score, evidence, _concerns = model.assess_health_criterion(
-        identity, [], JahodaCriterion.POSITIVE_SELF_ATTITUDE
-    )
+    hc = model.assess_health_criterion(identity, [], JahodaCriterion.POSITIVE_SELF_ATTITUDE)
 
-    assert score >= 0.5
-    assert len(evidence) > 0
+    assert hc.score >= 0.5
+    assert len(hc.evidence) > 0
 
 
 def test_assess_health_growth() -> None:
@@ -242,12 +242,10 @@ def test_assess_health_growth() -> None:
 
     identity = Identity(goals=[Goal(content="Learn more")])
 
-    score, evidence, _concerns = model.assess_health_criterion(
-        identity, [], JahodaCriterion.GROWTH_AND_ACTUALIZATION
-    )
+    hc = model.assess_health_criterion(identity, [], JahodaCriterion.GROWTH_AND_ACTUALIZATION)
 
-    assert score >= 0.5
-    assert "goal" in " ".join(evidence).lower()
+    assert hc.score >= 0.5
+    assert "goal" in " ".join(hc.evidence).lower()
 
 
 def test_assess_health_integration() -> None:
@@ -259,11 +257,9 @@ def test_assess_health_integration() -> None:
         habits=[Habit(statement="Usually honest")],
     )
 
-    score, _evidence, _concerns = model.assess_health_criterion(
-        identity, [], JahodaCriterion.INTEGRATION
-    )
+    hc = model.assess_health_criterion(identity, [], JahodaCriterion.INTEGRATION)
 
-    assert score >= 0.5
+    assert hc.score >= 0.5
 
 
 def test_assess_health_autonomy() -> None:
@@ -272,8 +268,6 @@ def test_assess_health_autonomy() -> None:
 
     identity = Identity(principles=[Principle(statement="My choice", chosen_consciously=True)])
 
-    score, _evidence, _concerns = model.assess_health_criterion(
-        identity, [], JahodaCriterion.AUTONOMY
-    )
+    hc = model.assess_health_criterion(identity, [], JahodaCriterion.AUTONOMY)
 
-    assert score >= 0.5
+    assert hc.score >= 0.5
