@@ -30,7 +30,15 @@ from atman.core.models.experience import (
 )
 from atman.core.models.identity import Identity, IdentitySnapshot
 from atman.core.models.narrative import LayerType, NarrativeDocument, NarrativeLayer
-from atman.core.models.reflection import ReflectionEvent, ReflectionLevel
+from atman.core.models.reflection import (
+    HealthCriterionOutput,
+    JahodaCriterion,
+    NarrativeUpdateOutput,
+    PatternDetectionOutput,
+    ReflectionEvent,
+    ReflectionLevel,
+    ReframingNoteOutput,
+)
 from atman.core.narrative_write_audit import NoOpNarrativeWriteAudit
 from atman.core.reflection_run_keys import (
     daily_reflection_run_key_empty_day,
@@ -250,6 +258,68 @@ class RejectingReframeMockRepo(MockExperienceRepo):
         if experience_id not in self.experiences:
             return ReframingNoteAppendResult.EXPERIENCE_NOT_FOUND
         return ReframingNoteAppendResult.STORAGE_REJECTED
+
+
+class StructuredOutputReflectionModel(MockReflectionModel):
+    """Configurable model for structured-output service boundary tests."""
+
+    def __init__(
+        self,
+        *,
+        pattern_description: str = "",
+        pattern_confidence: float | None = None,
+        reframing_text: str = "",
+        potential_habit: str = "",
+        potential_principle: str = "",
+        health_score: float = 0.6,
+        narrative_body: str = "Structured narrative proposal.",
+    ) -> None:
+        self.pattern_description = pattern_description
+        self.pattern_confidence = pattern_confidence
+        self.reframing_text = reframing_text
+        self.potential_habit = potential_habit
+        self.potential_principle = potential_principle
+        self.health_score = health_score
+        self.narrative_body = narrative_body
+
+    def detect_pattern(
+        self,
+        experiences: list[SessionExperience],
+        context: dict[str, str],
+    ) -> PatternDetectionOutput:
+        return PatternDetectionOutput(
+            description=self.pattern_description,
+            confidence=self.pattern_confidence,
+            potential_habit=self.potential_habit,
+            potential_principle=self.potential_principle,
+        )
+
+    def generate_reframing_note(
+        self,
+        experience: SessionExperience,
+        context: dict[str, str],
+    ) -> ReframingNoteOutput:
+        return ReframingNoteOutput(reflection=self.reframing_text, reflection_type="boundary")
+
+    def propose_narrative_update(
+        self,
+        current_narrative: NarrativeDocument,
+        recent_experiences: list[SessionExperience],
+        reflection_level: ReflectionLevel,
+    ) -> NarrativeUpdateOutput:
+        return NarrativeUpdateOutput(body=self.narrative_body)
+
+    def assess_health_criterion(
+        self,
+        identity: Identity,
+        experiences: list[SessionExperience],
+        criterion: JahodaCriterion,
+    ) -> HealthCriterionOutput:
+        return HealthCriterionOutput(
+            score=self.health_score,
+            evidence=[f"covered {criterion.value}"],
+            concerns=[],
+        )
 
 
 def create_test_experience(session_id: UUID | None = None) -> SessionExperience:
@@ -491,6 +561,104 @@ def test_daily_reflection_reframing_count_skips_failed_persist() -> None:
     assert "signal=reframing_append_degraded" in (event.notes or "")
 
 
+def test_daily_reflection_skips_short_structured_pattern_output() -> None:
+    """A short structured pattern description is treated as no durable pattern."""
+    anchor = datetime(2026, 9, 1, 12, 0, 0, tzinfo=UTC)
+    exp1 = create_test_experience().model_copy(update={"timestamp": anchor})
+    exp2 = create_test_experience().model_copy(update={"timestamp": anchor})
+    identity = Identity()
+    exp_repo = MockExperienceRepo([exp1, exp2])
+    identity_repo = MockIdentityRepo(identity)
+    pattern_store = InMemoryPatternStore()
+    event_store = InMemoryReflectionEventStore()
+    reflection_model = StructuredOutputReflectionModel(pattern_description="123456789")
+
+    service = DailyReflectionService(
+        experience_repo=exp_repo,
+        identity_repo=identity_repo,
+        pattern_store=pattern_store,
+        reflection_model=reflection_model,
+        event_store=event_store,
+    )
+
+    event = service.reflect(anchor)
+
+    assert event.patterns_detected == []
+    assert pattern_store.get_all() == []
+    assert event.reframing_notes_added == 0
+
+
+def test_daily_reflection_persists_minimum_length_structured_pattern_output() -> None:
+    """Daily reflection must preserve valid structured confidence at the length boundary."""
+    anchor = datetime(2026, 9, 2, 12, 0, 0, tzinfo=UTC)
+    exp1 = create_test_experience().model_copy(update={"timestamp": anchor})
+    exp2 = create_test_experience().model_copy(update={"timestamp": anchor})
+    identity = Identity()
+    exp_repo = MockExperienceRepo([exp1, exp2])
+    identity_repo = MockIdentityRepo(identity)
+    pattern_store = InMemoryPatternStore()
+    event_store = InMemoryReflectionEventStore()
+    reflection_model = StructuredOutputReflectionModel(
+        pattern_description="1234567890",
+        pattern_confidence=0.41,
+    )
+
+    service = DailyReflectionService(
+        experience_repo=exp_repo,
+        identity_repo=identity_repo,
+        pattern_store=pattern_store,
+        reflection_model=reflection_model,
+        event_store=event_store,
+    )
+
+    event = service.reflect(anchor)
+    patterns = pattern_store.get_all()
+
+    assert len(event.patterns_detected) == 1
+    assert len(patterns) == 1
+    assert patterns[0].description == "1234567890"
+    assert patterns[0].confidence == 0.41
+
+
+@pytest.mark.parametrize(
+    ("reframing_text", "expected_notes_added"),
+    [
+        ("1234567890", 0),
+        (" 12345678901 ", 2),
+    ],
+)
+def test_daily_reflection_reframing_boundary_uses_stripped_length(
+    reframing_text: str,
+    expected_notes_added: int,
+) -> None:
+    """Structured reframing output is persisted only when stripped length exceeds ten."""
+    anchor = datetime(2026, 9, 3, 12, 0, 0, tzinfo=UTC)
+    exp1 = create_test_experience().model_copy(update={"timestamp": anchor})
+    exp2 = create_test_experience().model_copy(update={"timestamp": anchor})
+    identity = Identity()
+    exp_repo = MockExperienceRepo([exp1, exp2])
+    identity_repo = MockIdentityRepo(identity)
+    pattern_store = InMemoryPatternStore()
+    event_store = InMemoryReflectionEventStore()
+    reflection_model = StructuredOutputReflectionModel(
+        pattern_description="stable pattern",
+        reframing_text=reframing_text,
+    )
+
+    service = DailyReflectionService(
+        experience_repo=exp_repo,
+        identity_repo=identity_repo,
+        pattern_store=pattern_store,
+        reflection_model=reflection_model,
+        event_store=event_store,
+    )
+
+    event = service.reflect(anchor)
+
+    assert event.reframing_notes_added == expected_notes_added
+    assert len(exp1.reframing_notes) + len(exp2.reframing_notes) == expected_notes_added
+
+
 def test_deep_reflection_performs_health_assessment() -> None:
     """Test that deep reflection performs health assessment."""
     exp1 = create_test_experience()
@@ -578,6 +746,50 @@ def test_deep_reflection_proposes_changes() -> None:
     assert event.identity_changes_proposed != ""
     assert event.reframing_notes_added >= 1
     assert any(len(e.reframing_notes) > 0 for e in (exp1, exp2, exp3))
+
+
+def test_deep_reflection_promotes_structured_pattern_implications() -> None:
+    """Deep identity proposals should include habit/principle fields from structured output."""
+    anchor = datetime(2026, 9, 4, 12, 0, 0, tzinfo=UTC)
+    exp1 = create_test_experience().model_copy(update={"timestamp": anchor})
+    exp2 = create_test_experience().model_copy(update={"timestamp": anchor})
+    exp3 = create_test_experience().model_copy(update={"timestamp": anchor})
+    identity = Identity()
+    narrative = NarrativeDocument(
+        identity_id=identity.id,
+        core_layer=NarrativeLayer(layer_type=LayerType.CORE, content="Core"),
+        recent_layer=NarrativeLayer(layer_type=LayerType.RECENT, content="Recent"),
+    )
+    exp_repo = MockExperienceRepo([exp1, exp2, exp3])
+    identity_repo = MockIdentityRepo(identity)
+    narrative_repo = MockNarrativeRepo(narrative)
+    pattern_store = InMemoryPatternStore()
+    health_store = InMemoryHealthAssessmentStore()
+    event_store = InMemoryReflectionEventStore()
+    reflection_model = StructuredOutputReflectionModel(
+        pattern_description="structured pattern for implication",
+        potential_habit="Pause before overcommitting",
+        potential_principle="Prefer sustainable commitments",
+        reframing_text="Strategic reframing note",
+    )
+    service = DeepReflectionService(
+        experience_repo=exp_repo,
+        identity_repo=identity_repo,
+        narrative_repo=narrative_repo,
+        pattern_store=pattern_store,
+        health_store=health_store,
+        reflection_model=reflection_model,
+        event_store=event_store,
+    )
+
+    event = service.reflect(
+        anchor.replace(hour=0, minute=0, second=0, microsecond=0),
+        anchor.replace(hour=23, minute=59, second=59, microsecond=0),
+    )
+
+    assert len(event.patterns_detected) == 2
+    assert "New habit: Pause before overcommitting" in event.identity_changes_proposed
+    assert "New principle: Prefer sustainable commitments" in event.identity_changes_proposed
 
 
 def test_deep_reflection_fixture_json_adds_reframing() -> None:
