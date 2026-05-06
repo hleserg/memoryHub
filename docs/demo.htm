@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="ru">
+<html lang="en">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Atman — Demo · Дворецкий Альфред</title>
+  <title>Atman — Interactive demo</title>
   <link rel="icon" href="pic/logo.png" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -821,7 +821,7 @@ const VIZ = [Viz1, Viz2, Viz3, Viz4];
 
 // ─── Main App ─────────────────────────────────────────────────────────────────
 function App() {
-  const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{"lang":"ru","speed":60,"showVoice":true}/*EDITMODE-END*/;
+  const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{"lang":"en","speed":60,"showVoice":true}/*EDITMODE-END*/;
   const { tweaks, setTweak } = useTweaks(TWEAK_DEFAULTS);
   const lang = tweaks.lang;
   const t = T[lang];

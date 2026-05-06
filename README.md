@@ -12,6 +12,8 @@
 
 [[ru](README-ru.md)] — *Russian version*
 
+Atman is open-source infrastructure that gives LLM agents a way to track their own values, notice when they drift from themselves under contextual pressure, and build identity through actual lived experience instead of static prompt injection. Research-stage code addressing value drift, sycophancy, and the bootstrap problem in long-running agents. MIT licensed.
+
 *In Indian philosophy, Atman is the unchanging self, that which remains itself through all changes. Not a soul in the religious sense, but literally the "immutable core of identity". Atman is neither born nor dies — it simply is. For an agent that resets with each session, this is precisely what we give it.*
 
 ---
