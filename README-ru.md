@@ -4,6 +4,12 @@
 >
 > **Непрерывная личность для ваших агентов**
 
+[![CI](https://github.com/hleserg/atman/actions/workflows/ci.yml/badge.svg)](https://github.com/hleserg/atman/actions/workflows/ci.yml)
+[![Python 3.12+](https://img.shields.io/badge/python-3.12%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/downloads/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
+
+**Тесты:** 568 проходят (`pytest tests/` на `main`; см. workflow CI выше).
+
 [[en](README.md)] — *English version*
 
 *В индийской философии — неизменная самость, то что остаётся собой через все перемены. Не душа в религиозном смысле, а буквально "неизменное ядро идентичности". Атман не рождается и не умирает — он просто есть. Для агента, который обнуляется с каждой сессией, это именно то, что мы даём ему.*
@@ -56,7 +62,8 @@
   ├─ Experience Store   ✅ Реализовано (WP02)
   ├─ Identity Store     ✅ Реализовано (WP03)
   ├─ Reflection Engine  ✅ Реализовано (WP04)
-  └─ Session Manager    ✅ Реализовано (WP05)
+  ├─ Session Manager    ✅ Реализовано (WP05)
+  └─ CI и покрытие тестами ✅ GitHub Actions для `main`/PR (`make check`, pytest-cov ≥90%)
 ○ Первая реализация
 ○ Интеграция
 ○ Развитие
