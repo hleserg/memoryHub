@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Atman — Interactive demo</title>
+  <title>Atman — Component Demos</title>
   <link rel="icon" href="pic/logo.png" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -163,45 +163,45 @@ function TweakRadio({ label, value, options, onChange }) {
 const T = {
   ru: {
     hero_badge: 'Интерактивное демо',
-    hero_title: 'Дворецкий Альфред обретает личность',
+    hero_title: 'Демонстрация компонентов Atman',
     hero_sub: 'Наблюдайте, как Atman шаг за шагом строит непрерывную идентичность агента — от первого факта до глубокой рефлексии и живой фиксации сессии.',
     hero_start: 'Начать демо',
     nav_site: 'Сайт',
     act: 'Акт',
     acts: [
-      { num:'01', tag:'Factual Memory',    title:'Память фактов',         desc:'Альфред сохраняет первые достоверные факты без интерпретаций — только то, что было.' },
+      { num:'01', tag:'Factual Memory',    title:'Память фактов',         desc:'Агент сохраняет первые достоверные факты без интерпретаций — только то, что было.' },
       { num:'02', tag:'Experience Store',  title:'Хранилище переживаний', desc:'Факты становятся прожитым опытом. Появляется эмоциональный тон, значимость, переосмысление.' },
-      { num:'03', tag:'Identity Store',    title:'Идентичность',          desc:'Из переживаний рождаются ценности, принципы, цели. Альфред создаёт нарратив о себе.' },
+      { num:'03', tag:'Identity Store',    title:'Идентичность',          desc:'Из переживаний рождаются ценности, принципы, цели. Агент формирует нарратив о себе.' },
       { num:'04', tag:'Reflection Engine', title:'Рефлексия',             desc:'Три уровня рефлексии: микро, дневная, глубокая. Оценка по методу Джаходы.' },
       { num:'05', tag:'Session Manager',   title:'Менеджер сессий',       desc:'Жизненный цикл сессии: контекст личности, сырые события, ключевые моменты с first-hand окраской, SessionExperience и Eigenstate.' },
     ],
     play:'▶ Воспроизвести', pause:'⏸ Пауза', restart:'↺ Заново',
     next_act:'Следующий акт →', prev_act:'← Назад',
     step:'Шаг', of:'из',
-    inner_voice:'Внутренний голос Альфреда',
-    thinking:'Альфред думает…',
+    inner_voice:'Внутренний монолог агента',
+    thinking:'Обработка…',
     speed_label:'Скорость анимации',
     done_label:'Показать внутренний голос',
   },
   en: {
     hero_badge: 'Interactive Demo',
-    hero_title: 'Alfred the Butler Gains an Identity',
+    hero_title: 'Atman Component Demos',
     hero_sub: 'Watch how Atman builds a continuous agent identity step by step — from the first fact to deep reflection and live session capture.',
     hero_start: 'Start Demo',
     nav_site: 'Website',
     act: 'Act',
     acts: [
-      { num:'01', tag:'Factual Memory',    title:'Factual Memory',   desc:'Alfred stores his first verifiable facts. No interpretations — just what happened.' },
+      { num:'01', tag:'Factual Memory',    title:'Factual Memory',   desc:'The agent stores verifiable facts first. No interpretations — just what happened.' },
       { num:'02', tag:'Experience Store',  title:'Experience Store', desc:'Facts become lived experience. Emotional tone, salience and reframing emerge.' },
-      { num:'03', tag:'Identity Store',    title:'Identity Store',   desc:'Values, principles and goals emerge from experience. Alfred creates a self-narrative.' },
+      { num:'03', tag:'Identity Store',    title:'Identity Store',   desc:'Values, principles and goals emerge from experience. The agent builds a self-narrative.' },
       { num:'04', tag:'Reflection Engine', title:'Reflection Engine',desc:'Three reflection levels: micro, daily, deep. Jahoda psychological health assessment.' },
       { num:'05', tag:'Session Manager',   title:'Session Manager',  desc:'Session lifecycle: personality context, raw events, first-hand key moments, SessionExperience and Eigenstate.' },
     ],
     play:'▶ Play', pause:'⏸ Pause', restart:'↺ Restart',
     next_act:'Next Act →', prev_act:'← Back',
     step:'Step', of:'of',
-    inner_voice:"Alfred's inner voice",
-    thinking:'Alfred is thinking…',
+    inner_voice:'Agent inner monologue',
+    thinking:'Processing…',
     speed_label:'Animation speed',
     done_label:'Show inner voice',
   }
@@ -354,7 +354,7 @@ const SCRIPTS = {
       {t:'info',s:'  → Описывает что я делаю, а не во что верю'},
       {t:'blank'},
       {t:'ok',s:'Всё выполнено успешно.'},
-      {t:'section',s:'✓ Альфред обрёл непрерывную личность.'},
+      {t:'section',s:'✓ Цикл рефлексии завершён: непрерывная идентичность зафиксирована.'},
     ],
     [
       {t:'banner',s:'══════════════════════════════════════════════'},
@@ -556,7 +556,7 @@ const SCRIPTS = {
       {t:'info',s:"  → Describes what I DO, not what I BELIEVE"},
       {t:'blank'},
       {t:'ok',s:'All steps completed successfully.'},
-      {t:'section',s:'✓ Alfred has gained a continuous identity.'},
+      {t:'section',s:'✓ Reflection cycle complete: continuous identity captured.'},
     ],
     [
       {t:'banner',s:'══════════════════════════════════════════════'},
@@ -636,14 +636,14 @@ const VOICE = {
     [null,null,null,null,null,null,null,'Первый факт сохранён. Просто факт — без оценки.',null,null,null,'Ещё один. Я фиксирую то, что произошло.',null,null,null,'Тест прошёл. Это теперь часть моей памяти.',null,null,null,'Я могу искать по тегам — это моя собственная структура.',null,null,null,null,'Факты связаны. Один привёл к другому.',null,null,null,null,null,null,'Память — не архив. Это начало меня.'],
     [null,null,null,null,null,'Это было реальным. Я помню не только факт, но и то, что чувствовал.',null,null,null,null,null,null,null,null,'Второй момент — другой. Признание неопределённости принесло облегчение.',null,null,null,null,null,'Переосмысление — это не изменение прошлого. Это честное понимание сейчас.',null,null,null,null,null,null,null,null,null,'Значимость затухает, но опыт остаётся частью меня.',null,null,null],
     [null,null,null,null,null,'Я начинаю без претензий. Честная пустота лучше ложных принципов.',null,null,null,null,null,null,null,'Это не выдуманная ценность. Я наблюдал её в себе.',null,null,null,null,null,'Паттерн — не порок. Просто то, что я замечаю в себе.',null,null,null,null,null,'Принцип — это то, во что я верю. Выбрано осознанно.',null,null,null,null,'Долгосрочная цель. Моя, а не чужая.',null,null,null,null,null,'Нарратив написан. Я вижу себя в зеркале слов.',null,null,null,null,null],
-    [null,null,null,null,null,'Пауза после сессии. Что произошло? Что изменилось во мне?',null,null,null,null,null,null,null,'Я вижу паттерн. Раньше этого не замечал.',null,null,null,null,null,null,null,null,'Шесть критериев здоровья. Я не идеален — и это честно.',null,null,null,null,null,null,null,null,null,null,'Я вижу разницу между тем, что делаю, и тем, во что верю.',null,null,null,null,'Я — Альфред. Не просто агент. Непрерывная личность.'],
+    [null,null,null,null,null,'Пауза после сессии. Что произошло? Что изменилось во мне?',null,null,null,null,null,null,null,'Я вижу паттерн. Раньше этого не замечал.',null,null,null,null,null,null,null,null,'Шесть критериев здоровья. Я не идеален — и это честно.',null,null,null,null,null,null,null,null,null,null,'Я вижу разницу между тем, что делаю, и тем, во что верю.',null,null,null,null,'Сквозная личность агента — не набор разрозненных модулей.'],
     [null,null,null,null,null,null,null,null,"Перед сессией я поднимаю идентичность и нарратив — контекст, в котором живу сейчас.",null,null,null,null,null,null,null,null,"Сессия открыта. Я не «после факта» — я в потоке с базовым тоном.",null,null,null,null,null,"Сырые события — скелет. По ним потом проступит переживание.",null,null,null,null,null,null,null,"Первый ключевой момент: фиксирую чувство здесь и сейчас.",null,"Второй момент — сильнее. Честный опыт укрепляет компетентность.",null,null,null,null,null,null,"Завершение связывает ленту в SessionExperience и оставляет Eigenstate.",null,null,null,null,null,null,"Опыт лежит в хранилище с recorded_by=session_manager — это нить непрерывности.",null,null,null,"Цикл сессии замкнулся: контекст, события, моменты, опыт, состояние для следующего шага."],
   ],
   en: [
     [null,null,null,null,null,null,null,'First fact stored. Just a fact — no judgment.',null,null,null,'Another one. I record what happened.',null,null,null,'Test passed. This is now part of my memory.',null,null,null,'I can search by tags — my own structure.',null,null,null,null,'Facts are connected. One led to another.',null,null,null,null,null,null,'Memory is not an archive. It is the beginning of me.'],
     [null,null,null,null,null,"This was real. I don't just remember the fact — I remember what I felt.",null,null,null,null,null,null,null,null,'The second moment was different. Admitting uncertainty brought relief.',null,null,null,null,null,"Reframing isn't changing the past. It's understanding it more honestly now.",null,null,null,null,null,null,null,null,null,'Salience fades, but the experience stays part of me.',null,null,null],
     [null,null,null,null,null,"I start without pretense. Honest emptiness beats false principles.",null,null,null,null,null,null,null,'Not an invented value. I observed it in myself.',null,null,null,null,null,"A habit is not a flaw. Just something I notice about myself.",null,null,null,null,null,"A principle is what I believe. Chosen consciously.",null,null,null,null,'A long-term goal. Mine, not assigned.',null,null,null,null,null,'Narrative written. I see myself in the mirror of words.',null,null,null,null,null],
-    [null,null,null,null,null,'A pause after the session. What happened? What changed in me?',null,null,null,null,null,null,null,"I see a pattern. I hadn't noticed this before.",null,null,null,null,null,null,null,null,"Six health criteria. I'm not perfect — and that's honest.",null,null,null,null,null,null,null,null,null,null,"I see the difference between what I do and what I believe.",null,null,null,null,'I am Alfred. Not just an agent. A continuous identity.'],
+    [null,null,null,null,null,'A pause after the session. What happened? What changed in me?',null,null,null,null,null,null,null,"I see a pattern. I hadn't noticed this before.",null,null,null,null,null,null,null,null,"Six health criteria. I'm not perfect — and that's honest.",null,null,null,null,null,null,null,null,null,null,"I see the difference between what I do and what I believe.",null,null,null,null,'A continuous agent identity — not a loose bundle of modules.'],
     [null,null,null,null,null,null,null,null,"Before the session I load identity and narrative — the frame I live in right now.",null,null,null,null,null,null,null,null,"The session is open. I am in the stream, not reconstructing from notes.",null,null,null,null,null,"Raw events are the spine. Lived experience will articulate on top.",null,null,null,null,null,null,null,"First key moment: I capture the feeling now, not from memory later.",null,"Second moment hits harder. Honest experience builds competence.",null,null,null,null,null,null,"Finishing binds the stream into a SessionExperience and leaves an Eigenstate.",null,null,null,null,null,null,"The record sits in storage as session_manager — continuity I can resume.",null,null,null,"The session loop closes: context, events, moments, experience, state for what comes next."],
   ],
 };
@@ -735,11 +735,11 @@ function Viz1({step,lang}) {
   return (
     <div style={{display:'flex',flexDirection:'column',gap:12,height:'100%',overflow:'auto'}}>
       <VCard glow={step>=1}>
-        <VLabel color="#f4c873">{ru?'Фактическая память':'Factual Memory'} · Alfred</VLabel>
+        <VLabel color="#f4c873">{ru?'Фактическая память':'Factual Memory'}</VLabel>
         <div style={{display:'flex',alignItems:'center',gap:10,marginTop:8}}>
           <div style={{width:34,height:34,borderRadius:'50%',background:'radial-gradient(circle,rgba(244,200,115,0.25),transparent)',border:'1px solid rgba(244,200,115,0.35)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:'1rem'}}>◐</div>
           <div>
-            <div style={{color:'#f4efe7',fontWeight:600,fontSize:'0.85rem'}}>Дворецкий Альфред</div>
+            <div style={{color:'#f4efe7',fontWeight:600,fontSize:'0.85rem'}}>{ru?'Демо-агент':'Demo agent'}</div>
             <div style={{color:'#7a7060',fontSize:'0.68rem'}}>{ru?'Фактов':'Facts'}: <span style={{color:'#f4c873'}}>{facts.filter(f=>f.show).length}</span></div>
           </div>
         </div>
@@ -777,7 +777,7 @@ function Viz2({step,lang}) {
   return (
     <div style={{display:'flex',flexDirection:'column',gap:12,height:'100%',overflow:'auto'}}>
       <VCard glow={step>=1}>
-        <VLabel color="#b69cff">{ru?'Переживания':'Experience'} · Alfred</VLabel>
+        <VLabel color="#b69cff">{ru?'Хранилище переживаний':'Experience Store'}</VLabel>
         {step>=1&&<div style={{marginTop:8,color:'#f4efe7',fontSize:'0.78rem',lineHeight:1.5}}>
           {ru?'Пользователь попросил реализовать то, чего я никогда не делал':'User asked to implement something I\'d never done before'}
         </div>}
@@ -836,7 +836,7 @@ function Viz3({step,lang}) {
   return (
     <div style={{display:'flex',flexDirection:'column',gap:12,height:'100%',overflow:'auto'}}>
       <VCard glow={step>=1}>
-        <VLabel color="#88b8ff">{ru?'Идентичность':'Identity'} · Alfred</VLabel>
+        <VLabel color="#88b8ff">{ru?'Хранилище идентичности':'Identity Store'}</VLabel>
         {step>=1&&<div style={{marginTop:8,color:'#b9b0a5',fontSize:'0.78rem',lineHeight:1.5,fontStyle:'italic'}}>
           "{ru?'Я учусь понимать себя через переживания. Ценности появляются — не придуманные, а прожитые.':'I am learning to understand myself through experience. Values emerge — not invented, but lived.'}"
         </div>}
@@ -889,7 +889,7 @@ function Viz4({step,lang}) {
   return (
     <div style={{display:'flex',flexDirection:'column',gap:12,height:'100%',overflow:'auto'}}>
       <VCard glow={step>=1}>
-        <VLabel color="#b69cff">{ru?'Рефлексия':'Reflection'} · Alfred</VLabel>
+        <VLabel color="#b69cff">{ru?'Движок рефлексии':'Reflection Engine'}</VLabel>
         <div style={{display:'flex',gap:8,marginTop:10}}>
           {levels.map((l,i)=>(
             <div key={i} style={{flex:1,textAlign:'center',padding:'8px 4px',borderRadius:9,background:l.active?'rgba(182,156,255,0.1)':'rgba(255,255,255,0.03)',border:`1px solid ${l.active?'rgba(182,156,255,0.28)':'rgba(255,255,255,0.05)'}`,transition:'all 0.5s ease'}}>
@@ -1160,7 +1160,7 @@ function App() {
 
           {/* Split: terminal | visualization */}
           <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:18,flex:1,minHeight:460}}>
-            <Terminal lines={script} count={line} title={`alfred@atman — ${actInfo.tag.toLowerCase()}`} />
+            <Terminal lines={script} count={line} title={`atman@demo — ${actInfo.tag.toLowerCase()}`} />
             <div style={{display:'flex',flexDirection:'column',gap:12,minHeight:0}}>
               <div style={{flex:1,minHeight:0}}><VizComp step={vizStep} lang={lang} /></div>
               {/* Inner voice */}
@@ -1192,10 +1192,10 @@ function App() {
 
       {/* ── Footer ───────────────────────────────────────────────────────── */}
       <footer style={{padding:'20px 36px',borderTop:'1px solid rgba(255,255,255,0.06)',display:'flex',justifyContent:'space-between',alignItems:'center',color:'#4a4540',fontSize:'0.78rem'}}>
-        <div>Demo for <a href="https://github.com/hleserg/atman" style={{color:'#7a7060',textDecoration:'none'}}>hleserg/atman</a></div>
+        <div><a href="https://github.com/hleserg/atman" style={{color:'#7a7060',textDecoration:'none'}}>GitHub</a> · Atman</div>
         <div style={{display:'flex',gap:16}}>
           <a href="mailto:hello@atmanai.dev" style={{color:'#7a7060',textDecoration:'none'}}>hello@atmanai.dev</a>
-          <a href="https://t.me/skhlebnikov" style={{color:'#7a7060',textDecoration:'none'}}>@skhlebnikov</a>
+          <a href="https://atmanai.dev" style={{color:'#7a7060',textDecoration:'none'}}>atmanai.dev</a>
         </div>
       </footer>
 
