@@ -1,22 +1,45 @@
 <!doctype html>
-<html lang="ru">
+<html lang="en">
   <head>
     <meta charset="utf-8">
+    <script>
+      (function () {
+        try {
+          var q = new URLSearchParams(window.location.search);
+          var u = q.get('lang');
+          var s = localStorage.getItem('atman-lang');
+          var L =
+            u === 'en' || u === 'ru'
+              ? u
+              : s === 'en' || s === 'ru'
+                ? s
+                : (navigator.language || '').toLowerCase().startsWith('ru')
+                  ? 'ru'
+                  : 'en';
+          document.documentElement.lang = L;
+        } catch (e) {}
+      })();
+    </script>
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Atman — документы проекта</title>
+    <title>Atman — project documents</title>
     <meta
       name="description"
-      content="Документы проекта Atman в едином визуальном стиле сайта: README, манифест и архитектура системы."
+      content="README, manifesto, architecture, and comparison—rendered in the same visual language as the Atman site."
     >
-    <meta property="og:title" content="Atman — документы проекта">
+    <meta property="og:title" content="Atman — project documents">
     <meta
       property="og:description"
-      content="README, манифест и архитектура Atman в оформлении сайта."
+      content="Read the same markdown the repo ships—without raw white-page Markdown."
     >
     <meta property="og:type" content="website">
     <meta property="og:url" content="https://atmanai.dev/document.html">
     <meta property="og:image" content="https://atmanai.dev/pic/logo.png">
+    <meta property="og:locale" content="en_US">
+    <meta property="og:locale:alternate" content="ru_RU">
     <link rel="canonical" href="https://atmanai.dev/document.html">
+    <link rel="alternate" hreflang="en" href="https://atmanai.dev/document.html">
+    <link rel="alternate" hreflang="ru" href="https://atmanai.dev/document.html?lang=ru">
+    <link rel="alternate" hreflang="x-default" href="https://atmanai.dev/document.html">
     <link rel="icon" href="pic/logo.png">
     <style>
       :root {
@@ -499,15 +522,15 @@
   </head>
   <body>
     <div class="page">
-      <header class="nav" aria-label="Главная навигация">
+      <header class="nav" aria-label="Primary navigation">
         <a class="brand" href="index.html" aria-label="Atman">
-          <img src="pic/logo.png" alt="Логотип Atman">
+          <img src="pic/logo.png" alt="Atman logo">
           <span>Atman</span>
         </a>
-        <nav class="nav-links" aria-label="Разделы сайта">
-          <a href="index.html#why" data-i18n="nav.why">Зачем</a>
-          <a href="index.html#how" data-i18n="nav.how">Как работает</a>
-          <a href="index.html#plan" data-i18n="nav.plan">План</a>
+        <nav class="nav-links" aria-label="Site sections">
+          <a href="index.html#why" data-i18n="nav.why">Why</a>
+          <a href="index.html#how" data-i18n="nav.how">How It Works</a>
+          <a href="index.html#plan" data-i18n="nav.plan">Roadmap</a>
           <a href="https://github.com/hleserg/atman">GitHub</a>
           <div class="lang-switcher" aria-label="Language switcher">
             <button class="lang-btn" data-lang="ru" aria-label="Русский">RU</button>
@@ -518,45 +541,45 @@
 
       <main>
         <section class="hero" aria-labelledby="doc-title">
-          <div class="eyebrow" data-i18n="doc.eyebrow">Библиотека Atman</div>
-          <h1 id="doc-title" data-i18n="doc.title">Документы проекта</h1>
+          <div class="eyebrow" data-i18n="doc.eyebrow">Atman library</div>
+          <h1 id="doc-title" data-i18n="doc.title">Project documents</h1>
           <p class="lead" id="doc-description" data-i18n="doc.description">
-            Манифест, README и архитектура открываются в той же визуальной среде,
-            что и сайт: без сырого Markdown на белом фоне.
+            Manifesto, README, architecture, and comparison—same typography and atmosphere as the landing page, not a raw Markdown tab.
           </p>
-          <nav class="doc-tabs" aria-label="Документы проекта">
+          <nav class="doc-tabs" aria-label="Project documents">
             <a class="tab" data-doc-link="readme" href="document.html?doc=readme">README</a>
-            <a class="tab" data-doc-link="manifest" href="document.html?doc=manifest" data-i18n="doc.tab_manifest">Манифест</a>
-            <a class="tab" data-doc-link="system" href="document.html?doc=system" data-i18n="doc.tab_system">Архитектура</a>
-            <a class="tab" data-doc-link="comparison" href="document.html?doc=comparison" data-i18n="doc.tab_comparison">Сравнение</a>
+            <a class="tab" data-doc-link="manifest" href="document.html?doc=manifest" data-i18n="doc.tab_manifest">Manifesto</a>
+            <a class="tab" data-doc-link="system" href="document.html?doc=system" data-i18n="doc.tab_system">Architecture</a>
+            <a class="tab" data-doc-link="comparison" href="document.html?doc=comparison" data-i18n="doc.tab_comparison">Comparison</a>
           </nav>
         </section>
 
-        <section class="document-shell" aria-label="Содержимое документа">
+        <section class="document-shell" aria-label="Document content">
           <article class="document-card">
             <div class="document-meta">
-              <span id="doc-path" data-i18n="doc.loading">Загрузка документа...</span>
-              <span class="document-source" id="doc-source" data-i18n="doc.source">Текст загружается из Markdown</span>
+              <span id="doc-path" data-i18n="doc.loading">Loading document…</span>
+              <span class="document-source" id="doc-source" data-i18n="doc.source">Loading text from Markdown</span>
             </div>
             <div class="markdown-body" id="markdown-content">
-              <div class="empty-state" data-i18n="doc.loading_text">Загружаю текст документа...</div>
+              <div class="empty-state" data-i18n="doc.loading_text">Fetching document…</div>
             </div>
           </article>
 
-          <aside class="toc" aria-label="Оглавление">
-            <div class="toc-title" data-i18n="doc.toc_title">Содержание</div>
+          <aside class="toc" aria-label="Table of contents">
+            <div class="toc-title" data-i18n="doc.toc_title">Contents</div>
             <div id="toc-links">
-              <span class="muted" data-i18n="doc.toc_wait">Появится после загрузки документа.</span>
+              <span class="muted" data-i18n="doc.toc_wait">Appears after the document loads.</span>
             </div>
           </aside>
         </section>
       </main>
 
       <footer>
-        <div data-i18n="footer.copyright">Atman · Апрель 2026</div>
+        <div data-i18n="footer.copyright">Atman · April 2026</div>
         <div>
-          <a href="document.html?doc=manifest" data-i18n="footer.manifest">Манифест</a> ·
-          <a href="document.html?doc=system">System</a> ·
+          <a href="document.html?doc=manifest" data-i18n="footer.manifest">Manifesto</a> ·
+          <a href="document.html?doc=system" data-i18n="footer.system">Architecture</a> ·
+          <a href="document.html?doc=comparison" data-i18n="footer.comparison">Comparison</a> ·
           <a href="https://github.com/hleserg/atman">GitHub</a>
         </div>
       </footer>
@@ -585,7 +608,9 @@
           },
           footer: {
             copyright: 'Atman · Апрель 2026',
-            manifest: 'Манифест'
+            manifest: 'Манифест',
+            system: 'Архитектура',
+            comparison: 'Сравнение'
           },
           documents: {
             readme: {
@@ -613,49 +638,61 @@
             plan: 'Roadmap'
           },
           doc: {
-            eyebrow: 'Atman Library',
-            title: 'Project Documents',
-            description: 'Manifesto, README, and architecture are presented in the same visual environment as the site: no raw Markdown on a white background.',
+            eyebrow: 'Atman library',
+            title: 'Project documents',
+            description:
+              'Manifesto, README, architecture, and comparison—same typography and atmosphere as the landing page, not a raw Markdown tab.',
             tab_manifest: 'Manifesto',
             tab_system: 'Architecture',
             tab_comparison: 'Comparison',
-            loading: 'Loading document...',
-            source: 'Text is loading from Markdown',
-            loading_text: 'Loading document text...',
+            loading: 'Loading document…',
+            source: 'Loading text from Markdown',
+            loading_text: 'Fetching document…',
             toc_title: 'Contents',
-            toc_wait: 'Will appear after document loads.'
+            toc_wait: 'Appears after the document loads.'
           },
           footer: {
             copyright: 'Atman · April 2026',
-            manifest: 'Manifesto'
+            manifest: 'Manifesto',
+            system: 'Architecture',
+            comparison: 'Comparison'
           },
           documents: {
             readme: {
-              title: "README",
-              description: "A brief introduction to Atman: what changes, how the idea works, and where the project is headed."
+              title: 'README',
+              description:
+                'The front door: what changes with Atman, how the stack is meant to feel in practice, and what is real in the repo today.'
             },
             manifest: {
-              title: "Atman Manifesto",
-              description: "An expanded text about the problem of continuous identity in AI agents and Atman's hypothesis."
+              title: 'Atman Manifesto',
+              description:
+                'The long argument: why continuity matters, what “identity” means here, and the hypothesis the code is built to test.'
             },
             system: {
-              title: "System Architecture",
-              description: "Technical description of components, interfaces, and operating modes of the psychological layer."
+              title: 'System Architecture',
+              description:
+                'Components, ports, adapters, and modes of operation—how the psychological layer is wired without hand-waving.'
             },
             comparison: {
-              title: "Atman vs. a Standard Agent",
-              description: "How an agent thinks in typical situations: a side-by-side table for first-time readers of Atman."
+              title: 'Atman vs. a standard agent',
+              description:
+                'Same situations, two stacks: a side-by-side read for anyone who wants the contrast in one pass.'
             }
           }
         }
       };
 
       function detectLanguage() {
+        const urlLang = new URLSearchParams(window.location.search).get('lang');
+        if (urlLang === 'en' || urlLang === 'ru') {
+          return urlLang;
+        }
+
         const savedLang = localStorage.getItem('atman-lang');
         if (savedLang && translations[savedLang]) {
           return savedLang;
         }
-        
+
         const browserLang = navigator.language || navigator.userLanguage;
         if (browserLang.startsWith('ru')) {
           return 'ru';
@@ -686,8 +723,43 @@
         });
 
         localStorage.setItem('atman-lang', lang);
-        
+        syncAtmanLangInLinks(lang);
+
         return t;
+      }
+
+      function syncAtmanLangInLinks(lang) {
+        document.querySelectorAll('a[href]').forEach((a) => {
+          const raw = a.getAttribute('href');
+          if (
+            !raw ||
+            raw.startsWith('http://') ||
+            raw.startsWith('https://') ||
+            raw.startsWith('mailto:') ||
+            raw.startsWith('#')
+          ) {
+            return;
+          }
+          const hashIdx = raw.indexOf('#');
+          const pathAndQuery = hashIdx >= 0 ? raw.slice(0, hashIdx) : raw;
+          const hash = hashIdx >= 0 ? raw.slice(hashIdx) : '';
+          if (
+            !pathAndQuery.startsWith('document.html') &&
+            !pathAndQuery.startsWith('demo.html') &&
+            pathAndQuery !== 'index.html' &&
+            !pathAndQuery.startsWith('index.html?')
+          ) {
+            return;
+          }
+          const base = pathAndQuery || 'index.html';
+          const u = new URL(base, window.location.href);
+          const file = u.pathname.split('/').pop() || '';
+          if (file !== 'document.html' && file !== 'demo.html' && file !== 'index.html') {
+            return;
+          }
+          u.searchParams.set('lang', lang);
+          a.setAttribute('href', file + u.search + hash);
+        });
       }
 
       document.querySelectorAll('.lang-btn').forEach(btn => {
