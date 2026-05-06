@@ -4,6 +4,12 @@
 >
 > **Continuous Identity for Your Agents**
 
+[![CI](https://github.com/hleserg/atman/actions/workflows/ci.yml/badge.svg)](https://github.com/hleserg/atman/actions/workflows/ci.yml)
+[![Python 3.12+](https://img.shields.io/badge/python-3.12%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/downloads/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
+
+**Tests:** 568 passing (`pytest tests/` on `main`; see CI workflow above).
+
 [[ru](README-ru.md)] — *Russian version*
 
 *In Indian philosophy, Atman is the unchanging self, that which remains itself through all changes. Not a soul in the religious sense, but literally the "immutable core of identity". Atman is neither born nor dies — it simply is. For an agent that resets with each session, this is precisely what we give it.*
@@ -56,7 +62,8 @@ Under the hood — seven components: store of lived experiences, reflection engi
   ├─ Experience Store   ✅ Implemented (WP02)
   ├─ Identity Store     ✅ Implemented (WP03)
   ├─ Reflection Engine  ✅ Implemented (WP04)
-  └─ Session Manager    ✅ Implemented (WP05)
+  ├─ Session Manager    ✅ Implemented (WP05)
+  └─ CI & test coverage ✅ GitHub Actions on `main`/PRs (`make check`, pytest-cov ≥90%)
 ○ First implementation
 ○ Integration
 ○ Evolution
