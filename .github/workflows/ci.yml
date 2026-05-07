@@ -39,5 +39,9 @@ jobs:
       - name: Install package with dev and e2e dependencies
         run: uv pip install --system -e ".[dev,e2e]"
 
-      - name: Run required checks
+      - name: Run fast tests (quick feedback on PRs)
+        if: github.event_name == 'pull_request'
+        run: pytest tests/ -m "not slow" -v
+
+      - name: Run required checks (lint, typecheck, security, full test suite)
         run: make check
