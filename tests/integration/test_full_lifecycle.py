@@ -20,6 +20,8 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from uuid import UUID, uuid4
 
+import pytest
+
 from atman.adapters.reflection.mock_reflection_model import MockReflectionModel
 from atman.adapters.storage import FileStateStore
 from atman.adapters.storage.in_memory_reflection_store import (
@@ -165,6 +167,7 @@ class _NarrativeRepoOverFileStateStore:
         return []
 
 
+@pytest.mark.integration
 def test_full_lifecycle_invariants():
     """
     Test full lifecycle verifying all 4 invariants from E2E-02:
@@ -349,6 +352,7 @@ def test_full_lifecycle_invariants():
         assert len(experience_after_duplicate.experience.reframing_notes) == 1
 
 
+@pytest.mark.integration
 def test_immutability_enforcement():
     """Test that experience core data cannot be modified after creation."""
     with TemporaryDirectory() as tmp:

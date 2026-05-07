@@ -40,6 +40,7 @@ from atman.core.models.reflection import (
     ReframingNoteOutput,
 )
 from atman.core.narrative_write_audit import NoOpNarrativeWriteAudit
+from atman.core.reflection_event_audit import NoOpReflectionEventPersistenceObserver
 from atman.core.reflection_run_keys import (
     daily_reflection_run_key_empty_day,
     daily_reflection_run_key_for_identity,
@@ -477,8 +478,9 @@ def test_micro_reflection_no_narrative() -> None:
 
 def test_daily_reflection_detects_patterns() -> None:
     """Test that daily reflection detects patterns."""
-    exp1 = create_test_experience()
-    exp2 = create_test_experience()
+    anchor = datetime(2026, 9, 15, 12, 0, 0, tzinfo=UTC)
+    exp1 = create_test_experience().model_copy(update={"timestamp": anchor})
+    exp2 = create_test_experience().model_copy(update={"timestamp": anchor})
 
     identity = Identity()
 
@@ -496,8 +498,7 @@ def test_daily_reflection_detects_patterns() -> None:
         event_store=event_store,
     )
 
-    date = datetime.now(UTC)
-    event = service.reflect(date)
+    event = service.reflect(anchor)
 
     assert event.reflection_level == ReflectionLevel.DAILY
     assert len(event.experiences_analyzed) == 2
@@ -505,8 +506,9 @@ def test_daily_reflection_detects_patterns() -> None:
 
 def test_daily_reflection_adds_reframing_notes() -> None:
     """Test that daily reflection can add reframing notes."""
-    exp1 = create_test_experience()
-    exp2 = create_test_experience()
+    anchor = datetime(2026, 9, 15, 12, 0, 0, tzinfo=UTC)
+    exp1 = create_test_experience().model_copy(update={"timestamp": anchor})
+    exp2 = create_test_experience().model_copy(update={"timestamp": anchor})
 
     identity = Identity()
 
@@ -524,8 +526,7 @@ def test_daily_reflection_adds_reframing_notes() -> None:
         event_store=event_store,
     )
 
-    date = datetime.now(UTC)
-    event = service.reflect(date)
+    event = service.reflect(anchor)
 
     assert event.reflection_level == ReflectionLevel.DAILY
     assert event.reframing_notes_added >= 1
@@ -533,8 +534,9 @@ def test_daily_reflection_adds_reframing_notes() -> None:
 
 def test_daily_reflection_reframing_count_skips_failed_persist() -> None:
     """Reframing count must not increase when the repo rejects the append."""
-    exp1 = create_test_experience()
-    exp2 = create_test_experience()
+    anchor = datetime(2026, 9, 15, 12, 0, 0, tzinfo=UTC)
+    exp1 = create_test_experience().model_copy(update={"timestamp": anchor})
+    exp2 = create_test_experience().model_copy(update={"timestamp": anchor})
 
     identity = Identity()
 
@@ -552,7 +554,7 @@ def test_daily_reflection_reframing_count_skips_failed_persist() -> None:
         event_store=event_store,
     )
 
-    event = service.reflect(datetime.now(UTC))
+    event = service.reflect(anchor)
 
     assert event.reflection_level == ReflectionLevel.DAILY
     assert len(event.patterns_detected) >= 1
@@ -661,9 +663,10 @@ def test_daily_reflection_reframing_boundary_uses_stripped_length(
 
 def test_deep_reflection_performs_health_assessment() -> None:
     """Test that deep reflection performs health assessment."""
-    exp1 = create_test_experience()
-    exp2 = create_test_experience()
-    exp3 = create_test_experience()
+    anchor = datetime(2026, 9, 15, 12, 0, 0, tzinfo=UTC)
+    exp1 = create_test_experience().model_copy(update={"timestamp": anchor})
+    exp2 = create_test_experience().model_copy(update={"timestamp": anchor})
+    exp3 = create_test_experience().model_copy(update={"timestamp": anchor})
 
     identity = Identity()
     narrative = NarrativeDocument(
@@ -690,8 +693,8 @@ def test_deep_reflection_performs_health_assessment() -> None:
         event_store=event_store,
     )
 
-    since = datetime.now(UTC).replace(hour=0, minute=0)
-    until = datetime.now(UTC)
+    since = anchor.replace(hour=0, minute=0, second=0, microsecond=0)
+    until = anchor
 
     event = service.reflect(since, until)
 
@@ -707,9 +710,10 @@ def test_deep_reflection_performs_health_assessment() -> None:
 
 def test_deep_reflection_proposes_changes() -> None:
     """Test that deep reflection proposes identity and narrative changes."""
-    exp1 = create_test_experience()
-    exp2 = create_test_experience()
-    exp3 = create_test_experience()
+    anchor = datetime(2026, 9, 15, 12, 0, 0, tzinfo=UTC)
+    exp1 = create_test_experience().model_copy(update={"timestamp": anchor})
+    exp2 = create_test_experience().model_copy(update={"timestamp": anchor})
+    exp3 = create_test_experience().model_copy(update={"timestamp": anchor})
 
     identity = Identity()
     narrative = NarrativeDocument(
@@ -736,8 +740,8 @@ def test_deep_reflection_proposes_changes() -> None:
         event_store=event_store,
     )
 
-    since = datetime.now(UTC).replace(hour=0, minute=0)
-    until = datetime.now(UTC)
+    since = anchor.replace(hour=0, minute=0, second=0, microsecond=0)
+    until = anchor
 
     event = service.reflect(since, until)
 
@@ -836,8 +840,9 @@ def test_deep_reflection_fixture_json_adds_reframing() -> None:
 
 def test_daily_reflection_skipped_no_identity_preserves_experience_ids() -> None:
     """Experiences exist but identity is missing — not an empty day."""
-    exp1 = create_test_experience()
-    exp2 = create_test_experience()
+    anchor = datetime(2026, 9, 15, 12, 0, 0, tzinfo=UTC)
+    exp1 = create_test_experience().model_copy(update={"timestamp": anchor})
+    exp2 = create_test_experience().model_copy(update={"timestamp": anchor})
 
     exp_repo = MockExperienceRepo([exp1, exp2])
     identity_repo = NullIdentityRepo()
@@ -853,7 +858,7 @@ def test_daily_reflection_skipped_no_identity_preserves_experience_ids() -> None
         event_store=event_store,
     )
 
-    event = service.reflect(datetime.now(UTC))
+    event = service.reflect(anchor)
 
     assert event.reflection_level == ReflectionLevel.DAILY
     assert set(event.experiences_analyzed) == {exp1.id, exp2.id}
@@ -863,9 +868,10 @@ def test_daily_reflection_skipped_no_identity_preserves_experience_ids() -> None
 
 
 def test_deep_reflection_skipped_no_identity_preserves_experience_ids() -> None:
-    exp1 = create_test_experience()
-    exp2 = create_test_experience()
-    exp3 = create_test_experience()
+    anchor = datetime(2026, 9, 15, 12, 0, 0, tzinfo=UTC)
+    exp1 = create_test_experience().model_copy(update={"timestamp": anchor})
+    exp2 = create_test_experience().model_copy(update={"timestamp": anchor})
+    exp3 = create_test_experience().model_copy(update={"timestamp": anchor})
 
     identity = Identity()
     narrative = NarrativeDocument(
@@ -892,8 +898,8 @@ def test_deep_reflection_skipped_no_identity_preserves_experience_ids() -> None:
         event_store=event_store,
     )
 
-    since = datetime.now(UTC).replace(hour=0, minute=0)
-    until = datetime.now(UTC)
+    since = anchor.replace(hour=0, minute=0, second=0, microsecond=0)
+    until = anchor
     event = service.reflect(since, until)
 
     assert event.reflection_level == ReflectionLevel.DEEP
@@ -905,9 +911,10 @@ def test_deep_reflection_skipped_no_identity_preserves_experience_ids() -> None:
 
 def test_deep_reflection_persist_failure_links_health_assessment() -> None:
     """If success event persistence fails after health is stored, emit a failed run event."""
-    exp1 = create_test_experience()
-    exp2 = create_test_experience()
-    exp3 = create_test_experience()
+    anchor = datetime(2026, 9, 15, 12, 0, 0, tzinfo=UTC)
+    exp1 = create_test_experience().model_copy(update={"timestamp": anchor})
+    exp2 = create_test_experience().model_copy(update={"timestamp": anchor})
+    exp3 = create_test_experience().model_copy(update={"timestamp": anchor})
 
     identity = Identity()
     narrative = NarrativeDocument(
@@ -936,8 +943,8 @@ def test_deep_reflection_persist_failure_links_health_assessment() -> None:
         reflection_event_observer=observer,
     )
 
-    since = datetime.now(UTC).replace(hour=0, minute=0)
-    until = datetime.now(UTC)
+    since = anchor.replace(hour=0, minute=0, second=0, microsecond=0)
+    until = anchor
     run_key = deep_reflection_run_key_for_identity(since, until, identity.id)
 
     with pytest.raises(RuntimeError, match="persist failure"):
@@ -1286,9 +1293,10 @@ def test_daily_reflection_event_save_failure_notifies_observer_after_side_effect
 
 
 def test_deep_reflection_retry_after_event_save_failure_counts_duplicate_reframing() -> None:
-    exp1 = create_test_experience()
-    exp2 = create_test_experience()
-    exp3 = create_test_experience()
+    anchor = datetime(2026, 9, 15, 12, 0, 0, tzinfo=UTC)
+    exp1 = create_test_experience().model_copy(update={"timestamp": anchor})
+    exp2 = create_test_experience().model_copy(update={"timestamp": anchor})
+    exp3 = create_test_experience().model_copy(update={"timestamp": anchor})
 
     identity = Identity()
     narrative = NarrativeDocument(
@@ -1317,8 +1325,8 @@ def test_deep_reflection_retry_after_event_save_failure_counts_duplicate_reframi
         reflection_event_observer=observer,
     )
 
-    since = datetime.now(UTC).replace(hour=0, minute=0)
-    until = datetime.now(UTC)
+    since = anchor.replace(hour=0, minute=0, second=0, microsecond=0)
+    until = anchor
 
     with pytest.raises(RuntimeError, match="persist failure"):
         service.reflect(since, until)
@@ -1533,9 +1541,10 @@ def test_deep_reflection_repeated_run_does_not_duplicate_snapshot() -> None:
     - reuse the same ``IdentitySnapshot`` (no second snapshot created);
     - reuse the same ``HealthAssessment`` id.
     """
-    exp1 = create_test_experience()
-    exp2 = create_test_experience()
-    exp3 = create_test_experience()
+    anchor = datetime(2026, 9, 15, 12, 0, 0, tzinfo=UTC)
+    exp1 = create_test_experience().model_copy(update={"timestamp": anchor})
+    exp2 = create_test_experience().model_copy(update={"timestamp": anchor})
+    exp3 = create_test_experience().model_copy(update={"timestamp": anchor})
 
     identity = Identity(
         self_description="I am self-discovering.",
@@ -1566,8 +1575,8 @@ def test_deep_reflection_repeated_run_does_not_duplicate_snapshot() -> None:
         event_store=event_store,
     )
 
-    since = datetime.now(UTC).replace(hour=0, minute=0, second=0, microsecond=0)
-    until = datetime.now(UTC)
+    since = anchor.replace(hour=0, minute=0, second=0, microsecond=0)
+    until = anchor
 
     first = service.reflect(since, until)
     snapshots_after_first = identity_repo.get_history()
@@ -1587,8 +1596,9 @@ def test_daily_reflection_repeated_run_does_not_duplicate_snapshot() -> None:
     Two ``reflect()`` calls for the same UTC day must yield the same anchor
     snapshot and the same ``reflection_run_key``.
     """
-    exp1 = create_test_experience()
-    exp2 = create_test_experience()
+    anchor = datetime(2026, 9, 15, 12, 0, 0, tzinfo=UTC)
+    exp1 = create_test_experience().model_copy(update={"timestamp": anchor})
+    exp2 = create_test_experience().model_copy(update={"timestamp": anchor})
     identity = Identity()
 
     exp_repo = MockExperienceRepo([exp1, exp2])
@@ -1604,11 +1614,31 @@ def test_daily_reflection_repeated_run_does_not_duplicate_snapshot() -> None:
         event_store=event_store,
     )
 
-    date = datetime.now(UTC)
-    first = service.reflect(date)
-    second = service.reflect(date)
+    first = service.reflect(anchor)
+    second = service.reflect(anchor)
 
     assert first.reflection_run_key == second.reflection_run_key
     assert first.identity_snapshot_id == second.identity_snapshot_id
     # Anchor snapshot created exactly once.
     assert len(identity_repo.get_history()) == 1
+
+
+def test_noop_observer_record_narrative_commit_failure_returns_none() -> None:
+    """NoOpReflectionEventPersistenceObserver.record_narrative_commit_failure is a silent no-op."""
+    observer = NoOpReflectionEventPersistenceObserver()
+    result = observer.record_reflection_event_save_failed_after_narrative_commit(
+        reflection_level=ReflectionLevel.MICRO,
+        error_message="simulated error",
+    )
+    assert result is None
+
+
+def test_noop_observer_record_side_effect_failure_returns_none() -> None:
+    """NoOpReflectionEventPersistenceObserver.record_side_effect_failure is a silent no-op."""
+    observer = NoOpReflectionEventPersistenceObserver()
+    result = observer.record_reflection_job_event_save_failed_after_side_effects(
+        reflection_level=ReflectionLevel.DAILY,
+        reflection_run_key="deep|v1|abc",
+        error_message="simulated side-effect error",
+    )
+    assert result is None

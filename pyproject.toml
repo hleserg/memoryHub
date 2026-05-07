@@ -51,6 +51,11 @@ packages = ["src/atman"]
 testpaths = ["tests"]
 pythonpath = ["src"]
 asyncio_mode = "auto"
+markers = [
+    "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+    "integration: marks integration tests (multiple real components, no mocks)",
+    "e2e: marks full end-to-end scenarios",
+]
 
 [tool.coverage.run]
 source = ["atman"]

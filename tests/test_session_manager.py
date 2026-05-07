@@ -57,7 +57,7 @@ def frozen_clock():
 
 
 @pytest.fixture
-def test_identity():
+def identity_fixture():
     """Create test identity."""
     return Identity(
         id=uuid4(),
@@ -80,10 +80,10 @@ def test_identity():
 
 
 @pytest.fixture
-def test_narrative(test_identity):
+def narrative_fixture(identity_fixture):
     """Create test narrative."""
     return NarrativeDocument(
-        identity_id=test_identity.id,
+        identity_id=identity_fixture.id,
         core_layer=NarrativeLayer(
             layer_type=LayerType.CORE,
             content="Core narrative",
@@ -96,11 +96,11 @@ def test_narrative(test_identity):
 
 
 @pytest.fixture
-def session_manager(temp_storage, test_identity, test_narrative, frozen_clock):
+def session_manager(temp_storage, identity_fixture, narrative_fixture, frozen_clock):
     """Create session manager with test data and frozen clock."""
-    temp_storage.save_identity(test_identity)
-    temp_storage.save_narrative(test_narrative)
-    return SessionManager(temp_storage, clock=frozen_clock), test_identity.id
+    temp_storage.save_identity(identity_fixture)
+    temp_storage.save_narrative(narrative_fixture)
+    return SessionManager(temp_storage, clock=frozen_clock), identity_fixture.id
 
 
 def test_start_session_returns_context_with_identity_and_narrative(session_manager):
@@ -127,13 +127,13 @@ def test_start_session_fails_without_identity(temp_storage):
         manager.start_session(fake_agent_id)
 
 
-def test_start_session_fails_without_narrative(temp_storage, test_identity):
+def test_start_session_fails_without_narrative(temp_storage, identity_fixture):
     """A session cannot start without the matching narrative context."""
-    temp_storage.save_identity(test_identity)
+    temp_storage.save_identity(identity_fixture)
     manager = SessionManager(temp_storage)
 
     with pytest.raises(ValueError, match="Narrative not found"):
-        manager.start_session(test_identity.id)
+        manager.start_session(identity_fixture.id)
 
 
 def test_record_event_tracks_event(session_manager):
@@ -316,16 +316,16 @@ def test_record_event_does_not_mutate_caller_event(session_manager):
 
 
 def test_key_moment_when_uses_recorded_at_before_finish(
-    temp_storage, test_identity, test_narrative
+    temp_storage, identity_fixture, narrative_fixture
 ):
     """KeyMoment.when follows Clock time when recorded (temporal consistency)."""
-    temp_storage.save_identity(test_identity)
-    temp_storage.save_narrative(test_narrative)
+    temp_storage.save_identity(identity_fixture)
+    temp_storage.save_narrative(narrative_fixture)
 
     # Start session with clock at T0
     clock_t0 = FrozenClock(datetime(2024, 1, 15, 12, 0, 0, tzinfo=UTC))
     manager_t0 = SessionManager(temp_storage, clock=clock_t0)
-    context = manager_t0.start_session(test_identity.id)
+    context = manager_t0.start_session(identity_fixture.id)
 
     # Record key moment at T0
     moment = KeyMomentInput(
@@ -440,22 +440,22 @@ def test_alignment_check_false_requires_notes(session_manager):
     )
 
 
-def test_max_active_sessions_limit(temp_storage, test_identity, test_narrative):
-    temp_storage.save_identity(test_identity)
-    temp_storage.save_narrative(test_narrative)
+def test_max_active_sessions_limit(temp_storage, identity_fixture, narrative_fixture):
+    temp_storage.save_identity(identity_fixture)
+    temp_storage.save_narrative(narrative_fixture)
     manager = SessionManager(temp_storage, max_active_sessions=1)
-    manager.start_session(test_identity.id)
+    manager.start_session(identity_fixture.id)
     # Check snapshot count (file-based specific check)
     if hasattr(temp_storage, "identity_snapshots_dir"):
         snap_before = len(list(temp_storage.identity_snapshots_dir.glob("*.json")))
     else:
-        snap_before = len(temp_storage.list_identity_snapshots(test_identity.id))
+        snap_before = len(temp_storage.list_identity_snapshots(identity_fixture.id))
     with pytest.raises(TooManyActiveSessionsError):
-        manager.start_session(test_identity.id)
+        manager.start_session(identity_fixture.id)
     if hasattr(temp_storage, "identity_snapshots_dir"):
         assert len(list(temp_storage.identity_snapshots_dir.glob("*.json"))) == snap_before
     else:
-        assert len(temp_storage.list_identity_snapshots(test_identity.id)) == snap_before
+        assert len(temp_storage.list_identity_snapshots(identity_fixture.id)) == snap_before
 
 
 def test_overall_emotional_tone_out_of_range_raises(session_manager):

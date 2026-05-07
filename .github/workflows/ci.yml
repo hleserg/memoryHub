@@ -18,18 +18,22 @@ concurrency:
 
 jobs:
   check:
-    name: Lint, typecheck, security, tests
+    name: Lint, typecheck, security, tests (Python ${{ matrix.python-version }})
     runs-on: ubuntu-latest
     timeout-minutes: 20
+
+    strategy:
+      matrix:
+        python-version: ["3.12", "3.13"]
 
     steps:
       - name: Checkout
         uses: actions/checkout@v6
 
-      - name: Set up Python
+      - name: Set up Python ${{ matrix.python-version }}
         uses: actions/setup-python@v6
         with:
-          python-version: "3.12"
+          python-version: ${{ matrix.python-version }}
 
       - name: Set up uv
         uses: astral-sh/setup-uv@v7
@@ -39,5 +43,14 @@ jobs:
       - name: Install package with dev and e2e dependencies
         run: uv pip install --system -e ".[dev,e2e]"
 
-      - name: Run required checks
+      - name: Run fast tests (quick feedback on PRs)
+        if: github.event_name == 'pull_request'
+        run: pytest tests/ -m "not slow" -v
+
+      - name: Run required checks (lint, typecheck, security, full test suite)
+        if: matrix.python-version == '3.12'
         run: make check
+
+      - name: Run tests only (Python ${{ matrix.python-version }})
+        if: matrix.python-version != '3.12'
+        run: pytest tests/ -v --cov=atman --cov-fail-under=90

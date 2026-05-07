@@ -16,6 +16,8 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from uuid import UUID, uuid4
 
+import pytest
+
 from atman.adapters.reflection.mock_reflection_model import MockReflectionModel
 from atman.adapters.storage import FileStateStore
 from atman.adapters.storage.in_memory_reflection_store import (
@@ -198,6 +200,8 @@ def _build_session_experience(
     )
 
 
+@pytest.mark.slow
+@pytest.mark.e2e
 def test_bootstrap_to_deep_reflection_full_lifecycle():
     """SYSTEM_MAP §3 (A–G) end-to-end: bootstrap → 5 experiences → micro/daily/deep → narrative.
 

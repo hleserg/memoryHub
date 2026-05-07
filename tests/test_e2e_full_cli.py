@@ -25,6 +25,8 @@ import sys
 from pathlib import Path
 from uuid import uuid4
 
+import pytest
+
 AGENT_ID = "00000000-0000-4000-8000-000000000077"
 
 
@@ -38,6 +40,8 @@ def _run(module: str, *args: str, cwd: Path | None = None) -> subprocess.Complet
     )
 
 
+@pytest.mark.slow
+@pytest.mark.e2e
 def test_full_cli_lifecycle(tmp_path: Path) -> None:
     """SYSTEM_MAP §3 A–G: complete CLI lifecycle in a single workspace."""
     ws = tmp_path / "workspace"

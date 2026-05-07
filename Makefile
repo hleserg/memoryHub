@@ -1,4 +1,4 @@
-.PHONY: lint format typecheck security test test-fast audit check all sync-site-content docs-preview demo-experience demo-factual demo-identity demo-reflection demo-session demo-full-corpus demo-webui demo-experience-fast demo-factual-fast demo-identity-fast demo-reflection-fast demo-session-fast demo-full-corpus-fast demo-webui-fast demo-experience-paced demo-factual-paced demo-identity-paced demo-reflection-paced demo-session-paced demo-full-corpus-paced demo-webui-paced webui demo-e2e-scenario
+.PHONY: lint format typecheck security test test-fast test-all test-integration audit check all sync-site-content docs-preview demo-experience demo-factual demo-identity demo-reflection demo-session demo-full-corpus demo-webui demo-experience-fast demo-factual-fast demo-identity-fast demo-reflection-fast demo-session-fast demo-full-corpus-fast demo-webui-fast demo-experience-paced demo-factual-paced demo-identity-paced demo-reflection-paced demo-session-paced demo-full-corpus-paced demo-webui-paced webui demo-e2e-scenario
 
 lint:
 	ruff check src/ tests/ e2e/
@@ -16,7 +16,13 @@ test:
 	pytest tests/ -v --cov=atman --cov-fail-under=90 --cov-report=term-missing
 
 test-fast:
-	pytest tests/ -n auto -q
+	pytest tests/ -m "not slow" -v
+
+test-all:
+	pytest tests/ -v
+
+test-integration:
+	pytest tests/ -m "integration" -v
 
 audit:
 	@python3 -c "\
