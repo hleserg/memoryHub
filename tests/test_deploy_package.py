@@ -42,14 +42,17 @@ def test_deploy_directory_contains_all_runtime_files() -> None:
 
 def test_deploy_runtime_files_are_not_gitignored() -> None:
     """Required scripts must not disappear again because of broad ignore rules."""
-    candidates = [str(DEPLOY_DIR / name) for name in sorted(REQUIRED_RUNTIME_FILES)]
-    result = subprocess.run(
-        ["git", "check-ignore", "--quiet", "--", *candidates],
-        cwd=REPO_ROOT,
-        check=False,
-    )
+    ignored: list[str] = []
+    for name in sorted(REQUIRED_RUNTIME_FILES):
+        result = subprocess.run(
+            ["git", "check-ignore", "--quiet", "--", str(DEPLOY_DIR / name)],
+            cwd=REPO_ROOT,
+            check=False,
+        )
+        if result.returncode == 0:
+            ignored.append(name)
 
-    assert result.returncode == 1
+    assert ignored == []
 
 
 def test_deploy_zip_matches_checked_out_runtime_files() -> None:
