@@ -9,7 +9,6 @@ import subprocess
 import zipfile
 from pathlib import Path
 
-
 REPO_ROOT = Path(__file__).resolve().parent.parent
 DEPLOY_DIR = REPO_ROOT / "deploy" / "atman-deploy" / "deploy"
 DEPLOY_ZIP = REPO_ROOT / "deploy" / "atman-deploy.zip"
