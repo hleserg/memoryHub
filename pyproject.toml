@@ -140,7 +140,7 @@ include = ["src", "tests", "e2e"]
 exclude = ["src/atman/reflection/store.py"]
 
 [tool.ruff]
-target-version = "py312"
+target-version = "py311"
 line-length = 100
 src = ["src", "tests", "e2e"]
 

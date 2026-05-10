@@ -5,8 +5,9 @@ Simple in-memory storage for usage records.
 Not persistent - suitable for testing and short-lived sessions.
 """
 
-from typing_extensions import override
 from uuid import UUID
+
+from typing_extensions import override
 
 from atman.core.ports.memory_usage_log import MemoryUsageLog, MemoryUsageRecord
 
