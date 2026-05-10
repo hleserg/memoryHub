@@ -133,11 +133,19 @@ class FactualMemory(ABC):
         """
         Confirm a fact, increasing its confirmation count and salience.
 
+        Only ACTIVE facts can be confirmed. Confirmation is a signal that
+        the fact is still observed in fresh evidence — a non-ACTIVE fact
+        (DISPUTED, SUPERSEDED, INVALIDATED) has already exited the active
+        lifecycle and resurrecting it via a confirmation bump would be
+        semantically wrong (e.g. an INVALIDATED fact's salience must stay
+        at 0.0 unless it is explicitly re-activated through a separate API).
+
         Args:
             fact_id: ID of the fact to confirm
 
         Returns:
-            bool: True if fact was found and confirmed
+            bool: True if the fact was found AND ACTIVE and got confirmed.
+                False if the fact was not found or is not ACTIVE.
         """
         pass
 

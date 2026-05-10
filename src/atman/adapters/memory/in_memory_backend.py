@@ -143,9 +143,14 @@ class InMemoryBackend(FactualMemory):
         return [f.model_copy(deep=True) for f in results]
 
     def confirm_fact(self, fact_id: UUID) -> bool:
-        """Confirm a fact, increasing its confirmation count."""
+        """Confirm an ACTIVE fact, increasing its confirmation count.
+
+        Returns ``False`` for unknown ids and for non-ACTIVE facts —
+        confirming a DISPUTED/SUPERSEDED/INVALIDATED fact would resurrect
+        its salience, which violates the lifecycle contract.
+        """
         fact = self._facts.get(fact_id)
-        if fact is None:
+        if fact is None or fact.status != FactStatus.ACTIVE:
             return False
         fact.confirm()
         return True

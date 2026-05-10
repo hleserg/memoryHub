@@ -167,11 +167,16 @@ class FileBackend(FactualMemory):
         return results
 
     def confirm_fact(self, fact_id: UUID) -> bool:
-        """Confirm a fact and persist changes."""
+        """Confirm an ACTIVE fact and persist changes.
+
+        Returns ``False`` for unknown ids and for non-ACTIVE facts —
+        confirming a DISPUTED/SUPERSEDED/INVALIDATED fact would resurrect
+        its salience, which violates the lifecycle contract.
+        """
         with self._storage_lock():
             updated_facts = self._read_facts_from_disk()
             fact = updated_facts.get(fact_id)
-            if fact is None:
+            if fact is None or fact.status != FactStatus.ACTIVE:
                 self._facts = updated_facts
                 return False
             fact.confirm()

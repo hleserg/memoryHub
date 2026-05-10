@@ -127,6 +127,19 @@ def test_embed_batch_raises_on_empty_response():
         adapter.embed_batch(["a"])
 
 
+def test_embed_batch_raises_on_length_mismatch():
+    """Defensive: a server that drops or duplicates inputs must not silently
+    return a misaligned vector list."""
+    adapter = OllamaEmbeddingAdapter(base_url="http://localhost:11434")
+    # Send 3 inputs but the server returns only 2 vectors.
+    response = _FakeResponse({"embeddings": [[0.1], [0.2]]})
+    with (
+        patch("urllib.request.urlopen", return_value=response),
+        pytest.raises(RuntimeError, match="length mismatch"),
+    ):
+        adapter.embed_batch(["a", "b", "c"])
+
+
 def test_dimension_caches_after_first_probe():
     adapter = OllamaEmbeddingAdapter(base_url="http://localhost:11434")
     response = _FakeResponse({"embedding": [0.1, 0.2, 0.3, 0.4]})

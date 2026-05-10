@@ -123,6 +123,14 @@ class OllamaEmbeddingAdapter(EmbeddingPort):
                 embeddings = data.get("embeddings", [])
                 if not embeddings:
                     raise RuntimeError("Empty embeddings received from Ollama")
+                # Defensive: Ollama's API contract is 1:1 input->vector but a
+                # silent drop or duplication on the server side would otherwise
+                # leak as a misaligned ``zip(texts, embeddings)`` downstream.
+                if len(embeddings) != len(texts):
+                    raise RuntimeError(
+                        f"Ollama batch embedding length mismatch: "
+                        f"got {len(embeddings)} vectors for {len(texts)} inputs"
+                    )
                 return embeddings
         except urllib.error.URLError as e:
             raise RuntimeError(f"Failed to connect to Ollama: {e}") from e
