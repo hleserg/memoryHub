@@ -26,7 +26,21 @@ dev = [
     "bandit>=1.8.0",
     "pip-audit>=2.7.0",
     "pre-commit>=4.0.0",
+    "import-linter>=2.0.0",
     "streamlit>=1.30.0",
+]
+eval = [
+    # Evaluation subsystem dependencies (benchmarks, judges, dashboards)
+    # NOT part of production install; only for development and CI benchmarks
+    "streamlit>=1.30.0",
+    "huggingface-hub>=0.20.0",
+    "datasets>=2.16.0",
+    "plotly>=5.18.0",
+    "pandas>=2.1.0",
+    "scikit-learn>=1.3.0",
+    "alembic>=1.13.0",
+    "sqlalchemy[postgresql]>=2.0.0",
+    "psycopg2-binary>=2.9.0",
 ]
 webui = [
     "streamlit>=1.30.0",
@@ -37,6 +51,9 @@ api = [
 ]
 e2e = [
     "anthropic>=0.42.0",
+]
+all = [
+    "atman[dev,eval,webui,api,e2e]",
 ]
 
 [project.scripts]
