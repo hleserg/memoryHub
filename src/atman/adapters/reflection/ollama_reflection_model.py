@@ -6,7 +6,9 @@ Uses Ollama's local LLM API for structured generation during reflection.
 
 import json
 import os
-from typing import Any, TypeVar
+import warnings
+from typing import Any, TypedDict, TypeVar
+from urllib.parse import urlparse
 
 import httpx
 import pydantic
@@ -28,6 +30,13 @@ from atman.core.ports.reflection import ReflectionModel
 T = TypeVar("T", bound=pydantic.BaseModel)
 
 
+class OllamaMessage(TypedDict):
+    """Type for Ollama API message."""
+
+    role: str
+    content: str
+
+
 class OllamaReflectionModel(ReflectionModel):
     """
     Ollama-backed implementation of ReflectionModel.
@@ -35,22 +44,37 @@ class OllamaReflectionModel(ReflectionModel):
     Reads configuration from environment:
     - ATMAN_OLLAMA_BASE_URL (default: http://localhost:11434)
     - ATMAN_OLLAMA_MODEL (default: qwen3.5:9b)
+
+    Note: Uses synchronous HTTP client to match the synchronous ReflectionModel port.
+    Call close() when done to release resources, or use as context manager.
     """
 
     def __init__(self) -> None:
         """
         Initialize OllamaReflectionModel with configuration from environment.
-        """
-        self.base_url = os.getenv("ATMAN_OLLAMA_BASE_URL", "http://localhost:11434")
-        self.model = os.getenv("ATMAN_OLLAMA_MODEL", "qwen3.5:9b")
-        self._client = httpx.AsyncClient(
-            base_url=self.base_url,
-            timeout=60.0,
-        )
 
-    async def _call_with_retry(
+        Raises:
+            ValueError: If ATMAN_OLLAMA_BASE_URL has invalid scheme
+        """
+        base_url = os.getenv("ATMAN_OLLAMA_BASE_URL", "http://localhost:11434")
+        parsed_url = urlparse(base_url)
+        if parsed_url.scheme not in ("http", "https"):
+            raise ValueError(
+                f"Invalid URL scheme in ATMAN_OLLAMA_BASE_URL: {parsed_url.scheme}. "
+                "Expected 'http' or 'https'."
+            )
+
+        self.base_url = base_url
+        self.model = os.getenv("ATMAN_OLLAMA_MODEL", "qwen3.5:9b")
+        self._client = httpx.Client(
+            base_url=self.base_url,
+            timeout=httpx.Timeout(60.0, connect=5.0),
+        )
+        self._closed = False
+
+    def _call_with_retry(
         self,
-        messages: list[dict[str, str]],
+        messages: list[OllamaMessage],
         output_model: type[T],
     ) -> T:
         """
@@ -77,44 +101,65 @@ class OllamaReflectionModel(ReflectionModel):
             },
         }
 
-        attempts = 0
         last_raw = ""
 
         for attempt in range(2):
             attempts = attempt + 1
             try:
-                response = await self._client.post("/api/chat", json=payload)
+                response = self._client.post("/api/chat", json=payload)
                 response.raise_for_status()
                 response_json = response.json()
 
-                message_content = response_json.get("message", {}).get("content", "")
+                message = response_json.get("message")
+                if not isinstance(message, dict):
+                    raise ValueError(f"Unexpected message type: {type(message).__name__}")
+
+                message_content = message.get("content", "")
                 last_raw = message_content
 
                 parsed_json = json.loads(message_content)
                 return output_model.model_validate(parsed_json)
-            except (json.JSONDecodeError, pydantic.ValidationError):
+            except (
+                json.JSONDecodeError,
+                pydantic.ValidationError,
+                httpx.HTTPStatusError,
+                httpx.RequestError,
+                ValueError,
+            ):
                 if attempt == 1:
                     raise OllamaReflectionError(attempts=attempts, last_raw=last_raw) from None
                 continue
 
-        raise OllamaReflectionError(attempts=attempts, last_raw=last_raw)
+        raise AssertionError("Unreachable: loop should exit via return or raise")
 
-    async def close(self) -> None:
-        """Close the HTTP client."""
-        await self._client.aclose()
+    def close(self) -> None:
+        """Close the HTTP client and release resources."""
+        if not self._closed:
+            self._client.close()
+            self._closed = True
 
-    async def __aenter__(self) -> "OllamaReflectionModel":
-        """Async context manager entry."""
+    def __enter__(self) -> "OllamaReflectionModel":
+        """Context manager entry."""
         return self
 
-    async def __aexit__(
+    def __exit__(
         self,
         exc_type: type[BaseException] | None,
         exc_val: BaseException | None,
         exc_tb: Any,
     ) -> None:
-        """Async context manager exit."""
-        await self.close()
+        """Context manager exit."""
+        self.close()
+
+    def __del__(self) -> None:
+        """Destructor to warn about unclosed client."""
+        if hasattr(self, "_closed") and not self._closed:
+            warnings.warn(
+                "OllamaReflectionModel was not closed properly. "
+                "Use 'with OllamaReflectionModel() as model:' or call close() explicitly.",
+                ResourceWarning,
+                stacklevel=2,
+            )
 
     def generate_reframing_note(
         self,
