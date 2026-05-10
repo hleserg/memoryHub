@@ -15,8 +15,7 @@ from abc import ABC, abstractmethod
 from datetime import datetime
 from uuid import UUID
 
-from atman.adapters.storage.postgres_reflection_models import ReflectionRecord
-from atman.core.models.reflection import ReflectionLevel
+from atman.core.models.reflection import ReflectionLevel, ReflectionRecord
 
 
 class ReflectionStore(ABC):

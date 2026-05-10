@@ -14,8 +14,7 @@ from uuid import uuid4
 import pytest
 from pydantic import ValidationError
 
-from atman.adapters.storage.postgres_reflection_models import ReflectionRecord
-from atman.core.models.reflection import ReflectionLevel
+from atman.core.models.reflection import ReflectionLevel, ReflectionRecord
 
 
 def test_reflection_record_minimal_micro():

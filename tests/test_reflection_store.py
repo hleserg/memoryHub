@@ -15,8 +15,7 @@ from uuid import uuid4
 import pytest
 
 from atman.adapters.storage.in_memory_postgres_reflection_store import InMemoryReflectionStore
-from atman.adapters.storage.postgres_reflection_models import ReflectionRecord
-from atman.core.models.reflection import ReflectionLevel
+from atman.core.models.reflection import ReflectionLevel, ReflectionRecord
 
 
 @pytest.fixture

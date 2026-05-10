@@ -12,8 +12,7 @@ from datetime import datetime
 from threading import Lock
 from uuid import UUID
 
-from atman.adapters.storage.postgres_reflection_models import ReflectionRecord
-from atman.core.models.reflection import ReflectionLevel
+from atman.core.models.reflection import ReflectionLevel, ReflectionRecord
 from atman.core.ports.reflection_store import ReflectionStore
 
 
@@ -90,8 +89,9 @@ class InMemoryReflectionStore(ReflectionStore):
         """
         Retrieve a reflection by its ID.
 
-        RLS not applied on direct ID lookup (matches PostgreSQL behavior
-        where get-by-PK bypasses RLS in controlled contexts).
+        Applies RLS filter (agent_id must match current agent if set),
+        matching PostgreSQL RLS behavior where USING policy applies to
+        all SELECT queries.
 
         Args:
             reflection_id: Database ID
@@ -100,7 +100,12 @@ class InMemoryReflectionStore(ReflectionStore):
             ReflectionRecord if found, None otherwise
         """
         with self._lock:
-            return self._reflections.get(reflection_id)
+            record = self._reflections.get(reflection_id)
+            if record is None:
+                return None
+            if self._current_agent_id is not None and record.agent_id != self._current_agent_id:
+                return None
+            return record
 
     def list_by_session(self, session_id: UUID) -> list[ReflectionRecord]:
         """

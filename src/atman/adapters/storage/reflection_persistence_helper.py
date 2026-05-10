@@ -9,11 +9,11 @@ These functions bridge between:
 from datetime import datetime
 from uuid import UUID
 
-from atman.adapters.storage.postgres_reflection_models import ReflectionRecord
 from atman.core.models.identity import Identity
 from atman.core.models.reflection import (
     HealthAssessment,
     ReflectionLevel,
+    ReflectionRecord,
 )
 from atman.core.ports.reflection_store import ReflectionStore
 

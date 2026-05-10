@@ -25,7 +25,7 @@ All paths are absolute relative to the repository root.
 | `core/models/identity.py` | Agent's self-representation (values, habits, principles, goals, open questions) | `Identity`, `CoreValue`, `Habit`, `Principle`, `Goal`, `OpenQuestion`, `IdentitySnapshot`, `HelpfulnessLevel` |
 | `core/models/narrative.py` | Self-narrative document (CORE/RECENT/THREADS) and eigenstate | `NarrativeDocument`, `NarrativeLayer`, `NarrativeThread`, `Eigenstate` (`schema_version`, optional `identity_id`), `LayerType` |
 | `core/models/session.py` | Session runtime models: context, events, key moment input, result, active listing | `SessionContext`, `SessionEvent`, `KeyMomentInput`, `SessionResult`, `ActiveSessionSummary` |
-| `core/models/reflection.py` | Reflection processes, patterns, health assessment (Jahoda criteria), structured LLM/mock outputs (MODEL-01 / #146) | `ReflectionLevel`, `PatternCandidate`, `PatternStatus`, `PatternType`, `ReflectionEvent`, `HealthAssessment`, `JahodaCriterion`, `CriterionAssessment`, `ReframingNoteOutput`, `PatternDetectionOutput`, `NarrativeUpdateOutput`, `HealthCriterionOutput` |
+| `core/models/reflection.py` | Reflection processes, patterns, health assessment (Jahoda criteria), structured LLM/mock outputs (MODEL-01 / #146), **PostgreSQL reflections persistence** (E27) | `ReflectionLevel`, `PatternCandidate`, `PatternStatus`, `PatternType`, `ReflectionEvent`, `HealthAssessment`, `JahodaCriterion`, `CriterionAssessment`, `ReframingNoteOutput`, `PatternDetectionOutput`, `NarrativeUpdateOutput`, `HealthCriterionOutput`, **`ReflectionRecord`** |
 | `core/models/governance.py` | Governance decisions for core narrative mutations | `GovernanceDecision`, `GovernanceMode` |
 
 ### 1.2. Ports / interfaces (`src/atman/core/ports/`)
@@ -36,7 +36,7 @@ All paths are absolute relative to the repository root.
 | `core/ports/clock.py` | Domain clock for reproducibility | `ClockPort` (Protocol) |
 | `core/ports/state_store.py` | Storage for experience/identity/narrative | `StateStore`, `ExperienceQuery`, `SessionExperienceQuery`, `ValuesTouchedQuery`, `DepthQuery`, `DateRangeQuery` |
 | `core/ports/reflection.py` | Reflection Engine dependencies; `ReflectionModel` returns structured DTOs (#146) | `ExperienceRepository`, `IdentityRepository`, `NarrativeRepository`, `ReflectionModel`, `PatternStore`, `ReflectionEventStore`, `HealthAssessmentStore`, `ReflectionEventPersistenceObserver`, `NarrativeWriteAuditPort` |
-|| **`core/ports/reflection_store.py`** | **E27**: PostgreSQL `reflections` table interface | `ReflectionStore` (ABC): `add`, `get`, `list_by_session`, `list_recent`, `list_by_level`, `list_by_experience` |
+| **`core/ports/reflection_store.py`** | **E27**: PostgreSQL `reflections` table interface | `ReflectionStore` (ABC): `add`, `get`, `list_by_session`, `list_recent`, `list_by_level`, `list_by_experience` |
 
 ### 1.3. Services (`src/atman/core/services/`)
 
@@ -70,6 +70,8 @@ All paths are absolute relative to the repository root.
 | `adapters/storage/jsonl_experience_store.py` (`JsonlExperienceStore`) | `StateStore` | JSONL for experience |
 | `adapters/storage/file_state_store.py` (`FileStateStore`) | `StateStore` | JSON files (experience + identity + narrative + eigenstate) |
 | `adapters/storage/in_memory_reflection_store.py` | `PatternStore`, `ReflectionEventStore`, `HealthAssessmentStore` | reflection output stores |
+| **`adapters/storage/in_memory_postgres_reflection_store.py`** (`InMemoryReflectionStore`) | **`ReflectionStore`** | **E27**: in-memory with BIGSERIAL + RLS simulation |
+| `adapters/storage/reflection_persistence_helper.py` | — | **E27**: helper functions for persisting reflections (`persist_micro_reflection`, `persist_daily_reflection`, `persist_deep_reflection`) |
 | `adapters/reflection/mock_reflection_model.py` (`MockReflectionModel`) | `ReflectionModel` | deterministic mock |
 | `adapters/reflection/fixture_loader.py` | — | load fixtures for demos |
 
@@ -131,6 +133,7 @@ Connections between two or more parts. These are seams that may break independen
 | `InMemoryExperienceStore`, `JsonlExperienceStore`, `FileStateStore` | `StateStore` |
 | `MockReflectionModel` | `ReflectionModel` |
 | `InMemoryPatternStore`, `InMemoryReflectionEventStore`, `InMemoryHealthAssessmentStore` | corresponding ports |
+| **`InMemoryReflectionStore`** | **`ReflectionStore`** (E27) |
 
 ### 2.3. CLI ↔ service
 

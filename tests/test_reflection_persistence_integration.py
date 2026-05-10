@@ -55,6 +55,7 @@ def test_persist_micro_reflection_after_session():
     assert len(record.experience_refs) == 2
 
     # Verify retrieval
+    assert record.id is not None
     retrieved = store.get(record.id)
     assert retrieved is not None
     assert retrieved.content == content
@@ -212,6 +213,7 @@ def test_persist_reflection_with_reframing_notes():
     assert record.reframing_note_ids == note_ids
 
     # Verify retrieval
+    assert record.id is not None
     retrieved = store.get(record.id)
     assert retrieved is not None
     assert retrieved.reframing_note_ids == note_ids
