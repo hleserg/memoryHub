@@ -11,10 +11,8 @@ import pytest
 from pydantic import BaseModel
 
 from atman.adapters.reflection.exceptions import OllamaReflectionError
-from atman.adapters.reflection.ollama_reflection_model import (
-    OllamaMessage,
-    OllamaReflectionModel,
-)
+from atman.adapters.reflection.ollama_reflection_model import OllamaReflectionModel
+from atman.adapters.reflection.prompts import OllamaMessage
 
 
 class MockOutput(BaseModel):
@@ -265,37 +263,84 @@ class TestCallWithRetry:
                 assert payload["options"]["seed"] == 42
 
 
-class TestNotImplementedMethods:
-    """Tests for not-yet-implemented reflection methods."""
+class TestReflectionMethods:
+    """Tests for the four reflection methods delegating to _call_with_retry."""
 
-    def test_generate_reframing_note_raises(self) -> None:
-        """Test that generate_reframing_note raises NotImplementedError."""
+    def _make_mock_response(self, content: str) -> MagicMock:
+        """Create a mock httpx.Response returning *content* as message body."""
+        resp = MagicMock(spec=httpx.Response)
+        resp.json.return_value = {"message": {"content": content}}
+        return resp
+
+    def test_generate_reframing_note(self) -> None:
+        """Test generate_reframing_note delegates to _call_with_retry."""
+        payload = json.dumps({"reflection": "new insight", "reflection_type": "insight"})
+        mock_resp = self._make_mock_response(payload)
+
         with (
             OllamaReflectionModel() as model,
-            pytest.raises(NotImplementedError, match=r"E21\.2"),
+            patch.object(model._client, "post", return_value=mock_resp) as mock_post,
         ):
-            model.generate_reframing_note(MagicMock(), {})
+            result = model.generate_reframing_note(MagicMock(), {})
 
-    def test_detect_pattern_raises(self) -> None:
-        """Test that detect_pattern raises NotImplementedError."""
+            assert result.reflection == "new insight"
+            assert result.reflection_type == "insight"
+            mock_post.assert_called_once()
+
+    def test_detect_pattern(self) -> None:
+        """Test detect_pattern delegates to _call_with_retry."""
+        payload = json.dumps(
+            {
+                "description": "recurring pattern",
+                "confidence": 0.7,
+                "potential_habit": "",
+                "potential_principle": "",
+            }
+        )
+        mock_resp = self._make_mock_response(payload)
+
         with (
             OllamaReflectionModel() as model,
-            pytest.raises(NotImplementedError, match=r"E21\.2"),
+            patch.object(model._client, "post", return_value=mock_resp) as mock_post,
         ):
-            model.detect_pattern([], {})
+            result = model.detect_pattern([], {})
 
-    def test_propose_narrative_update_raises(self) -> None:
-        """Test that propose_narrative_update raises NotImplementedError."""
+            assert result.description == "recurring pattern"
+            assert result.confidence == 0.7
+            mock_post.assert_called_once()
+
+    def test_propose_narrative_update(self) -> None:
+        """Test propose_narrative_update delegates to _call_with_retry."""
+        payload = json.dumps({"body": "updated narrative text"})
+        mock_resp = self._make_mock_response(payload)
+
         with (
             OllamaReflectionModel() as model,
-            pytest.raises(NotImplementedError, match=r"E21\.2"),
+            patch.object(model._client, "post", return_value=mock_resp) as mock_post,
         ):
-            model.propose_narrative_update(MagicMock(), [], MagicMock())
+            result = model.propose_narrative_update(MagicMock(), [], MagicMock())
 
-    def test_assess_health_criterion_raises(self) -> None:
-        """Test that assess_health_criterion raises NotImplementedError."""
+            assert result.body == "updated narrative text"
+            mock_post.assert_called_once()
+
+    def test_assess_health_criterion(self) -> None:
+        """Test assess_health_criterion delegates to _call_with_retry."""
+        payload = json.dumps(
+            {
+                "score": 0.75,
+                "evidence": ["shows growth"],
+                "concerns": ["limited data"],
+            }
+        )
+        mock_resp = self._make_mock_response(payload)
+
         with (
             OllamaReflectionModel() as model,
-            pytest.raises(NotImplementedError, match=r"E21\.2"),
+            patch.object(model._client, "post", return_value=mock_resp) as mock_post,
         ):
-            model.assess_health_criterion(MagicMock(), [], MagicMock())
+            result = model.assess_health_criterion(MagicMock(), [], MagicMock())
+
+            assert result.score == 0.75
+            assert result.evidence == ["shows growth"]
+            assert result.concerns == ["limited data"]
+            mock_post.assert_called_once()
