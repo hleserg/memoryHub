@@ -117,7 +117,8 @@ class ConflictDetector:
         for i, fact1 in enumerate(active_facts):
             for fact2 in active_facts[i + 1 :]:
                 # Avoid duplicate checks (order doesn't matter)
-                pair = tuple(sorted([fact1.id, fact2.id]))  # type: ignore
+                ids_sorted = sorted([fact1.id, fact2.id])
+                pair: tuple[UUID, UUID] = (ids_sorted[0], ids_sorted[1])
                 if pair in checked:
                     continue
                 checked.add(pair)

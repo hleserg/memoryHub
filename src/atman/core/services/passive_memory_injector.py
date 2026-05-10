@@ -179,8 +179,10 @@ class PassiveMemoryInjector:
         # Get recent experiences and filter by embedding similarity
         from atman.core.ports.state_store import ExperienceQuery
 
-        query = ExperienceQuery(limit=limit * 2)
-        experience_records = self.state_store.search_experiences(query)
+        query = ExperienceQuery()
+        all_records = self.state_store.search_experiences(query)
+        # Take more than needed for scoring, will filter later
+        experience_records = all_records[: limit * 4] if all_records else []
 
         # Score by embedding similarity
         query_embedding = self.embedding.embed(context_text)
