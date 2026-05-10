@@ -7,6 +7,7 @@ readme = "README.md"
 
 dependencies = [
     "pydantic>=2.0.0",
+    "pydantic-ai>=1.88.0,<2.0",
     "rich>=13.7.0",
     "textual>=0.86.0",
     "httpx>=0.28.0",
@@ -19,6 +20,7 @@ dev = [
     "pytest-cov>=6.0.0",
     "pytest-xdist>=3.5.0",
     "respx>=0.21.1",
+    "opentelemetry-api>=1.20.0",
     "ruff>=0.11.0",
     "pyright>=1.1.0",
     "bandit>=1.8.0",
@@ -28,6 +30,10 @@ dev = [
 ]
 webui = [
     "streamlit>=1.30.0",
+]
+api = [
+    "fastapi>=0.115.0",
+    "uvicorn>=0.32.0",
 ]
 e2e = [
     "anthropic>=0.42.0",

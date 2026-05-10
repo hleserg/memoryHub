@@ -74,6 +74,10 @@ All paths are absolute relative to the repository root.
 | `adapters/storage/reflection_persistence_helper.py` | — | **E27**: helper functions for persisting reflections (`persist_micro_reflection`, `persist_daily_reflection`, `persist_deep_reflection`) |
 | `adapters/reflection/mock_reflection_model.py` (`MockReflectionModel`) | `ReflectionModel` | deterministic mock |
 | `adapters/reflection/fixture_loader.py` | — | load fixtures for demos |
+| `adapters/agent/config.py` (`ModelConfig`, `AgentConfig`) | — | Pydantic AI model + agent runtime config (E26-R1, E26-R2, E26-R4) |
+| `adapters/agent/deps.py` (`AtmanDeps`, `AtmanDeps.from_config`) | — | frozen DI container wiring `SessionManager`, `IdentityService`, `ExperienceService`, `MicroReflectionService`, `StateStore`; `from_config` factory transfers validated limits from `AgentConfig` |
+| `adapters/agent/instructions.py` (`build_instructions`) | — | builds dynamic system prompt from current `Identity` + `NarrativeDocument` (truncated per `AtmanDeps.truncate_narrative_*`) |
+| `adapters/agent/tools.py` (`record_key_moment`, `log_experience`) | — | Pydantic AI tools for recording key moments / pointing log_experience at the session-end flow |
 
 ### 1.6. CLI / TUI / Web / Demos
 
@@ -134,6 +138,14 @@ Connections between two or more parts. These are seams that may break independen
 | `MockReflectionModel` | `ReflectionModel` |
 | `InMemoryPatternStore`, `InMemoryReflectionEventStore`, `InMemoryHealthAssessmentStore` | corresponding ports |
 | **`InMemoryReflectionStore`** | **`ReflectionStore`** (E27) |
+
+### 2.2a. Agent adapter ↔ services
+
+| Connection | Files | Type |
+|-----------|-------|------|
+| `AtmanDeps` ↔ `SessionManager`, `IdentityService`, `ExperienceService`, `MicroReflectionService`, `StateStore` | `adapters/agent/deps.py` | DI container (frozen dataclass) |
+| `record_key_moment` / `log_experience` ↔ `SessionManager.record_key_moment` | `adapters/agent/tools.py` → `core/services/session_manager.py` | Pydantic AI tool → service call |
+| `build_instructions` ↔ `StateStore.load_identity` / `load_narrative` | `adapters/agent/instructions.py` → `core/ports/state_store.py` | dynamic system-prompt builder |
 
 ### 2.3. CLI ↔ service
 
