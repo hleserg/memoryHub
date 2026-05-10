@@ -1,0 +1,78 @@
+name: Trigger Devin from Issue Comment
+
+on:
+  issue_comment:
+    types: [created]
+
+permissions:
+  issues: read
+
+jobs:
+  trigger-devin:
+    name: Create Devin session from issue mention
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+
+    # Only run when someone writes "@devin-bot" in a comment
+    if: >-
+      !github.event.issue.pull_request
+      && contains(github.event.comment.body, '@devin-bot')
+
+    steps:
+      - name: Extract issue context
+        id: context
+        env:
+          ISSUE_TITLE: ${{ github.event.issue.title }}
+          ISSUE_BODY: ${{ github.event.issue.body }}
+          COMMENT_BODY: ${{ github.event.comment.body }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+          ISSUE_URL: ${{ github.event.issue.html_url }}
+          REPO_NAME: ${{ github.repository }}
+          COMMENT_USER: ${{ github.event.comment.user.login }}
+        run: |
+          # Build prompt from issue context (use env vars to avoid injection)
+          PROMPT=$(cat <<PROMPT_END
+          GitHub Issue #${ISSUE_NUMBER} in ${REPO_NAME}
+          URL: ${ISSUE_URL}
+          Requested by: ${COMMENT_USER}
+
+          Issue title: ${ISSUE_TITLE}
+
+          Issue description:
+          ${ISSUE_BODY}
+
+          Comment that triggered this session:
+          ${COMMENT_BODY}
+
+          Please work on the above issue in the ${REPO_NAME} repository.
+          PROMPT_END
+          )
+
+          # Write to file to preserve newlines
+          echo "$PROMPT" > /tmp/devin_prompt.txt
+
+      - name: Create Devin session
+        env:
+          DEVIN_API_KEY: ${{ secrets.DEVIN_API_KEY }}
+          DEVIN_ORG_ID: ${{ secrets.DEVIN_ORG_ID }}
+        run: |
+          PROMPT=$(cat /tmp/devin_prompt.txt)
+
+          RESPONSE=$(curl -s -w "\n%{http_code}" -X POST \
+            "https://api.devin.ai/v3/organizations/${DEVIN_ORG_ID}/sessions" \
+            -H "Authorization: Bearer ${DEVIN_API_KEY}" \
+            -H "Content-Type: application/json" \
+            -d "$(jq -n --arg prompt "$PROMPT" '{prompt: $prompt}')")
+
+          HTTP_CODE=$(echo "$RESPONSE" | tail -1)
+          BODY=$(echo "$RESPONSE" | sed '$d')
+
+          if [ "$HTTP_CODE" -ge 200 ] && [ "$HTTP_CODE" -lt 300 ]; then
+            SESSION_ID=$(echo "$BODY" | jq -r '.session_id // .devin_id // "unknown"')
+            echo "::notice::Devin session created: ${SESSION_ID}"
+            echo "Session response: ${BODY}"
+          else
+            echo "::error::Failed to create Devin session (HTTP ${HTTP_CODE})"
+            echo "Response: ${BODY}"
+            exit 1
+          fi
