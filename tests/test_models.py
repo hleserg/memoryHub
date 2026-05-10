@@ -179,3 +179,62 @@ def test_fact_record_invalidated_at_field():
     )
     restored = FactRecord.model_validate_json(fact.model_dump_json())
     assert restored.invalidated_at is not None
+
+
+# --- E25 / Devin Review: legacy FactStatus migration ---
+
+
+@pytest.mark.parametrize(
+    ("legacy_value", "expected_status"),
+    [
+        ("outdated", FactStatus.SUPERSEDED),
+        ("retracted", FactStatus.INVALIDATED),
+        ("uncertain", FactStatus.DISPUTED),
+    ],
+)
+def test_fact_record_migrates_legacy_status_values(
+    legacy_value: str, expected_status: FactStatus
+) -> None:
+    """Legacy FactStatus values from pre-E25 JSONL files are mapped on load.
+
+    ``FileBackend`` loads facts from ~/.atman/facts.jsonl; previously valid
+    ``outdated``/``retracted``/``uncertain`` values must continue to load
+    instead of being silently dropped as malformed.
+    """
+    fact = FactRecord.model_validate(
+        {
+            "content": "Migrated fact",
+            "source": "test",
+            "status": legacy_value,
+        }
+    )
+    assert fact.status == expected_status
+
+
+def test_fact_record_unknown_status_still_rejected() -> None:
+    """Unknown status strings keep raising ValidationError."""
+    with pytest.raises(ValueError):
+        FactRecord.model_validate(
+            {
+                "content": "x",
+                "source": "y",
+                "status": "totally-bogus-status",
+            }
+        )
+
+
+def test_fact_record_validate_assignment_enforces_invariants() -> None:
+    """``validate_assignment=True`` keeps mutators on FactRecord safe."""
+    fact = FactRecord(content="x", source="y")
+
+    # Confirming a fact stays within validator-allowed bounds.
+    fact.confirm()
+    assert fact.confirmation_count == 1
+    assert 0.0 <= fact.salience <= 1.0
+
+    # Reassigning to invalid values should now raise instead of silently
+    # corrupting the record.
+    with pytest.raises(ValueError):
+        fact.confirmation_count = -1
+    with pytest.raises(ValueError):
+        fact.salience = 1.5

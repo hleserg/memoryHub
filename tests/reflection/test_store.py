@@ -1,9 +1,10 @@
 """Tests for ReflectionStore."""
 
-import pytest
 from datetime import UTC, datetime
 from unittest.mock import MagicMock, Mock, patch
-from uuid import UUID, uuid4
+from uuid import uuid4
+
+import pytest
 
 from atman.reflection.models import ReflectionEvent, ReflectionLevel
 
@@ -157,7 +158,7 @@ class TestReflectionStore:
         mock_conn = MagicMock()
         mock_conn.closed = False
         mock_cursor = MagicMock()
-        mock_cursor.row_factory = lambda cls: (lambda row: expected_event)
+        mock_cursor.row_factory = lambda cls: lambda row: expected_event
         mock_cursor.fetchone.return_value = expected_event
         mock_conn.cursor.return_value.__enter__.return_value = mock_cursor
         mock_psycopg.connect.return_value = mock_conn
@@ -327,3 +328,113 @@ class TestReflectionStore:
         assert mock_cursor.execute.called
         call_args = mock_cursor.execute.call_args[0]
         assert since in call_args[1]  # since should be in the query parameters
+
+
+class TestReflectionStoreDevinReviewFixes:
+    """Regression tests for Devin Review issues on PR #414."""
+
+    @patch("atman.reflection.store.psycopg")
+    def test_add_wraps_metadata_with_jsonb_adapter(self, mock_psycopg: Mock) -> None:
+        """``ReflectionStore.add`` wraps ``metadata`` in :class:`psycopg.types.json.Jsonb`.
+
+        Without the explicit Jsonb wrapper, psycopg cannot serialize a Python
+        ``dict`` into the ``metadata jsonb`` column and the INSERT fails at
+        runtime.
+        """
+        from psycopg.types.json import Jsonb
+
+        from atman.reflection.store import ReflectionStore
+
+        mock_conn = MagicMock()
+        mock_conn.closed = False
+        mock_cursor = MagicMock()
+        mock_conn.cursor.return_value.__enter__.return_value = mock_cursor
+        mock_cursor.fetchone.return_value = (1,)
+        mock_psycopg.connect.return_value = mock_conn
+
+        agent_id = uuid4()
+        event = ReflectionEvent(
+            agent_id=agent_id,
+            level=ReflectionLevel.DAILY,
+            content="Reflection",
+            metadata={"k": "v", "n": 1},
+        )
+
+        store = ReflectionStore(db_url="postgresql://test:pass@localhost/db")
+        store._conn = mock_conn
+        store.add(event)
+
+        assert mock_cursor.execute.call_args is not None
+        params = mock_cursor.execute.call_args[0][1]
+        metadata_param = params[-1]
+        assert isinstance(metadata_param, Jsonb)
+        assert metadata_param.obj == {"k": "v", "n": 1}
+
+    @patch("atman.reflection.store.psycopg")
+    def test_get_commits_after_select(self, mock_psycopg: Mock) -> None:
+        """Read methods commit so connections do not stay ``idle in transaction``."""
+        from atman.reflection.store import ReflectionStore
+
+        mock_conn = MagicMock()
+        mock_conn.closed = False
+        mock_cursor = MagicMock()
+        mock_cursor.fetchone.return_value = None
+        mock_conn.cursor.return_value.__enter__.return_value = mock_cursor
+        mock_psycopg.connect.return_value = mock_conn
+
+        store = ReflectionStore(db_url="postgresql://test:pass@localhost/db")
+        store._conn = mock_conn
+        store.get(1)
+
+        assert mock_conn.commit.called
+
+    @patch("atman.reflection.store.psycopg")
+    def test_list_recent_commits_after_select(self, mock_psycopg: Mock) -> None:
+        from atman.reflection.store import ReflectionStore
+
+        mock_conn = MagicMock()
+        mock_conn.closed = False
+        mock_cursor = MagicMock()
+        mock_cursor.fetchall.return_value = []
+        mock_conn.cursor.return_value.__enter__.return_value = mock_cursor
+        mock_psycopg.connect.return_value = mock_conn
+
+        store = ReflectionStore(db_url="postgresql://test:pass@localhost/db")
+        store._conn = mock_conn
+        store.list_recent(uuid4(), limit=5)
+
+        assert mock_conn.commit.called
+
+    @patch("atman.reflection.store.psycopg")
+    def test_list_by_session_commits_after_select(self, mock_psycopg: Mock) -> None:
+        from atman.reflection.store import ReflectionStore
+
+        mock_conn = MagicMock()
+        mock_conn.closed = False
+        mock_cursor = MagicMock()
+        mock_cursor.fetchall.return_value = []
+        mock_conn.cursor.return_value.__enter__.return_value = mock_cursor
+        mock_psycopg.connect.return_value = mock_conn
+
+        store = ReflectionStore(db_url="postgresql://test:pass@localhost/db")
+        store._conn = mock_conn
+        store.list_by_session(uuid4())
+
+        assert mock_conn.commit.called
+
+    @patch("atman.reflection.store.psycopg")
+    def test_list_by_level_commits_after_select(self, mock_psycopg: Mock) -> None:
+        from atman.reflection.store import ReflectionStore
+
+        mock_conn = MagicMock()
+        mock_conn.closed = False
+        mock_cursor = MagicMock()
+        mock_cursor.fetchall.return_value = []
+        mock_conn.cursor.return_value.__enter__.return_value = mock_cursor
+        mock_psycopg.connect.return_value = mock_conn
+
+        store = ReflectionStore(db_url="postgresql://test:pass@localhost/db")
+        store._conn = mock_conn
+        store.list_by_level(uuid4(), ReflectionLevel.DAILY)
+
+        assert mock_conn.commit.called

@@ -87,6 +87,10 @@ class SessionManager:
         self._max_active_sessions = max_active_sessions
         self._clock = clock or SystemClock()
         self._active_sessions: dict[UUID, SessionResult] = {}
+        # Tracks fact IDs noted via _note_facts_read for the current session.
+        # Held off the SessionResult Pydantic model so model_copy/model_dump
+        # behaviour stays predictable.
+        self._facts_read_by_session: dict[UUID, set[UUID]] = {}
         self._lock = threading.Lock()
 
     def start_session(self, agent_id: UUID) -> SessionContext:
@@ -256,10 +260,10 @@ class SessionManager:
             if session_result.is_finished:
                 raise SessionAlreadyFinishedError(f"Session {session_id} already finished")
 
-            # Store fact IDs in session metadata for aggregation at finish
-            if not hasattr(session_result, "_facts_read"):
-                session_result._facts_read = set()
-            session_result._facts_read.update(fact_ids)
+            # Store fact IDs alongside the session result, keyed by session id,
+            # so SessionResult stays a clean Pydantic model.
+            facts_read = self._facts_read_by_session.setdefault(session_id, set())
+            facts_read.update(fact_ids)
 
     def finish_session(
         self,
@@ -337,8 +341,7 @@ class SessionManager:
                 for moment in session_result.key_moments:
                     fact_refs_set.update(moment.fact_refs)
                 # Also include any facts noted via _note_facts_read
-                if hasattr(session_result, "_facts_read"):
-                    fact_refs_set.update(session_result._facts_read)
+                fact_refs_set.update(self._facts_read_by_session.get(session_id, set()))
 
                 experience = SessionExperience(
                     id=experience_id,
@@ -376,6 +379,7 @@ class SessionManager:
         # Remove from active sessions only after successful persistence
         with self._lock:
             self._active_sessions.pop(session_id, None)
+            self._facts_read_by_session.pop(session_id, None)
 
         return session_result.model_copy(deep=True)
 

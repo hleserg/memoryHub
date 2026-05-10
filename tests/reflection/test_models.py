@@ -1,8 +1,9 @@
 """Tests for reflection persistence models."""
 
-import pytest
 from datetime import UTC, datetime
-from uuid import UUID, uuid4
+from uuid import uuid4
+
+import pytest
 
 from atman.reflection.models import ReflectionEvent, ReflectionLevel
 

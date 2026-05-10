@@ -8,21 +8,31 @@ Requires psycopg2 and a configured database connection.
 import os
 import warnings
 from datetime import datetime
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from uuid import UUID
 
-try:
+if TYPE_CHECKING:
     import psycopg
     from psycopg import sql
     from psycopg.rows import class_row
-except ImportError:
-    psycopg = None  # type: ignore[assignment]
-    warnings.warn(
-        "psycopg not installed. ReflectionStore requires PostgreSQL support. "
-        "Install with: pip install psycopg[binary]",
-        ImportWarning,
-        stacklevel=2,
-    )
+    from psycopg.types.json import Jsonb
+else:
+    try:
+        import psycopg
+        from psycopg import sql
+        from psycopg.rows import class_row
+        from psycopg.types.json import Jsonb
+    except ImportError:
+        psycopg = None
+        sql = None
+        class_row = None
+        Jsonb = None
+        warnings.warn(
+            "psycopg not installed. ReflectionStore requires PostgreSQL support. "
+            "Install with: pip install psycopg[binary]",
+            ImportWarning,
+            stacklevel=2,
+        )
 
 from atman.reflection.models import ReflectionEvent, ReflectionLevel
 
@@ -60,8 +70,7 @@ class ReflectionStore:
         """
         if psycopg is None:
             raise ImportError(
-                "psycopg is required for ReflectionStore. "
-                "Install with: pip install psycopg[binary]"
+                "psycopg is required for ReflectionStore. Install with: pip install psycopg[binary]"
             )
 
         self.db_url = db_url or os.environ.get(
@@ -158,7 +167,7 @@ class ReflectionStore:
                     event.model_provider,
                     event.model_name,
                     event.schema_version,
-                    event.metadata,
+                    Jsonb(event.metadata),
                 ],
             )
             result = cur.fetchone()
@@ -198,7 +207,13 @@ class ReflectionStore:
 
         with self._conn.cursor(row_factory=class_row(ReflectionEvent)) as cur:
             cur.execute(query, [reflection_id])
-            return cur.fetchone()
+            row = cur.fetchone()
+        # Read methods run inside an implicit transaction (autocommit is
+        # off by default). Commit so the connection does not stay
+        # ``idle in transaction`` and block VACUUM / hit
+        # idle_in_transaction_session_timeout.
+        self._conn.commit()
+        return row
 
     def list_by_session(self, session_id: UUID) -> list[ReflectionEvent]:
         """
@@ -231,7 +246,9 @@ class ReflectionStore:
 
         with self._conn.cursor(row_factory=class_row(ReflectionEvent)) as cur:
             cur.execute(query, [str(session_id)])
-            return cur.fetchall()
+            rows = cur.fetchall()
+        self._conn.commit()
+        return rows
 
     def list_recent(self, agent_id: UUID, limit: int = 10) -> list[ReflectionEvent]:
         """
@@ -266,7 +283,9 @@ class ReflectionStore:
 
         with self._conn.cursor(row_factory=class_row(ReflectionEvent)) as cur:
             cur.execute(query, [str(agent_id), limit])
-            return cur.fetchall()
+            rows = cur.fetchall()
+        self._conn.commit()
+        return rows
 
     def list_by_level(
         self, agent_id: UUID, level: ReflectionLevel, since: datetime | None = None
@@ -315,4 +334,6 @@ class ReflectionStore:
 
         with self._conn.cursor(row_factory=class_row(ReflectionEvent)) as cur:
             cur.execute(query, params)
-            return cur.fetchall()
+            rows = cur.fetchall()
+        self._conn.commit()
+        return rows

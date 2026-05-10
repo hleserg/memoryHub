@@ -24,6 +24,8 @@ class BM25EmbeddingAdapter(EmbeddingPort):
     that requires no external dependencies or model downloads.
     """
 
+    _MODEL_NAME = "bm25-sparse"
+
     def __init__(self, k1: float = 1.5, b: float = 0.75):
         """
         Initialize BM25 adapter.
@@ -111,6 +113,11 @@ class BM25EmbeddingAdapter(EmbeddingPort):
         return self._dimension
 
     @override
+    def model_name(self) -> str:
+        """Return the BM25 adapter identifier."""
+        return self._MODEL_NAME
+
+    @override
     def similarity(self, vec1: list[float], vec2: list[float]) -> float:
         """Calculate cosine similarity between two sparse vectors."""
         if len(vec1) != len(vec2):
@@ -126,10 +133,15 @@ class BM25EmbeddingAdapter(EmbeddingPort):
         return dot_product / (norm1 * norm2)
 
     def _tokenize(self, text: str) -> list[str]:
-        """Simple tokenization: lowercase, alphanumeric only."""
+        """Tokenize text into lowercase Unicode word tokens.
+
+        Uses ``re.findall(r"\\w+", ...)`` so that non-Latin scripts (Cyrillic,
+        CJK, etc.) produce real tokens instead of an empty list. Tokens of
+        length ≤2 are dropped to filter out noise (matches the previous
+        ASCII-only behaviour for English).
+        """
         text = text.lower()
-        tokens = re.findall(r"[a-z0-9]+", text)
-        # Filter out very short tokens
+        tokens = re.findall(r"\w+", text, flags=re.UNICODE)
         return [t for t in tokens if len(t) > 2]
 
     def _build_corpus_stats(self, all_tokens: list[list[str]]) -> None:
