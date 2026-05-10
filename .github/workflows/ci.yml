@@ -40,8 +40,8 @@ jobs:
         with:
           enable-cache: true
 
-      - name: Install package with dev and e2e dependencies
-        run: uv pip install --system -e ".[dev,e2e]"
+      - name: Install package with dev, e2e, and eval dependencies
+        run: uv pip install --system -e ".[dev,e2e,eval]"
 
       - name: Run fast tests (quick feedback on PRs)
         if: github.event_name == 'pull_request'
