@@ -2,8 +2,10 @@
 Unit-тесты для FileBackend.
 """
 
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from tempfile import NamedTemporaryFile
+from uuid import uuid4
 
 import pytest
 
@@ -477,3 +479,72 @@ def test_list_invalidated_sort_handles_missing_lifecycle_timestamp(backend):
 
     listed = backend.list_invalidated()
     assert len(listed) == 2
+
+
+# ---------------------------------------------------------------------------
+# E24.3: confirm_fact / decay_stale_facts (disk persistence + cache refresh)
+# ---------------------------------------------------------------------------
+
+
+def test_confirm_fact_persists_to_disk(backend, temp_file):
+    """confirm_fact: a fresh FileBackend reading the same file sees the bump."""
+    fact = backend.add_fact(FactRecord(content="Persist me", source="t", salience=0.4))
+    assert backend.confirm_fact(fact.id) is True
+
+    # Independent reader proves the change reached disk, not just the cache.
+    reader = FileBackend(temp_file)
+    refreshed = reader.get_fact(fact.id)
+    assert refreshed is not None
+    assert refreshed.confirmation_count == 1
+    assert refreshed.last_confirmed_at is not None
+    assert refreshed.salience == pytest.approx(0.5)
+
+
+def test_confirm_fact_returns_false_for_unknown_id(backend):
+    """confirm_fact: missing ID is a clean ``False`` and does not write."""
+    assert backend.confirm_fact(uuid4()) is False
+
+
+def test_decay_stale_facts_persists_and_skips_non_active(backend, temp_file):
+    """decay_stale_facts: persists changes, skips non-ACTIVE facts."""
+    # Cutoff in the past so ``confirm_fact(fresh.id)`` lands after it.
+    before_cutoff = datetime.now(UTC) - timedelta(hours=1)
+    stale = backend.add_fact(FactRecord(content="Stale", source="t", salience=0.8))
+    fresh = backend.add_fact(FactRecord(content="Fresh", source="t", salience=0.8))
+    backend.confirm_fact(fresh.id)
+    invalidated = backend.add_fact(
+        FactRecord(content="Stale invalidated", source="t", salience=0.8)
+    )
+    backend.invalidate_fact(invalidated.id, status=FactStatus.INVALIDATED, note="gone")
+
+    decayed = backend.decay_stale_facts(before=before_cutoff, decay_factor=0.5)
+    assert decayed == 1
+
+    reader = FileBackend(temp_file)
+    refreshed_stale = reader.get_fact(stale.id)
+    refreshed_fresh = reader.get_fact(fresh.id)
+    refreshed_inv = reader.get_fact(invalidated.id)
+    assert refreshed_stale is not None
+    assert refreshed_fresh is not None
+    assert refreshed_inv is not None
+    assert refreshed_stale.salience == pytest.approx(0.4)
+    # confirm() bumped fresh to 0.9; decay does not touch it.
+    assert refreshed_fresh.salience == pytest.approx(0.9)
+    # Invalidated facts are zeroed by invalidate_fact, not by decay.
+    assert refreshed_inv.salience == 0.0
+
+
+def test_decay_stale_facts_skips_disk_write_when_count_is_zero(backend, temp_file):
+    """decay_stale_facts: when no fact decays, mtime stays stable (no write)."""
+    fact = backend.add_fact(FactRecord(content="Just confirmed", source="t", salience=0.6))
+    backend.confirm_fact(fact.id)
+
+    mtime_before = temp_file.stat().st_mtime_ns
+
+    decayed = backend.decay_stale_facts(
+        before=datetime.now(UTC) - timedelta(days=30), decay_factor=0.5
+    )
+    assert decayed == 0
+    # The implementation guards _save_facts behind `if count > 0`, so the
+    # JSONL file must not be rewritten.
+    assert temp_file.stat().st_mtime_ns == mtime_before

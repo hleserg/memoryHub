@@ -2,6 +2,7 @@
 Unit-тесты для InMemoryBackend.
 """
 
+from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
 import pytest
@@ -331,3 +332,71 @@ def test_invalidate_lifecycle(backend):
     assert len(backend.search(query="lifecycle")) == 0
     assert len(backend.search(query="lifecycle", include_invalidated=True)) == 1
     assert len(backend.list_invalidated()) == 1
+
+
+# ---------------------------------------------------------------------------
+# E24.3: confirm_fact / decay_stale_facts (port-level contract via in-memory)
+# ---------------------------------------------------------------------------
+
+
+def test_confirm_fact_increments_count_and_bumps_salience(backend):
+    """confirm_fact: storage layer mirrors FactRecord.confirm() semantics."""
+    fact = backend.add_fact(FactRecord(content="Confirmable", source="t", salience=0.5))
+    assert fact.confirmation_count == 0
+    assert fact.last_confirmed_at is None
+
+    assert backend.confirm_fact(fact.id) is True
+
+    refreshed = backend.get_fact(fact.id)
+    assert refreshed is not None
+    assert refreshed.confirmation_count == 1
+    assert refreshed.last_confirmed_at is not None
+    # confirm() bumps salience by 0.1, capped at 1.0
+    assert refreshed.salience == pytest.approx(0.6)
+
+
+def test_confirm_fact_returns_false_for_unknown_id(backend):
+    """confirm_fact: missing ID is a clean ``False`` (no exception)."""
+    assert backend.confirm_fact(uuid4()) is False
+
+
+def test_decay_stale_facts_only_decays_active_and_stale(backend):
+    """decay_stale_facts: skips non-ACTIVE facts and recently-confirmed ones."""
+    # ``before`` is the cutoff: facts with last_confirmed_at < before (or None) decay.
+    # Pick a cutoff in the past so the upcoming confirm() lands AFTER it.
+    before_cutoff = datetime.now(UTC) - timedelta(hours=1)
+    stale = backend.add_fact(FactRecord(content="Never confirmed stale", source="t", salience=0.8))
+    fresh = backend.add_fact(FactRecord(content="Just confirmed", source="t", salience=0.8))
+    backend.confirm_fact(fresh.id)  # last_confirmed_at = now > before_cutoff
+    invalidated = backend.add_fact(
+        FactRecord(content="Stale but invalidated", source="t", salience=0.8)
+    )
+    backend.invalidate_fact(invalidated.id, status=FactStatus.INVALIDATED, note="gone")
+
+    decayed = backend.decay_stale_facts(before=before_cutoff, decay_factor=0.5)
+    # Only the never-confirmed ACTIVE fact decays. The fresh one was confirmed
+    # AFTER ``before_cutoff`` and the invalidated one is non-ACTIVE.
+    assert decayed == 1
+
+    refreshed_stale = backend.get_fact(stale.id)
+    refreshed_fresh = backend.get_fact(fresh.id)
+    assert refreshed_stale is not None
+    assert refreshed_fresh is not None
+    assert refreshed_stale.salience == pytest.approx(0.4)
+    # confirm() bumped fresh from 0.8 → 0.9, decay must NOT touch it
+    assert refreshed_fresh.salience == pytest.approx(0.9)
+
+
+def test_decay_stale_facts_clamps_salience_at_zero_lower_bound(backend):
+    """decay_stale_facts: lower clamp prevents negative salience."""
+    fact = backend.add_fact(FactRecord(content="Tiny salience", source="t", salience=0.001))
+    decayed = backend.decay_stale_facts(before=datetime.now(UTC), decay_factor=0.0)
+    assert decayed == 1
+    refreshed = backend.get_fact(fact.id)
+    assert refreshed is not None
+    assert refreshed.salience == 0.0
+
+
+def test_decay_stale_facts_returns_zero_when_nothing_to_decay(backend):
+    """decay_stale_facts: empty store returns ``0`` and is safe to call."""
+    assert backend.decay_stale_facts(before=datetime.now(UTC)) == 0
