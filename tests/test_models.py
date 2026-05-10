@@ -6,6 +6,7 @@ from datetime import datetime
 from uuid import uuid4
 
 import pytest
+from pydantic import ValidationError
 
 from atman.core.models import FactRecord, FactStatus, Relation
 
@@ -179,3 +180,36 @@ def test_fact_record_invalidated_at_field():
     )
     restored = FactRecord.model_validate_json(fact.model_dump_json())
     assert restored.invalidated_at is not None
+
+
+def test_validate_assignment_blocks_out_of_range_salience():
+    """``validate_assignment=True`` rejects out-of-range salience mutations.
+
+    Without this, ``confirm()`` / ``invalidate()`` and the backend
+    ``decay_stale_facts`` paths could push ``salience`` past its declared
+    [0.0, 1.0] bounds without re-running the field validator.
+    """
+    fact = FactRecord(content="x", source="y")
+    with pytest.raises(ValidationError):
+        fact.salience = 1.5
+    with pytest.raises(ValidationError):
+        fact.salience = -0.1
+
+
+def test_validate_assignment_blocks_negative_confirmation_count():
+    """``validate_assignment=True`` rejects negative confirmation counts."""
+    fact = FactRecord(content="x", source="y")
+    with pytest.raises(ValidationError):
+        fact.confirmation_count = -1
+
+
+def test_confirm_caps_salience_and_increments_count():
+    """``confirm()`` honors the upper salience bound and bumps the counter."""
+    fact = FactRecord(content="x", source="y", salience=0.95, confirmation_count=2)
+    fact.confirm()
+    assert fact.confirmation_count == 3
+    assert fact.salience == pytest.approx(1.0)
+    # A second ``confirm()`` stays clamped at 1.0 rather than blowing past
+    # the field validator (which would raise under validate_assignment).
+    fact.confirm()
+    assert fact.salience == pytest.approx(1.0)

@@ -115,3 +115,45 @@ def test_lru_eviction_when_over_capacity():
 def test_get_returns_none_for_unknown():
     wm = SessionWorkingMemory()
     assert wm.get(uuid4()) is None
+
+
+def test_get_promotes_item_to_most_recently_used():
+    """Accessing an item via ``get`` moves it to the back of the LRU order.
+
+    Regression test for the OrderedDict-backed cache: without
+    ``move_to_end`` the first-touched item would be evicted on the next
+    insert even though it was just accessed.
+    """
+    wm = SessionWorkingMemory(max_size=3)
+    fact_a = _fact("A")
+    fact_b = _fact("B")
+    fact_c = _fact("C")
+    wm.add_fact(fact_a)
+    wm.add_fact(fact_b)
+    wm.add_fact(fact_c)
+
+    # Touching A makes B the least-recently-used.
+    wm.get(fact_a.id)
+
+    # Inserting D should evict B (the new LRU), not A.
+    fact_d = _fact("D")
+    wm.add_fact(fact_d)
+
+    assert wm.has(fact_a.id)
+    assert not wm.has(fact_b.id)
+    assert wm.has(fact_c.id)
+    assert wm.has(fact_d.id)
+
+
+def test_list_cached_reflects_lru_order_after_get():
+    """``list_cached`` returns items in LRU order, with promoted items last."""
+    wm = SessionWorkingMemory()
+    fact_a = _fact("A")
+    fact_b = _fact("B")
+    wm.add_fact(fact_a)
+    wm.add_fact(fact_b)
+    # Touch A so it becomes most recent.
+    wm.get(fact_a.id)
+
+    cached_ids = [item.item_id for item in wm.list_cached()]
+    assert cached_ids == [fact_b.id, fact_a.id]

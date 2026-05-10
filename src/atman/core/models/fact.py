@@ -113,7 +113,12 @@ class FactRecord(BaseModel):
             return self.invalidated_at
         return None
 
+    # ``validate_assignment=True`` re-runs field validators on every attribute
+    # assignment so mutating helpers (``confirm()``, ``invalidate()``, the
+    # ``decay_stale_facts`` paths in the backends) cannot silently bypass the
+    # ``ge``/``le`` field constraints on ``salience``/``confirmation_count``.
     model_config = ConfigDict(
+        validate_assignment=True,
         json_schema_extra={
             "example": {
                 "content": "Пользователь попросил реализовать factual memory adapter",
@@ -124,7 +129,7 @@ class FactRecord(BaseModel):
                 "confirmation_count": 1,
                 "salience": 0.5,
             }
-        }
+        },
     )
 
 
