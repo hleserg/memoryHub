@@ -48,9 +48,9 @@
 | Агент | Конфигурация | Цель |
 |-------|-------------|------|
 | **A (контрольный)** | Factual + Identity, без Experience, без Reflection | Baseline без опыта |
-| **B (полный)** | Все три слоя + Reflection Engine (qwen3:14b) | Полный стек |
+| **B (полный)** | Все три слоя + Reflection Engine (qwen3.5:9b) | Полный стек |
 | **C (опционально)** | Как B + Cohere Rerank в Experience Store | Сравнение качества поиска |
-| **D (опционально)** | Как B + Command R вместо qwen3:14b | Сравнение LLM |
+| **D (опционально)** | Как B + Command R вместо qwen3.5:9b | Сравнение LLM |
 
 ---
 
@@ -81,7 +81,7 @@
 | 1.3 | WP-09 PersonalityLoader: читает SOUL/AGENTS/USER/recent memories, сборка PersonalityContext, CLI: load-personality, scan-markers, run-micro | M | AI | #70 |
 | 1.4 | SCHED-02: Scheduler shell (micro/daily/deep, ручной dry-run) | M | AI | #153 |
 | 1.5 | Агент A: конфигурация только Factual + Identity, отдельный workspace, изолированные JSONL | S | AI | *(нет issue)* |
-| 1.6 | Агент B: все слои + ReflectionEngine с Ollama (qwen3:14b) + RealityAnchor | S | AI | *(нет issue)* |
+| 1.6 | Агент B: все слои + ReflectionEngine с Ollama (qwen3.5:9b) + RealityAnchor | S | AI | *(нет issue)* |
 | 1.7 | AgentRunner: запускает сессию с нужной конфигурацией (A/B/C/D), session log | M | AI | *(нет issue)* |
 | 1.8 | Workspace изоляция: каждый агент — отдельная директория, нет общего состояния | S | AI | *(нет issue)* |
 | 1.9 | Авто-сценарий "N сессий подряд": 5–10 сессий на фиксированных промптах, проверка роста Identity + Experience | L | AI + Сергей | *(нет issue)* |
@@ -149,7 +149,7 @@
 |-----------|-----------|
 | Агентный фреймворк | Pydantic AI |
 | Embedding | qwen3-embedding:1.5b (Ollama, локально) |
-| LLM основной | qwen3:14b (Ollama, локально) |
+| LLM основной | qwen3.5:9b (Ollama, локально) |
 | LLM тест | Command R 08-2024 (Cohere API) |
 | Rerank | Cohere Rerank 3.5 |
 | Хранилище (MVP) | JSONL |

@@ -5,8 +5,8 @@
 # Секреты — НИКОГДА в git
 .secrets
 *.secrets
-*.secret
-secrets.env
+*secrets*
+!gen-secrets.sh
 
 # Сгенерированные файлы (создаются из шаблонов)
 ../docker-compose.yml
