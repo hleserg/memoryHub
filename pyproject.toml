@@ -9,6 +9,7 @@ dependencies = [
     "pydantic>=2.0.0",
     "rich>=13.7.0",
     "textual>=0.86.0",
+    "httpx>=0.28.0",
 ]
 
 [project.optional-dependencies]
