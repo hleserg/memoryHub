@@ -111,6 +111,11 @@ class BM25EmbeddingAdapter(EmbeddingPort):
         return self._dimension
 
     @override
+    def model_name(self) -> str:
+        """Return model identifier."""
+        return f"bm25-{self._dimension}d"
+
+    @override
     def similarity(self, vec1: list[float], vec2: list[float]) -> float:
         """Calculate cosine similarity between two sparse vectors."""
         if len(vec1) != len(vec2):

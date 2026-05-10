@@ -147,6 +147,11 @@ class OllamaEmbeddingAdapter(EmbeddingPort):
         return self._dimension
 
     @override
+    def model_name(self) -> str:
+        """Return model identifier."""
+        return self.model
+
+    @override
     def similarity(self, vec1: list[float], vec2: list[float]) -> float:
         """Calculate cosine similarity between two vectors."""
         if len(vec1) != len(vec2):

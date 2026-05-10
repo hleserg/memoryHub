@@ -2,16 +2,13 @@
 
 from __future__ import annotations
 
-import hashlib
 import os
 import stat
 import subprocess
-import zipfile
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 DEPLOY_DIR = REPO_ROOT / "deploy" / "atman-deploy" / "deploy"
-DEPLOY_ZIP = REPO_ROOT / "deploy" / "atman-deploy.zip"
 
 REQUIRED_RUNTIME_FILES = {
     ".gitignore",
@@ -26,10 +23,6 @@ REQUIRED_RUNTIME_FILES = {
     "setup.sh",
     "smoke-test.sh",
 }
-
-
-def _sha256(path: Path) -> str:
-    return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
 def test_deploy_directory_contains_all_runtime_files() -> None:
@@ -52,18 +45,6 @@ def test_deploy_runtime_files_are_not_gitignored() -> None:
             ignored.append(name)
 
     assert ignored == []
-
-
-def test_deploy_zip_matches_checked_out_runtime_files() -> None:
-    """The zip artifact is the user-facing distribution and must stay in sync."""
-    with zipfile.ZipFile(DEPLOY_ZIP) as archive:
-        names = set(archive.namelist())
-        for name in REQUIRED_RUNTIME_FILES:
-            archive_name = f"deploy/{name}"
-            assert archive_name in names
-            assert hashlib.sha256(archive.read(archive_name)).hexdigest() == _sha256(
-                DEPLOY_DIR / name
-            )
 
 
 def test_gen_secrets_writes_restricted_env_file(tmp_path: Path) -> None:

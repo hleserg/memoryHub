@@ -314,9 +314,7 @@ class SessionResult(BaseModel):
         default=None, description="ID of the identity this session belongs to"
     )
 
-    # PrivateAttr-backed (E24.2): facts noted via SessionManager._note_facts_read.
-    # Aggregated into SessionExperience.fact_refs at finish_session.
-    # Not serialized; reset to empty set on each new SessionResult instance.
+    # Private: track facts read during session (E24.2)
     _facts_read: set[UUID] = PrivateAttr(default_factory=set)
 
     model_config = ConfigDict(

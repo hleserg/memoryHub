@@ -39,6 +39,9 @@ class _StaticEmbedding:
     def dimension(self) -> int:
         return self.dim
 
+    def model_name(self) -> str:
+        return "static-test-embedding"
+
     def similarity(self, vec1: list[float], vec2: list[float]) -> float:
         a, b = vec1, vec2
         if len(a) != len(b):

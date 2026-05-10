@@ -49,6 +49,16 @@ class EmbeddingPort(Protocol):
         pass
 
     @abstractmethod
+    def model_name(self) -> str:
+        """
+        Return the name of the embedding model used.
+
+        Returns:
+            str: The model identifier (e.g., "qwen3-embedding:1.5b")
+        """
+        pass
+
+    @abstractmethod
     def similarity(self, vec1: list[float], vec2: list[float]) -> float:
         """
         Calculate similarity between two embedding vectors.

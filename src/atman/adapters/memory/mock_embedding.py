@@ -22,7 +22,7 @@ class MockEmbeddingAdapter(EmbeddingPort):
     - No external services required
     """
 
-    _DIMENSION = 128
+    _DIMENSION = 768
 
     @override
     def embed(self, text: str) -> list[float]:
@@ -52,6 +52,11 @@ class MockEmbeddingAdapter(EmbeddingPort):
     def dimension(self) -> int:
         """Return embedding dimension."""
         return self._DIMENSION
+
+    @override
+    def model_name(self) -> str:
+        """Return model identifier."""
+        return "mock-embedding:768d"
 
     @override
     def similarity(self, vec1: list[float], vec2: list[float]) -> float:

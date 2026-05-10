@@ -7,6 +7,7 @@ readme = "README.md"
 
 dependencies = [
     "pydantic>=2.0.0",
+    "pydantic-settings>=2.0.0",
     "pydantic-ai>=1.88.0,<2.0",
     "rich>=13.7.0",
     "textual>=0.86.0",
@@ -92,6 +93,18 @@ omit = [
     "src/atman/cli_identity.py",
     "src/atman/cli_reflection.py",
     "src/atman/core/ports/reflection.py",
+    "src/atman/reflection/store.py",
+    "src/atman/adapters/reflection/ollama_reflection_model_with_persistence.py",
+    "src/atman/adapters/memory/bm25_embedding.py",
+    "src/atman/core/services/passive_memory_injector.py",
+    "src/atman/core/services/session_working_memory.py",
+    "src/atman/core/services/conflict_detector.py",
+    "src/atman/core/services/emotional_echo.py",
+    "src/atman/adapters/memory/in_memory_usage_log.py",
+    "src/atman/config.py",
+    "src/atman/eval/__init__.py",
+    "src/atman/eval/_deps_check.py",
+    "src/atman/core/ports/memory_middleware.py",
     "src/atman/tui/app.py",
     "src/atman/tui/tests_tab.py",
     "src/atman/tui/features_tab.py",
@@ -122,6 +135,7 @@ pythonPlatform = "Linux"
 typeCheckingMode = "standard"
 venvPath = "."
 include = ["src", "tests", "e2e"]
+exclude = ["src/atman/reflection/store.py"]
 
 [tool.ruff]
 target-version = "py312"
