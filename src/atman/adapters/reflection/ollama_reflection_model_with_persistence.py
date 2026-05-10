@@ -110,10 +110,16 @@ class OllamaReflectionModelWithPersistence(ReflectionModel):
                 model_name=self.base_model.model,
             )
             self.reflection_store.add(event)
-        except Exception:
+        except Exception as e:
             # Don't fail the reflection if persistence fails
             # Log the error but continue with the reflection process
-            pass
+            import logging
+
+            logging.warning(
+                "Failed to persist reflection to database for agent %s: %s",
+                agent_id,
+                e,
+            )
 
     def close(self) -> None:
         """Close resources."""
