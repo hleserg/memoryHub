@@ -7,13 +7,15 @@ required eval dependencies are missing.
 import importlib.util
 
 # Canary deps — if any of these is missing, the user installed bare `atman`
-# instead of `atman[eval]`. We don't check every eval dep, just the obvious
-# ones; full dep set is in pyproject.toml.
-_REQUIRED_CANARIES = (
-    ("streamlit", "streamlit"),
-    ("huggingface_hub", "huggingface_hub"),
-    ("datasets", "datasets"),
-)
+# instead of `atman[eval]`. We don't check every eval dep, just one obvious
+# canary that uniquely belongs to the eval extra; full dep set is in
+# pyproject.toml under ``[project.optional-dependencies] eval``.
+#
+# As of E0 the eval extra contains alembic / psycopg / sqlalchemy / click
+# (needed for migrations only); larger model/dataset deps will be added by
+# E-1.2 (#211) and E5+ work packages. Update this canary set when the eval
+# extra surface grows.
+_REQUIRED_CANARIES = (("alembic", "alembic"),)
 
 
 def _check_eval_deps_installed() -> None:
