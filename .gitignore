@@ -65,3 +65,9 @@ htmlcov/
 
 # Atman
 .atman/
+# Eval subsystem — local-only artifacts
+eval/data/
+eval/external/
+.issues_state.json
+requirements-prod.txt
+requirements-eval.txt

@@ -123,3 +123,31 @@ playbook-check:
 
 playbook-audit:
 	python3 scripts/suggest_playbook.py
+
+# ===== Eval / Production isolation =====
+# (added by setup_prod_eval_boundary.sh — see docs/architecture/PROD_EVAL_BOUNDARY.md)
+
+.PHONY: lint-boundary verify-prod-isolation eval-db-init eval-db-migrate eval-db-downgrade eval-up eval-down
+
+lint-boundary:
+	lint-imports
+
+verify-prod-isolation:
+	bash scripts/infra/verify_prod_isolation.sh
+
+eval-db-init:
+	alembic -c eval/migrations/alembic.ini upgrade head
+
+eval-db-migrate:
+	alembic -c eval/migrations/alembic.ini revision -m "$(MSG)"
+
+eval-db-downgrade:
+	alembic -c eval/migrations/alembic.ini downgrade -1
+
+COMPOSE_EVAL = docker compose -f docker-compose.yml -f docker-compose.eval.yml
+
+eval-up:
+	$(COMPOSE_EVAL) up -d
+
+eval-down:
+	$(COMPOSE_EVAL) down

@@ -1,0 +1,14 @@
+# Eval-only Docker services.
+# Overlays on docker-compose.yml — production never includes this file.
+#
+# Apply with:
+#   docker compose -f docker-compose.yml -f docker-compose.eval.yml up -d
+# or:
+#   make eval-up
+
+services: {}
+# Future eval-only services may go here, e.g.:
+#   - dedicated qdrant instance for eval indexes
+#   - jupyter notebook for analysis
+#   - streamlit dashboard container
+
