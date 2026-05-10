@@ -129,6 +129,44 @@ def cmd_recent(backend: FactualMemory, args: list[str]) -> None:
         print_err("Фактов нет")
 
 
+def cmd_invalidate(backend: FactualMemory, args: list[str]) -> None:
+    """Помечает факт как устаревший/недействительный."""
+    if len(args) < 2:
+        print_info("Использование: invalidate <fact_id> <reason>")
+        return
+
+    try:
+        fact_id = UUID(args[0])
+    except ValueError:
+        print_err("Ошибка: неверный формат UUID")
+        return
+
+    reason = " ".join(args[1:])
+    success = backend.invalidate_fact(fact_id, reason)
+
+    if success:
+        print_ok(f"Факт {fact_id} помечен как недействительный")
+        print_info(f"Причина: {reason}")
+    else:
+        print_err("Факт не найден")
+
+
+def cmd_list_invalidated(backend: FactualMemory, args: list[str]) -> None:
+    """Выводит список недействительных фактов."""
+    limit = int(args[0]) if args and args[0].isdigit() else 10
+
+    facts = backend.list_invalidated(limit=limit)
+
+    if facts:
+        print_ok(f"Недействительных фактов: {len(facts)}")
+        for fact in facts:
+            print_fact(fact, prefix="  ")
+            if fact.invalidated_reason:
+                print_info(f"    Причина: {fact.invalidated_reason}")
+    else:
+        print_err("Недействительных фактов нет")
+
+
 def cmd_help(_backend: FactualMemory, _args: list[str]) -> None:
     """Выводит справку."""
     print_help_text("""
@@ -140,6 +178,8 @@ Atman Factual Memory CLI
   search <query> [--tags t1,t2]       Искать факты
   link <source_id> <target_id> <type>  Создать связь
   recent [limit]                       Показать последние факты
+  invalidate <fact_id> <reason>        Пометить факт недействительным
+  list-invalidated [limit]           Список недействительных фактов
   help                                 Показать эту справку
   exit                                 Выйти
 
@@ -148,6 +188,7 @@ Atman Factual Memory CLI
   search "пользователь" --tags task
   link <uuid1> <uuid2> caused_by
   recent 5
+  invalidate <uuid> "outdated information"
 """)
 
 
@@ -157,6 +198,8 @@ COMMANDS = {
     "search": cmd_search,
     "link": cmd_link,
     "recent": cmd_recent,
+    "invalidate": cmd_invalidate,
+    "list-invalidated": cmd_list_invalidated,
     "help": cmd_help,
 }
 
