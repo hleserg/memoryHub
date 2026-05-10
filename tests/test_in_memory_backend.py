@@ -285,6 +285,43 @@ def test_list_invalidated_with_since_filter(backend):
     assert len(backend.list_invalidated(since=future)) == 0
 
 
+def test_list_invalidated_includes_disputed_facts(backend):
+    """DISPUTED facts must appear in list_invalidated and respect since-filter."""
+    from datetime import UTC, datetime, timedelta
+
+    fact = backend.add_fact(FactRecord(content="To be disputed", source="test"))
+    backend.invalidate_fact(fact.id, status=FactStatus.DISPUTED, note="not sure")
+
+    # Without filter, DISPUTED facts are included.
+    listed = backend.list_invalidated()
+    assert len(listed) == 1
+    assert listed[0].id == fact.id
+    assert listed[0].status == FactStatus.DISPUTED
+
+    # ``since`` uses the effective lifecycle timestamp; a moment in the
+    # past selects the disputed fact, a moment in the future excludes it.
+    listed_since_past = backend.list_invalidated(since=datetime(2000, 1, 1, tzinfo=UTC))
+    assert len(listed_since_past) == 1
+
+    listed_since_future = backend.list_invalidated(since=datetime.now(UTC) + timedelta(days=1))
+    assert listed_since_future == []
+
+
+def test_list_invalidated_sorts_disputed_and_invalidated_together(backend):
+    """Sort key uses the effective lifecycle timestamp regardless of status."""
+    f_disputed = backend.add_fact(FactRecord(content="d", source="test"))
+    backend.invalidate_fact(f_disputed.id, status=FactStatus.DISPUTED, note="?")
+
+    f_invalidated = backend.add_fact(FactRecord(content="i", source="test"))
+    backend.invalidate_fact(f_invalidated.id, status=FactStatus.INVALIDATED, note="x")
+
+    listed = backend.list_invalidated()
+    assert {f.id for f in listed} == {f_disputed.id, f_invalidated.id}
+    # Most recently stamped fact comes first; the second invalidate call
+    # ran after the first, so the INVALIDATED fact should top the list.
+    assert listed[0].id == f_invalidated.id
+
+
 def test_invalidate_lifecycle(backend):
     """E24.1: full lifecycle — add, invalidate, search, list_invalidated."""
     fact = backend.add_fact(FactRecord(content="Lifecycle test", source="test"))

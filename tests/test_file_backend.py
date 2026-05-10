@@ -391,6 +391,25 @@ def test_list_invalidated(backend):
     assert invalidated[1].id == f1.id
 
 
+def test_list_invalidated_includes_disputed_facts(backend):
+    """DISPUTED facts must appear in list_invalidated and respect since-filter."""
+    from datetime import UTC, datetime, timedelta
+
+    fact = backend.add_fact(FactRecord(content="To be disputed", source="test"))
+    backend.invalidate_fact(fact.id, status=FactStatus.DISPUTED, note="not sure")
+
+    listed = backend.list_invalidated()
+    assert len(listed) == 1
+    assert listed[0].id == fact.id
+    assert listed[0].status == FactStatus.DISPUTED
+
+    listed_since_past = backend.list_invalidated(since=datetime(2000, 1, 1, tzinfo=UTC))
+    assert len(listed_since_past) == 1
+
+    listed_since_future = backend.list_invalidated(since=datetime.now(UTC) + timedelta(days=1))
+    assert listed_since_future == []
+
+
 def test_invalidate_lifecycle(backend):
     """E24.1: full lifecycle — add, invalidate, search, list_invalidated."""
     fact = backend.add_fact(FactRecord(content="Lifecycle test", source="test"))

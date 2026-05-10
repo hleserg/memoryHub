@@ -177,7 +177,7 @@ Atman Factual Memory CLI
   link <source_id> <target_id> <type>  Создать связь
   recent [limit]                       Показать последние факты
   invalidate <fact_id> <reason>        Пометить факт недействительным
-  list-invalidated [limit]           Список недействительных фактов
+  list-invalidated                     Список недействительных фактов
   help                                 Показать эту справку
   exit                                 Выйти
 

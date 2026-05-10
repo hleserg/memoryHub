@@ -269,17 +269,23 @@ class FileBackend(FactualMemory):
         return fact.model_copy(deep=True)
 
     def list_invalidated(self, since: datetime | None = None) -> list[FactRecord]:
-        """Returns all invalidated (non-ACTIVE) facts."""
-        results = [
-            fact
-            for fact in self._facts.values()
-            if fact.status != FactStatus.ACTIVE
-            and (
-                since is None or (fact.invalidated_at is not None and fact.invalidated_at >= since)
-            )
-        ]
+        """
+        Returns all non-ACTIVE facts (INVALIDATED, SUPERSEDED, DISPUTED).
+
+        Filters and sorts by the effective lifecycle timestamp so DISPUTED
+        facts (whose timestamp lives in ``disputed_at`` rather than
+        ``invalidated_at``) are surfaced correctly.
+        """
+        results: list[FactRecord] = []
+        for fact in self._facts.values():
+            if fact.status == FactStatus.ACTIVE:
+                continue
+            ts = fact.effective_lifecycle_timestamp
+            if since is not None and (ts is None or ts < since):
+                continue
+            results.append(fact)
         results.sort(
-            key=lambda f: f.invalidated_at if f.invalidated_at is not None else datetime.min,
+            key=lambda f: f.effective_lifecycle_timestamp or datetime.min,
             reverse=True,
         )
         return [f.model_copy(deep=True) for f in results]
