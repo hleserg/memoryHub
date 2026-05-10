@@ -31,7 +31,7 @@ class TestBM25EmbeddingAdapter:
 
     def test_model_name_is_set(self, adapter: BM25EmbeddingAdapter) -> None:
         """``model_name`` returns a stable identifier for telemetry/logs."""
-        assert adapter.model_name() == "bm25-sparse"
+        assert adapter.model_name() == "bm25-1024d"
 
     def test_embed_ascii_returns_nonempty_vector(self, adapter: BM25EmbeddingAdapter) -> None:
         """English text produces a non-empty BM25 vector (regression baseline)."""
