@@ -8,16 +8,18 @@ Covers:
 """
 
 from datetime import UTC, datetime
-from uuid import uuid4
+from uuid import UUID, uuid4
 
+from opentelemetry.trace import NoOpTracer
 from pydantic_ai import RunContext
+from pydantic_ai.models.test import TestModel
+from pydantic_ai.usage import RunUsage
 
 from atman.adapters.agent import log_experience, record_key_moment
 from atman.adapters.agent.deps import AtmanDeps
 from atman.adapters.reflection.mock_reflection_model import MockReflectionModel
 from atman.adapters.storage import InMemoryExperienceStore, InMemoryStateStore
 from atman.adapters.storage.in_memory_reflection_store import InMemoryReflectionEventStore
-from atman.core.models import Identity
 from atman.core.narrative_write_audit import NoOpNarrativeWriteAudit
 from atman.core.services import (
     ExperienceService,
@@ -28,13 +30,25 @@ from atman.core.services import (
 )
 
 
-def _create_deps_with_session(agent_id: uuid4) -> tuple[AtmanDeps, uuid4]:
+def _make_run_context(deps: AtmanDeps) -> RunContext[AtmanDeps]:
+    """Construct a minimal RunContext suitable for unit-testing tool functions."""
+    return RunContext(
+        deps=deps,
+        model=TestModel(),
+        usage=RunUsage(),
+        messages=[],
+        tracer=NoOpTracer(),
+        retries={},
+    )
+
+
+def _create_deps_with_session(agent_id: UUID) -> tuple[AtmanDeps, UUID]:
     """Create deps and start a session."""
     state_store = InMemoryStateStore()
     experience_service = ExperienceService(InMemoryExperienceStore())
     event_store = InMemoryReflectionEventStore()
     narrative_revision = NarrativeRevisionService(
-        narrative_repo=state_store,  # type: ignore
+        narrative_repo=state_store,  # type: ignore[arg-type]
         reflection_model=MockReflectionModel(),
         narrative_audit=NoOpNarrativeWriteAudit(),
     )
@@ -43,7 +57,7 @@ def _create_deps_with_session(agent_id: uuid4) -> tuple[AtmanDeps, uuid4]:
     identity_service = IdentityService(state_store)
 
     # Bootstrap identity
-    identity = identity_service.bootstrap_identity(agent_id)
+    identity_service.bootstrap_identity(agent_id)
 
     # Create bootstrap narrative
     from atman.core.models import LayerType, NarrativeDocument, NarrativeLayer
@@ -72,7 +86,7 @@ def _create_deps_with_session(agent_id: uuid4) -> tuple[AtmanDeps, uuid4]:
         identity_service=identity_service,
         experience_service=experience_service,
         micro_reflection=MicroReflectionService(
-            experience_repo=experience_service,  # type: ignore
+            experience_repo=experience_service,  # type: ignore[arg-type]
             narrative_revision=narrative_revision,
             event_store=event_store,
         ),
@@ -90,9 +104,9 @@ class TestRecordKeyMoment:
     def test_record_key_moment_success(self):
         """Test successfully recording a key moment."""
         agent_id = uuid4()
-        deps, session_id = _create_deps_with_session(agent_id)
+        deps, _session_id = _create_deps_with_session(agent_id)
 
-        ctx = RunContext(deps=deps, usage={}, request_data={}, model_name="test")
+        ctx = _make_run_context(deps)
 
         result = record_key_moment(
             ctx,
@@ -100,6 +114,7 @@ class TestRecordKeyMoment:
             why_it_matters="Pushed me to think more carefully",
             emotional_valence=0.3,
             emotional_intensity=0.7,
+            depth="meaningful",
         )
 
         assert "Key moment recorded" in result
@@ -112,7 +127,7 @@ class TestRecordKeyMoment:
         experience_service = ExperienceService(InMemoryExperienceStore())
         event_store = InMemoryReflectionEventStore()
         narrative_revision = NarrativeRevisionService(
-            narrative_repo=state_store,  # type: ignore
+            narrative_repo=state_store,  # type: ignore[arg-type]
             reflection_model=MockReflectionModel(),
             narrative_audit=NoOpNarrativeWriteAudit(),
         )
@@ -122,7 +137,7 @@ class TestRecordKeyMoment:
             identity_service=IdentityService(state_store),
             experience_service=experience_service,
             micro_reflection=MicroReflectionService(
-                experience_repo=experience_service,  # type: ignore
+                experience_repo=experience_service,  # type: ignore[arg-type]
                 narrative_revision=narrative_revision,
                 event_store=event_store,
             ),
@@ -131,7 +146,7 @@ class TestRecordKeyMoment:
             session_id=None,  # No active session
         )
 
-        ctx = RunContext(deps=deps, usage={}, request_data={}, model_name="test")
+        ctx = _make_run_context(deps)
 
         result = record_key_moment(
             ctx,
@@ -147,7 +162,7 @@ class TestRecordKeyMoment:
         agent_id = uuid4()
         deps, _ = _create_deps_with_session(agent_id)
 
-        ctx = RunContext(deps=deps, usage={}, request_data={}, model_name="test")
+        ctx = _make_run_context(deps)
 
         result = record_key_moment(
             ctx,
@@ -164,7 +179,7 @@ class TestRecordKeyMoment:
         agent_id = uuid4()
         deps, _ = _create_deps_with_session(agent_id)
 
-        ctx = RunContext(deps=deps, usage={}, request_data={}, model_name="test")
+        ctx = _make_run_context(deps)
 
         result = record_key_moment(
             ctx,
@@ -176,6 +191,23 @@ class TestRecordKeyMoment:
         assert "Error" in result
         assert "emotional_intensity" in result
 
+    def test_record_key_moment_invalid_depth(self):
+        """Test error with invalid depth value."""
+        agent_id = uuid4()
+        deps, _ = _create_deps_with_session(agent_id)
+
+        ctx = _make_run_context(deps)
+
+        result = record_key_moment(
+            ctx,
+            what_happened="Something",
+            why_it_matters="Matters",
+            depth="not-a-real-depth",
+        )
+
+        assert "Error" in result
+        assert "depth" in result
+
 
 class TestLogExperience:
     """Tests for log_experience tool."""
@@ -185,7 +217,7 @@ class TestLogExperience:
         agent_id = uuid4()
         deps, _ = _create_deps_with_session(agent_id)
 
-        ctx = RunContext(deps=deps, usage={}, request_data={}, model_name="test")
+        ctx = _make_run_context(deps)
 
         result = log_experience(
             ctx,

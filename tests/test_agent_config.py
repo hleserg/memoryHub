@@ -61,8 +61,8 @@ class TestAtmanDeps:
         assert deps.agent_id == agent_id
         assert deps.session_id is None
         assert deps.max_tool_calls == 20
-        assert deps.truncate_narrative_chars == 2000
-        assert deps.truncate_core_chars == 1000
+        assert deps.truncate_narrative_recent == 2000
+        assert deps.truncate_narrative_core == 1000
 
     def test_deps_immutability(self):
         """Test that AtmanDeps is immutable (frozen dataclass)."""
@@ -115,13 +115,13 @@ class TestAtmanDeps:
             state_store=state_store,
             agent_id=uuid4(),
             max_tool_calls=50,
-            truncate_narrative_chars=3000,
-            truncate_core_chars=1500,
+            truncate_narrative_recent=3000,
+            truncate_narrative_core=1500,
         )
 
         assert deps.max_tool_calls == 50
-        assert deps.truncate_narrative_chars == 3000
-        assert deps.truncate_core_chars == 1500
+        assert deps.truncate_narrative_recent == 3000
+        assert deps.truncate_narrative_core == 1500
 
 
 class TestAgentConfig:

@@ -9,7 +9,7 @@ Covers:
 """
 
 from datetime import UTC, datetime
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 from atman.adapters.agent import build_instructions
 from atman.adapters.agent.deps import AtmanDeps
@@ -35,13 +35,13 @@ from atman.core.services import (
 )
 
 
-def _create_deps(agent_id: uuid4) -> AtmanDeps:
+def _create_deps(agent_id: UUID) -> AtmanDeps:
     """Helper to create deps for testing."""
     state_store = InMemoryStateStore()
     experience_service = ExperienceService(InMemoryExperienceStore())
     event_store = InMemoryReflectionEventStore()
     narrative_revision = NarrativeRevisionService(
-        narrative_repo=state_store,  # type: ignore
+        narrative_repo=state_store,  # type: ignore[arg-type]
         reflection_model=MockReflectionModel(),
         narrative_audit=NoOpNarrativeWriteAudit(),
     )
@@ -51,7 +51,7 @@ def _create_deps(agent_id: uuid4) -> AtmanDeps:
         identity_service=IdentityService(state_store),
         experience_service=experience_service,
         micro_reflection=MicroReflectionService(
-            experience_repo=experience_service,  # type: ignore
+            experience_repo=experience_service,  # type: ignore[arg-type]
             narrative_revision=narrative_revision,
             event_store=event_store,
         ),

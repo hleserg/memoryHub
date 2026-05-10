@@ -77,7 +77,7 @@ def build_instructions(deps: AtmanDeps) -> str:
         if narrative.core_layer.content.strip():
             parts.append("\n## Core Narrative\n")
             truncated_core = _truncate_text(
-                narrative.core_layer.content, deps.truncate_core_chars
+                narrative.core_layer.content, deps.truncate_narrative_core
             )
             parts.append(truncated_core)
             parts.append("\n")
@@ -86,22 +86,16 @@ def build_instructions(deps: AtmanDeps) -> str:
         if narrative.recent_layer.content.strip():
             parts.append("\n## Recent Experience\n")
             truncated_recent = _truncate_text(
-                narrative.recent_layer.content, deps.truncate_narrative_chars
+                narrative.recent_layer.content, deps.truncate_narrative_recent
             )
             parts.append(truncated_recent)
             parts.append("\n")
 
     # Behavioral guidelines
     parts.append("\n## Behavioral Guidelines\n")
-    parts.append(
-        "- Record key moments during the session using record_key_moment tool\n"
-    )
-    parts.append(
-        "- Be honest about what I don't know or can't do\n"
-    )
-    parts.append(
-        "- Reflect on experiences to deepen self-understanding\n"
-    )
+    parts.append("- Record key moments during the session using record_key_moment tool\n")
+    parts.append("- Be honest about what I don't know or can't do\n")
+    parts.append("- Reflect on experiences to deepen self-understanding\n")
 
     return "".join(parts)
 

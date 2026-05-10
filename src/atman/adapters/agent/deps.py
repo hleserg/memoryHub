@@ -57,8 +57,8 @@ class AtmanDeps:
     max_tool_calls: int = 20
     """Maximum tool calls per session (risk mitigation E26-R4)"""
 
-    truncate_narrative_chars: int = 2000
+    truncate_narrative_recent: int = 2000
     """Max chars for narrative recent_layer (risk mitigation E26-R2)"""
 
-    truncate_core_chars: int = 1000
+    truncate_narrative_core: int = 1000
     """Max chars for narrative core_layer (risk mitigation E26-R2)"""

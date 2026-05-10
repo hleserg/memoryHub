@@ -15,6 +15,7 @@ from pydantic_ai import RunContext
 
 from atman.adapters.agent.deps import AtmanDeps
 from atman.core.models import KeyMomentInput
+from atman.core.models.experience import EmotionalDepth
 
 
 def record_key_moment(
@@ -23,6 +24,7 @@ def record_key_moment(
     why_it_matters: str,
     emotional_valence: float = 0.0,
     emotional_intensity: float = 0.5,
+    depth: str = "meaningful",
 ) -> str:
     """
     Record a key moment during the current session.
@@ -33,6 +35,8 @@ def record_key_moment(
         why_it_matters: Why this moment is significant
         emotional_valence: Emotional tone (-1.0 negative to +1.0 positive)
         emotional_intensity: Intensity of emotion (0.0 to 1.0)
+        depth: How deeply this touched the agent's identity
+            ("surface" | "meaningful" | "profound")
 
     Returns:
         Confirmation message
@@ -50,18 +54,24 @@ def record_key_moment(
     if not 0.0 <= emotional_intensity <= 1.0:
         return f"Error: emotional_intensity must be between 0.0 and 1.0, got {emotional_intensity}"
 
-    key_moment = KeyMomentInput(
-        what_happened=what_happened,
-        why_it_matters=why_it_matters,
-        emotional_valence=emotional_valence,
-        emotional_intensity=emotional_intensity,
-    )
+    try:
+        emotional_depth = EmotionalDepth(depth)
+    except ValueError:
+        allowed = ", ".join(d.value for d in EmotionalDepth)
+        return f"Error: depth must be one of [{allowed}], got {depth!r}"
 
     try:
+        key_moment = KeyMomentInput(
+            what_happened=what_happened,
+            why_it_matters=why_it_matters,
+            emotional_valence=emotional_valence,
+            emotional_intensity=emotional_intensity,
+            depth=emotional_depth,
+        )
         ctx.deps.session_manager.record_key_moment(ctx.deps.session_id, key_moment)
         return f"Key moment recorded: {what_happened[:50]}..."
     except Exception as e:
-        return f"Error recording key moment: {str(e)}"
+        return f"Error recording key moment: {e!s}"
 
 
 def log_experience(
@@ -85,7 +95,7 @@ def log_experience(
     """
     # This is a simplified version - normally SessionManager handles this
     # via finish_session which creates a complete SessionExperience
-
+    _ = ctx, key_insight  # currently unused; reserved for future direct-log path
     return (
         "Experience logging is handled automatically at session end. "
         f"Use record_key_moment to capture significant moments: {description[:30]}..."

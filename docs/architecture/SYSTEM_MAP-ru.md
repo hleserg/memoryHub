@@ -74,6 +74,10 @@
 | `adapters/storage/in_memory_reflection_store.py` | `PatternStore`, `ReflectionEventStore`, `HealthAssessmentStore` | хранилища выводов рефлексии |
 | `adapters/reflection/mock_reflection_model.py` (`MockReflectionModel`) | `ReflectionModel` | детерминированный мок |
 | `adapters/reflection/fixture_loader.py` | — | загрузка фикстур для демо |
+| `adapters/agent/config.py` (`ModelConfig`, `AgentConfig`) | — | конфигурация Pydantic AI модели и агента (E26-R1, E26-R2, E26-R4) |
+| `adapters/agent/deps.py` (`AtmanDeps`) | — | замороженный DI-контейнер: `SessionManager`, `IdentityService`, `ExperienceService`, `MicroReflectionService`, `StateStore` для Pydantic AI агента |
+| `adapters/agent/instructions.py` (`build_instructions`) | — | строит динамический system prompt из текущей `Identity` + `NarrativeDocument` (обрезается по `AtmanDeps.truncate_narrative_*`) |
+| `adapters/agent/tools.py` (`record_key_moment`, `log_experience`) | — | Pydantic AI инструменты: запись key moments и подсказка по завершению сессии |
 
 ### 1.6. CLI / TUI / Web / Демо
 
@@ -133,6 +137,14 @@
 | `InMemoryExperienceStore`, `JsonlExperienceStore`, `FileStateStore` | `StateStore` |
 | `MockReflectionModel` | `ReflectionModel` |
 | `InMemoryPatternStore`, `InMemoryReflectionEventStore`, `InMemoryHealthAssessmentStore` | соответствующие порты |
+
+### 2.2a. Адаптер агента ↔ сервисы
+
+| Связка | Файлы | Тип |
+|--------|-------|-----|
+| `AtmanDeps` ↔ `SessionManager`, `IdentityService`, `ExperienceService`, `MicroReflectionService`, `StateStore` | `adapters/agent/deps.py` | DI-контейнер (frozen dataclass) |
+| `record_key_moment` / `log_experience` ↔ `SessionManager.record_key_moment` | `adapters/agent/tools.py` → `core/services/session_manager.py` | Pydantic AI tool → сервисный вызов |
+| `build_instructions` ↔ `StateStore.load_identity` / `load_narrative` | `adapters/agent/instructions.py` → `core/ports/state_store.py` | сборка динамического system prompt |
 
 ### 2.3. CLI ↔ сервис
 
