@@ -4,7 +4,6 @@ Tests for OllamaReflectionModel.
 
 import json
 import os
-from typing import cast
 from unittest.mock import MagicMock, patch
 
 import httpx
@@ -56,9 +55,11 @@ class TestOllamaReflectionModelInit:
 
     def test_invalid_url_scheme(self) -> None:
         """Test that invalid URL scheme raises ValueError."""
-        with patch.dict(os.environ, {"ATMAN_OLLAMA_BASE_URL": "ftp://invalid"}):
-            with pytest.raises(ValueError, match="Invalid URL scheme.*ftp"):
-                OllamaReflectionModel()
+        with (
+            patch.dict(os.environ, {"ATMAN_OLLAMA_BASE_URL": "ftp://invalid"}),
+            pytest.raises(ValueError, match=r"Invalid URL scheme.*ftp"),
+        ):
+            OllamaReflectionModel()
 
     def test_context_manager(self) -> None:
         """Test context manager closes client properly."""
@@ -185,20 +186,22 @@ class TestCallWithRetry:
 
     def test_request_error(self) -> None:
         """Test handling of request errors (network issues)."""
-        with OllamaReflectionModel() as model:
-            with patch.object(
+        with (
+            OllamaReflectionModel() as model,
+            patch.object(
                 model._client,
                 "post",
                 side_effect=httpx.RequestError("Connection failed"),
-            ) as mock_post:
-                with pytest.raises(OllamaReflectionError) as exc_info:
-                    model._call_with_retry(
-                        [{"role": "user", "content": "test"}],
-                        MockOutput,
-                    )
+            ) as mock_post,
+            pytest.raises(OllamaReflectionError) as exc_info,
+        ):
+            model._call_with_retry(
+                [{"role": "user", "content": "test"}],
+                MockOutput,
+            )
 
-                assert exc_info.value.attempts == 2
-                assert mock_post.call_count == 2
+        assert exc_info.value.attempts == 2
+        assert mock_post.call_count == 2
 
     def test_invalid_message_structure(self) -> None:
         """Test handling of invalid response message structure."""
@@ -223,12 +226,14 @@ class TestCallWithRetry:
             mock_response = MagicMock(spec=httpx.Response)
             mock_response.json.return_value = {"message": None}
 
-            with patch.object(model._client, "post", return_value=mock_response):
-                with pytest.raises(OllamaReflectionError) as exc_info:
-                    model._call_with_retry(
-                        [{"role": "user", "content": "test"}],
-                        MockOutput,
-                    )
+            with (
+                patch.object(model._client, "post", return_value=mock_response),
+                pytest.raises(OllamaReflectionError) as exc_info,
+            ):
+                model._call_with_retry(
+                    [{"role": "user", "content": "test"}],
+                    MockOutput,
+                )
 
             assert exc_info.value.attempts == 2
 
@@ -265,24 +270,32 @@ class TestNotImplementedMethods:
 
     def test_generate_reframing_note_raises(self) -> None:
         """Test that generate_reframing_note raises NotImplementedError."""
-        with OllamaReflectionModel() as model:
-            with pytest.raises(NotImplementedError, match="E21.2"):
-                model.generate_reframing_note(MagicMock(), {})
+        with (
+            OllamaReflectionModel() as model,
+            pytest.raises(NotImplementedError, match=r"E21\.2"),
+        ):
+            model.generate_reframing_note(MagicMock(), {})
 
     def test_detect_pattern_raises(self) -> None:
         """Test that detect_pattern raises NotImplementedError."""
-        with OllamaReflectionModel() as model:
-            with pytest.raises(NotImplementedError, match="E21.2"):
-                model.detect_pattern([], {})
+        with (
+            OllamaReflectionModel() as model,
+            pytest.raises(NotImplementedError, match=r"E21\.2"),
+        ):
+            model.detect_pattern([], {})
 
     def test_propose_narrative_update_raises(self) -> None:
         """Test that propose_narrative_update raises NotImplementedError."""
-        with OllamaReflectionModel() as model:
-            with pytest.raises(NotImplementedError, match="E21.2"):
-                model.propose_narrative_update(MagicMock(), [], MagicMock())
+        with (
+            OllamaReflectionModel() as model,
+            pytest.raises(NotImplementedError, match=r"E21\.2"),
+        ):
+            model.propose_narrative_update(MagicMock(), [], MagicMock())
 
     def test_assess_health_criterion_raises(self) -> None:
         """Test that assess_health_criterion raises NotImplementedError."""
-        with OllamaReflectionModel() as model:
-            with pytest.raises(NotImplementedError, match="E21.2"):
-                model.assess_health_criterion(MagicMock(), [], MagicMock())
+        with (
+            OllamaReflectionModel() as model,
+            pytest.raises(NotImplementedError, match=r"E21\.2"),
+        ):
+            model.assess_health_criterion(MagicMock(), [], MagicMock())
