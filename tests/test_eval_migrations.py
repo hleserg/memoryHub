@@ -32,13 +32,17 @@ class _RecordingOp:
         self.statements.append(statement)
 
 
+class _FakeAlembicModule(types.ModuleType):
+    op: _RecordingOp
+
+
 class _BenchmarkRunsMigration(Protocol):
     def upgrade(self) -> None: ...
 
 
 def _load_benchmark_runs_migration(recording_op: _RecordingOp) -> _BenchmarkRunsMigration:
-    fake_alembic = types.ModuleType("alembic")
-    setattr(fake_alembic, "op", recording_op)
+    fake_alembic = _FakeAlembicModule("alembic")
+    fake_alembic.op = recording_op
     previous_alembic = sys.modules.get("alembic")
     sys.modules["alembic"] = fake_alembic
     try:
