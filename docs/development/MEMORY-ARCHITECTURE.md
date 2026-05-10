@@ -227,7 +227,7 @@ def get_other_agent_experience(self, other_agent_id, experience_id):
 | Векторный поиск | pgvector | latest | HNSW индексы на embedding полях |
 | Векторная база (резерв) | Qdrant | latest | коллекции `atman_facts`, `atman_experiences` |
 | Embedding модель | qwen3-embedding:1.5b | — | 768 dims, мультиязычная, Ollama |
-| LLM | qwen3:14b | — | ReflectionModel, Ollama |
+| LLM | qwen3.5:9b | — | ReflectionModel, Ollama |
 | ORM / миграции | SQLAlchemy + Alembic | — | схема как код, версионирование |
 
 ### Почему PostgreSQL а не mem0
