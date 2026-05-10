@@ -348,7 +348,7 @@ Each migration must update `schema_version` default and include `README` in `mig
 - **Development Standard:** `docs/development/DEVELOPMENT_STANDARD.md` §7 (canonical name: `ReflectionEvent`)
 - **System Map:** `docs/architecture/SYSTEM_MAP.md` (update with §1 reflections module, §2 storage integration)
 - **Related Components:**
-  - `src/atman/adapters/storage/postgres_reflection_models.py` (Pydantic models)
+  - `src/atman/core/models/reflection.py` (Pydantic models: `ReflectionRecord`)
   - `src/atman/core/ports/reflection_store.py` (port interface)
   - `src/atman/adapters/storage/in_memory_postgres_reflection_store.py` (in-memory adapter)
   - `src/atman/adapters/storage/reflection_persistence_helper.py` (persistence helpers)
