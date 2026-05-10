@@ -21,11 +21,13 @@ def test_check_fact_returns_empty_when_no_other_facts():
     assert detector.check_fact(new_fact) == []
 
 
-def test_check_fact_skips_invalidated_input():
+def test_check_fact_skips_non_active_input():
     backend = _backend_with()
     detector = ConflictDetector(factual_memory=backend)
-    invalidated = FactRecord(content="x", source="t", status=FactStatus.INVALIDATED)
-    assert detector.check_fact(invalidated) == []
+    # All non-ACTIVE inputs short-circuit to no conflicts.
+    for status in (FactStatus.INVALIDATED, FactStatus.SUPERSEDED, FactStatus.DISPUTED):
+        non_active = FactRecord(content="x", source="t", status=status)
+        assert detector.check_fact(non_active) == []
 
 
 def test_check_fact_detects_negation_contradiction():

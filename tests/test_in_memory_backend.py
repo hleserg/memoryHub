@@ -229,11 +229,24 @@ def test_invalidate_fact_without_superseded_by(backend):
     assert result.status == FactStatus.DISPUTED
     assert result.superseded_by is None
     assert result.invalidation_note == "doubted"
-    assert result.invalidated_at is not None
+    # DISPUTED populates ``disputed_at`` instead of ``invalidated_at``.
+    assert result.disputed_at is not None
+    assert result.invalidated_at is None
 
     retrieved = backend.get_fact(fact.id)
     assert retrieved is not None
     assert len([r for r in retrieved.relations if r.relation_type == "superseded_by"]) == 0
+
+
+def test_invalidate_fact_invalidated_status_sets_invalidated_at(backend):
+    """INVALIDATED / SUPERSEDED populate ``invalidated_at``, not ``disputed_at``."""
+    fact = backend.add_fact(FactRecord(content="To be retracted", source="test"))
+    result = backend.invalidate_fact(fact.id, status=FactStatus.INVALIDATED, note="wrong")
+
+    assert result is not None
+    assert result.status == FactStatus.INVALIDATED
+    assert result.invalidated_at is not None
+    assert result.disputed_at is None
 
 
 def test_list_invalidated(backend):

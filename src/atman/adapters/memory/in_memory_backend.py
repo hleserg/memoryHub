@@ -81,16 +81,24 @@ class InMemoryBackend(FactualMemory):
         note: str = "",
         superseded_by: UUID | None = None,
     ) -> FactRecord | None:
-        """Mark a fact as invalidated."""
+        """Mark a fact as invalidated, superseded, or disputed."""
         if status == FactStatus.ACTIVE:
             raise ValueError("invalidate_fact rejects FactStatus.ACTIVE")
         fact = self._facts.get(fact_id)
         if fact is None:
             return None
 
-        fact.status = status or FactStatus.INVALIDATED
+        new_status = status or FactStatus.INVALIDATED
+        fact.status = new_status
         fact.invalidation_note = note
-        fact.invalidated_at = datetime.now(UTC)
+        # Set the timestamp appropriate to the new lifecycle status: DISPUTED
+        # populates ``disputed_at``; INVALIDATED / SUPERSEDED populate
+        # ``invalidated_at``.
+        now = datetime.now(UTC)
+        if new_status == FactStatus.DISPUTED:
+            fact.disputed_at = now
+        else:
+            fact.invalidated_at = now
         fact.superseded_by = superseded_by
 
         if superseded_by is not None:

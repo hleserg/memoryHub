@@ -242,9 +242,15 @@ class FileBackend(FactualMemory):
                 return None
 
             now = datetime.now(UTC)
-            fact.status = status or FactStatus.INVALIDATED
+            new_status = status or FactStatus.INVALIDATED
+            fact.status = new_status
             fact.invalidation_note = note
-            fact.invalidated_at = now
+            # DISPUTED populates ``disputed_at``; INVALIDATED / SUPERSEDED
+            # populate ``invalidated_at``.
+            if new_status == FactStatus.DISPUTED:
+                fact.disputed_at = now
+            else:
+                fact.invalidated_at = now
             fact.superseded_by = superseded_by
 
             if superseded_by is not None:
