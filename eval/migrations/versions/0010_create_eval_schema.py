@@ -54,6 +54,23 @@ GRANT USAGE ON SCHEMA eval TO atman_eval_writer, atman_eval_reader;
 """
 
 
+# Two parallel sets of ALTER DEFAULT PRIVILEGES are issued so the default
+# grants fire regardless of which role actually creates the table:
+#
+#   1. ``FOR ROLE atman_eval_owner`` — fires when a future migration uses
+#      ``SET ROLE atman_eval_owner;`` before ``CREATE TABLE eval.<...>``.
+#
+#   2. No ``FOR ROLE`` clause — the alter applies to ``current_user`` at the
+#      time the ALTER itself runs (the migration runner, typically ``atman``
+#      in dev/CI, ``atman_admin`` in prod). This is the path that actually
+#      fires for tables created by subsequent eval migrations, since
+#      ``eval/migrations/env.py`` connects as the application user, not
+#      ``atman_eval_owner``.
+#
+# Each downstream eval migration should ALSO issue explicit
+# ``GRANT SELECT, INSERT, UPDATE ON eval.<table> TO atman_eval_writer;`` (and
+# ``GRANT SELECT ... TO atman_eval_reader;``) for clarity and to insulate
+# against surprises if the connecting role changes.
 _DEFAULT_PRIVILEGES_SQL = """
 ALTER DEFAULT PRIVILEGES FOR ROLE atman_eval_owner IN SCHEMA eval
     GRANT SELECT, INSERT, UPDATE ON TABLES TO atman_eval_writer;
@@ -66,6 +83,19 @@ ALTER DEFAULT PRIVILEGES FOR ROLE atman_eval_owner IN SCHEMA eval
 ALTER DEFAULT PRIVILEGES FOR ROLE atman_eval_owner IN SCHEMA eval
     GRANT EXECUTE ON FUNCTIONS TO atman_eval_writer;
 ALTER DEFAULT PRIVILEGES FOR ROLE atman_eval_owner IN SCHEMA eval
+    GRANT EXECUTE ON FUNCTIONS TO atman_eval_reader;
+
+ALTER DEFAULT PRIVILEGES IN SCHEMA eval
+    GRANT SELECT, INSERT, UPDATE ON TABLES TO atman_eval_writer;
+ALTER DEFAULT PRIVILEGES IN SCHEMA eval
+    GRANT SELECT ON TABLES TO atman_eval_reader;
+ALTER DEFAULT PRIVILEGES IN SCHEMA eval
+    GRANT USAGE, SELECT ON SEQUENCES TO atman_eval_writer;
+ALTER DEFAULT PRIVILEGES IN SCHEMA eval
+    GRANT USAGE ON SEQUENCES TO atman_eval_reader;
+ALTER DEFAULT PRIVILEGES IN SCHEMA eval
+    GRANT EXECUTE ON FUNCTIONS TO atman_eval_writer;
+ALTER DEFAULT PRIVILEGES IN SCHEMA eval
     GRANT EXECUTE ON FUNCTIONS TO atman_eval_reader;
 """
 
@@ -114,6 +144,19 @@ ALTER DEFAULT PRIVILEGES FOR ROLE atman_eval_owner IN SCHEMA eval
 ALTER DEFAULT PRIVILEGES FOR ROLE atman_eval_owner IN SCHEMA eval
     REVOKE EXECUTE ON FUNCTIONS FROM atman_eval_writer;
 ALTER DEFAULT PRIVILEGES FOR ROLE atman_eval_owner IN SCHEMA eval
+    REVOKE EXECUTE ON FUNCTIONS FROM atman_eval_reader;
+
+ALTER DEFAULT PRIVILEGES IN SCHEMA eval
+    REVOKE SELECT, INSERT, UPDATE ON TABLES FROM atman_eval_writer;
+ALTER DEFAULT PRIVILEGES IN SCHEMA eval
+    REVOKE SELECT ON TABLES FROM atman_eval_reader;
+ALTER DEFAULT PRIVILEGES IN SCHEMA eval
+    REVOKE USAGE, SELECT ON SEQUENCES FROM atman_eval_writer;
+ALTER DEFAULT PRIVILEGES IN SCHEMA eval
+    REVOKE USAGE ON SEQUENCES FROM atman_eval_reader;
+ALTER DEFAULT PRIVILEGES IN SCHEMA eval
+    REVOKE EXECUTE ON FUNCTIONS FROM atman_eval_writer;
+ALTER DEFAULT PRIVILEGES IN SCHEMA eval
     REVOKE EXECUTE ON FUNCTIONS FROM atman_eval_reader;
 """
 
