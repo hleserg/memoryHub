@@ -38,14 +38,14 @@ class ConflictDetector:
     """
 
     # Simple contradiction patterns (can be expanded)
-    NEGATION_PATTERNS = [
+    NEGATION_PATTERNS: tuple[str, ...] = (
         r"\bnot\b",
         r"\bno longer\b",
         r"\bnever\b",
         r"\bcancelled\b",
         r"\bremoved\b",
         r"\bdeprecated\b",
-    ]
+    )
 
     def __init__(
         self,
@@ -128,9 +128,7 @@ class ConflictDetector:
 
         return conflicts
 
-    def _detect_conflict(
-        self, fact1: FactRecord, fact2: FactRecord
-    ) -> FactConflict | None:
+    def _detect_conflict(self, fact1: FactRecord, fact2: FactRecord) -> FactConflict | None:
         """
         Detect if two facts contradict each other.
 

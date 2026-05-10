@@ -5,11 +5,11 @@ Requires running Ollama instance with an embedding model.
 Default model: qwen3-embedding:1.5b (lightweight, good quality)
 """
 
+import json
 import math
 import os
-import urllib.request
 import urllib.error
-import json
+import urllib.request
 from typing import override
 
 from atman.core.ports.embedding import EmbeddingPort
@@ -41,12 +41,8 @@ class OllamaEmbeddingAdapter(EmbeddingPort):
             model: Model name (defaults to OLLAMA_EMBED_MODEL env var or qwen3-embedding:1.5b)
             timeout: Request timeout in seconds
         """
-        self.base_url = base_url or os.environ.get(
-            "OLLAMA_HOST", "http://localhost:11434"
-        )
-        self.model = model or os.environ.get(
-            "OLLAMA_EMBED_MODEL", "qwen3-embedding:1.5b"
-        )
+        self.base_url = base_url or os.environ.get("OLLAMA_HOST", "http://localhost:11434")
+        self.model = model or os.environ.get("OLLAMA_EMBED_MODEL", "qwen3-embedding:1.5b")
         self.timeout = timeout
         self._dimension: int | None = None
 
@@ -55,10 +51,12 @@ class OllamaEmbeddingAdapter(EmbeddingPort):
         """Generate embedding via Ollama API."""
         url = f"{self.base_url}/api/embed"
 
-        payload = json.dumps({
-            "model": self.model,
-            "input": text,
-        }).encode("utf-8")
+        payload = json.dumps(
+            {
+                "model": self.model,
+                "input": text,
+            }
+        ).encode("utf-8")
 
         headers = {
             "Content-Type": "application/json",
@@ -89,10 +87,12 @@ class OllamaEmbeddingAdapter(EmbeddingPort):
         """Generate embeddings for multiple texts."""
         url = f"{self.base_url}/api/embed"
 
-        payload = json.dumps({
-            "model": self.model,
-            "input": texts,
-        }).encode("utf-8")
+        payload = json.dumps(
+            {
+                "model": self.model,
+                "input": texts,
+            }
+        ).encode("utf-8")
 
         headers = {
             "Content-Type": "application/json",
@@ -137,7 +137,7 @@ class OllamaEmbeddingAdapter(EmbeddingPort):
         if len(vec1) != len(vec2):
             raise ValueError("Vectors must have same dimension")
 
-        dot_product = sum(a * b for a, b in zip(vec1, vec2))
+        dot_product = sum(a * b for a, b in zip(vec1, vec2, strict=True))
         norm1 = math.sqrt(sum(a * a for a in vec1))
         norm2 = math.sqrt(sum(b * b for b in vec2))
 

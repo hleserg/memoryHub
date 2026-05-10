@@ -37,7 +37,7 @@ class MockEmbeddingAdapter(EmbeddingPort):
 
         # Generate embedding values using deterministic pseudo-random sequence
         embedding: list[float] = []
-        for i in range(self._DIMENSION):
+        for _i in range(self._DIMENSION):
             # Linear congruential generator for deterministic sequence
             seed = (seed * 1103515245 + 12345) % (2**31)
             # Convert to float in range [-1, 1]
@@ -68,7 +68,7 @@ class MockEmbeddingAdapter(EmbeddingPort):
         if len(vec1) != len(vec2):
             raise ValueError("Vectors must have same dimension")
 
-        dot_product = sum(a * b for a, b in zip(vec1, vec2))
+        dot_product = sum(a * b for a, b in zip(vec1, vec2, strict=True))
         norm1 = math.sqrt(sum(a * a for a in vec1))
         norm2 = math.sqrt(sum(b * b for b in vec2))
 

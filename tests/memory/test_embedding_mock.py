@@ -9,7 +9,6 @@ import math
 import pytest
 
 from atman.adapters.memory.mock_embedding import MockEmbeddingAdapter
-from atman.core.ports.embedding import EmbeddingPort
 
 
 class TestMockEmbeddingAdapter:
@@ -24,9 +23,12 @@ class TestMockEmbeddingAdapter:
     # Basic Functionality Tests
     # ==========================================================================
 
-    def test_adapter_implements_port(self, adapter: MockEmbeddingAdapter) -> None:
-        """MockEmbeddingAdapter implements EmbeddingPort ABC."""
-        assert isinstance(adapter, EmbeddingPort)
+    def test_adapter_has_required_methods(self, adapter: MockEmbeddingAdapter) -> None:
+        """MockEmbeddingAdapter implements all EmbeddingPort methods."""
+        assert hasattr(adapter, "embed")
+        assert hasattr(adapter, "embed_batch")
+        assert hasattr(adapter, "dimension")
+        assert hasattr(adapter, "model_name")
 
     def test_dimension_is_768(self, adapter: MockEmbeddingAdapter) -> None:
         """Adapter reports correct 768 dimension (qwen3-embedding:1.5b compatible)."""
@@ -168,7 +170,7 @@ class TestMockEmbeddingAdapter:
 
     def test_special_characters_embedding(self, adapter: MockEmbeddingAdapter) -> None:
         """Special characters produce valid embedding."""
-        text = "\n\t\r\\\"\'\x00\x01\x02"
+        text = "\n\t\r\\\"'\x00\x01\x02"
         embedding = adapter.embed(text)
         assert len(embedding) == 768
 

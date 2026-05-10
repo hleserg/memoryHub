@@ -8,7 +8,7 @@ Not persistent - suitable for testing and short-lived sessions.
 from typing import override
 from uuid import UUID
 
-from atman.core.ports.memory_usage_log import MemoryUsageLog, MemoryUsageRecord, UsageType
+from atman.core.ports.memory_usage_log import MemoryUsageLog, MemoryUsageRecord
 
 
 class InMemoryUsageLog(MemoryUsageLog):
@@ -35,10 +35,7 @@ class InMemoryUsageLog(MemoryUsageLog):
         memory_type: str | None = None,
     ) -> list[MemoryUsageRecord]:
         """Get all usage records for a session."""
-        results = [
-            r for r in self._records
-            if r.session_id == session_id
-        ]
+        results = [r for r in self._records if r.session_id == session_id]
         if memory_type:
             results = [r for r in results if r.memory_type == memory_type]
         return results
@@ -50,10 +47,7 @@ class InMemoryUsageLog(MemoryUsageLog):
         limit: int = 50,
     ) -> list[MemoryUsageRecord]:
         """Get usage history for a specific memory item."""
-        results = [
-            r for r in self._records
-            if r.memory_id == memory_id
-        ]
+        results = [r for r in self._records if r.memory_id == memory_id]
         # Return most recent first
         return results[-limit:][::-1]
 

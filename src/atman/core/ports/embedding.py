@@ -8,6 +8,7 @@ Used for semantic similarity search in passive memory surfacing.
 from abc import abstractmethod
 from typing import Protocol
 
+
 class EmbeddingPort(Protocol):
     """Interface for embedding generation services."""
 

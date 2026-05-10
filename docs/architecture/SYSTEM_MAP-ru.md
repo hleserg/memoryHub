@@ -39,7 +39,7 @@
 | `core/ports/clock.py` | Доменные часы для воспроизводимости | `ClockPort` (Protocol) |
 | `core/ports/state_store.py` | Хранилище опыта/identity/нарратива | `StateStore`, `ExperienceQuery`, `SessionExperienceQuery`, `ValuesTouchedQuery`, `DepthQuery`, `DateRangeQuery` |
 | `core/ports/reflection.py` | Зависимости Reflection Engine; `ReflectionModel` возвращает DTO (#146) | `ExperienceRepository`, `IdentityRepository`, `NarrativeRepository`, `ReflectionModel`, `PatternStore`, `ReflectionEventStore`, `HealthAssessmentStore`, `ReflectionEventPersistenceObserver`, `NarrativeWriteAuditPort` |
-| `core/ports/embedding.py` | Интерфейс эмбеддингов для семантического поиска | `EmbeddingPort` (Protocol) |
+| `core/ports/embedding.py` | Интерфейс эмбеддингов для семантического поиска | `EmbeddingPort` (ABC) — `embed()`, `embed_batch()`, `dimension()`, `model_name()` |
 | `core/ports/memory_middleware.py` | Точка интеграции middleware памяти для live agent | `MemoryMiddlewarePort` (Protocol), `MemoryContext` |
 | `core/ports/memory_usage_log.py` | Трекинг использования памяти для рефлексии | `MemoryUsageLog` (ABC), `MemoryUsageRecord`, `UsageType` |
 
@@ -63,11 +63,13 @@
 
 | Файл | Назначение |
 |------|------------|
+| `config.py` | Pydantic Settings: `EmbeddingSettings` с `EMBEDDING_BACKEND`, `EMBEDDING_MODEL`, `EMBEDDING_DIMENSION`, `EMBEDDING_OLLAMA_HOST`, `EMBEDDING_TIMEOUT` |
 | `core/exceptions.py` | `AtmanError`, `GovernanceRejectedError`, `NarrativePersistenceConflictError`, `SessionNotFoundError`, `SessionAlreadyFinishedError`, `TooManyActiveSessionsError` |
 | `core/clock_impl.py` | `SystemClock`, `FrozenClock` |
 | `core/narrative_write_audit.py` | Хуки аудита коммитов нарратива |
 | `core/reflection_event_audit.py` | Наблюдатели персистенса событий рефлексии |
 | `core/reflection_run_keys.py` | Детерминированные ключи прогонов рефлексии |
+| `eval/migrations/versions/0001_add_embed_model_column.sql` | SQL-миграция: добавляет колонку `embed_model TEXT` в `facts`, `key_moments`, `identity_snapshots` для отслеживаемости модели (E25.4) |
 
 ### 1.5. Адаптеры (`src/atman/adapters/`)
 
@@ -75,9 +77,9 @@
 |------|----------------|-----------|
 | `adapters/memory/in_memory_backend.py` (`InMemoryBackend`) | `FactualMemory` | без персистенса |
 | `adapters/memory/file_backend.py` (`FileBackend`) | `FactualMemory` | JSONL + file locking |
-| `adapters/memory/mock_embedding.py` (`MockEmbeddingAdapter`) | `EmbeddingPort` | детерминированные хеш-эмбеддинги для CI |
+| `adapters/memory/mock_embedding.py` (`MockEmbeddingAdapter`) | `EmbeddingPort` | детерминированные 768-мерные эмбеддинги; seed=`hash(text) % 2^31`; `model_name()` возвращает `"mock-embedding:768d"` |
 | `adapters/memory/bm25_embedding.py` (`BM25EmbeddingAdapter`) | `EmbeddingPort` | разреженные лексические BM25 эмбеддинги |
-| `adapters/memory/ollama_embedding.py` (`OllamaEmbeddingAdapter`) | `EmbeddingPort` | Ollama API эмбеддинги (qwen3-embedding:1.5b) |
+| `adapters/memory/ollama_embedding.py` (`OllamaEmbeddingAdapter`) | `EmbeddingPort` | Ollama API эмбеддинги; по умолчанию `qwen3-embedding:1.5b` (768-мерные); `model_name()` возвращает настроенную модель; доступен `health_check()` |
 | `adapters/memory/in_memory_usage_log.py` (`InMemoryUsageLog`) | `MemoryUsageLog` | in-memory трекинг использования |
 | `adapters/storage/in_memory_experience_store.py` (`InMemoryExperienceStore`) | `StateStore` | в памяти |
 | `adapters/storage/jsonl_experience_store.py` (`JsonlExperienceStore`) | `StateStore` | JSONL для опыта |
@@ -419,7 +421,8 @@ PrincipleRevisionAdvisor — пересмотр принципов
 
 ### Тесты
 
-- 24 тест-модуля в `tests/` + 1 интеграционный модуль.
+- 26 тест-модулей в `tests/` + 1 интеграционный модуль.
+- Тесты эмбеддингов: `tests/memory/test_embedding_mock.py` (≥25 тестов), `tests/memory/test_embedding_ollama.py` (≥20 тестов) — покрытие E25.
 - Интеграционные тесты: `tests/integration/test_full_lifecycle.py` — полный жизненный цикл от старта сессии до рефлексии с FileStateStore.
 - Цель — ≥90% покрытия.
 - CLI исключены из coverage (см. `pyproject.toml`).

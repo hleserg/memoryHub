@@ -6,7 +6,7 @@ and memory stores, managing passive memory surfacing and tracking.
 This is the integration point for future live agent (MODEL-02).
 """
 
-from abc import ABC, abstractmethod
+from abc import abstractmethod
 from dataclasses import dataclass
 from typing import Protocol
 from uuid import UUID

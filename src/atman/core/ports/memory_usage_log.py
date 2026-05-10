@@ -15,9 +15,9 @@ from uuid import UUID
 class UsageType(StrEnum):
     """Type of memory usage."""
 
-    SURFACED = "surfaced"      # Memory was surfaced but not necessarily used
-    ACCESSED = "accessed"      # Memory was explicitly accessed/read
-    CITED = "cited"           # Memory was cited/quoted in output
+    SURFACED = "surfaced"  # Memory was surfaced but not necessarily used
+    ACCESSED = "accessed"  # Memory was explicitly accessed/read
+    CITED = "cited"  # Memory was cited/quoted in output
     INFLUENCED = "influenced"  # Memory influenced decision/action
 
 

@@ -7,9 +7,8 @@ sorted by recency × intensity for emotional continuity.
 
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import override
 
-from atman.core.models.experience import EmotionalDepth, SessionExperience
+from atman.core.models.experience import EmotionalDepth
 from atman.core.ports.state_store import StateStore
 
 
@@ -84,8 +83,7 @@ class EmotionalEcho:
         # Use list_recent_experiences to get recent experiences, then filter by date
         experience_records = self.state_store.list_recent_experiences(limit=100)
         experiences = [
-            exp.experience for exp in experience_records
-            if exp.experience.timestamp >= since
+            exp.experience for exp in experience_records if exp.experience.timestamp >= since
         ]
 
         # Filter and score
@@ -152,7 +150,13 @@ class EmotionalEcho:
 
         parts = ["Recent emotional context:"]
         for echo in echoes:
-            tone = "positive" if echo.emotional_valence > 0.2 else "negative" if echo.emotional_valence < -0.2 else "neutral"
+            tone = (
+                "positive"
+                if echo.emotional_valence > 0.2
+                else "negative"
+                if echo.emotional_valence < -0.2
+                else "neutral"
+            )
             parts.append(
                 f"- {echo.what_happened[:80]}... "
                 f"({tone}, intensity: {echo.emotional_intensity:.1f})"

@@ -66,9 +66,7 @@ class BM25EmbeddingAdapter(EmbeddingPort):
 
         return vector
 
-    def embed_with_corpus(
-        self, text: str, corpus_docs: list[str]
-    ) -> list[float]:
+    def embed_with_corpus(self, text: str, corpus_docs: list[str]) -> list[float]:
         """
         Generate BM25 embedding using corpus statistics.
 
@@ -118,7 +116,7 @@ class BM25EmbeddingAdapter(EmbeddingPort):
         if len(vec1) != len(vec2):
             raise ValueError("Vectors must have same dimension")
 
-        dot_product = sum(a * b for a, b in zip(vec1, vec2))
+        dot_product = sum(a * b for a, b in zip(vec1, vec2, strict=True))
         norm1 = math.sqrt(sum(a * a for a in vec1))
         norm2 = math.sqrt(sum(b * b for b in vec2))
 

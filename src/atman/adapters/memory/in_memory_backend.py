@@ -97,16 +97,15 @@ class InMemoryBackend(FactualMemory):
                 fact.relations.append(
                     Relation(target_id=superseded_by, relation_type="superseded_by")
                 )
-                new_fact.relations.append(
-                    Relation(target_id=fact_id, relation_type="supersedes")
-                )
+                new_fact.relations.append(Relation(target_id=fact_id, relation_type="supersedes"))
 
         return fact.model_copy(deep=True)
 
     def list_invalidated(self, since: datetime | None = None) -> list[FactRecord]:
         """List invalidated facts."""
         results = [
-            f for f in self._facts.values()
+            f
+            for f in self._facts.values()
             if f.status != FactStatus.ACTIVE
             and (since is None or (f.invalidated_at is not None and f.invalidated_at >= since))
         ]

@@ -42,7 +42,9 @@ class FactRecord(BaseModel):
     status: FactStatus = Field(default=FactStatus.ACTIVE, description="Lifecycle status")
     invalidated_at: datetime | None = Field(default=None, description="When fact was invalidated")
     invalidation_note: str = Field(default="", description="Reason or context for invalidation")
-    superseded_by: UUID | None = Field(default=None, description="ID of fact that replaces this one")
+    superseded_by: UUID | None = Field(
+        default=None, description="ID of fact that replaces this one"
+    )
     disputed_at: datetime | None = Field(default=None, description="When fact was marked disputed")
 
     # Fact salience fields (E24.3)

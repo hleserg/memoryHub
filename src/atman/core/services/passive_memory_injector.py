@@ -116,9 +116,7 @@ class PassiveMemoryInjector:
             related_facts = self._associative_expand(seen_ids)
             for fact in related_facts:
                 if fact.id not in seen_ids:
-                    surfaced.append(
-                        SurfacedMemory(item=fact, source="associative", score=0.5)
-                    )
+                    surfaced.append(SurfacedMemory(item=fact, source="associative", score=0.5))
                     seen_ids.add(fact.id)
 
                     if working_memory:
