@@ -234,6 +234,33 @@ class SessionManager:
 
             session_result.key_moments.append(key_moment)
 
+    def _note_facts_read(self, session_id: UUID, fact_ids: list[UUID]) -> None:
+        """
+        Note that specific facts were read/accessed during this session.
+
+        This creates back-links from experiences to the facts that shaped them.
+        Called automatically when facts are surfaced to the session context.
+
+        Args:
+            session_id: UUID of the session
+            fact_ids: List of fact IDs that were read
+
+        Raises:
+            SessionNotFoundError: If session not found
+            SessionAlreadyFinishedError: If session already finished
+        """
+        with self._lock:
+            session_result = self._active_sessions.get(session_id)
+            if session_result is None:
+                raise SessionNotFoundError(f"Session {session_id} not found")
+            if session_result.is_finished:
+                raise SessionAlreadyFinishedError(f"Session {session_id} already finished")
+
+            # Store fact IDs in session metadata for aggregation at finish
+            if not hasattr(session_result, "_facts_read"):
+                session_result._facts_read = set()
+            session_result._facts_read.update(fact_ids)
+
     def finish_session(
         self,
         session_id: UUID,
@@ -305,6 +332,14 @@ class SessionManager:
         try:
             existing_record = self._state_store.get_experience(experience_id)
             if existing_record is None:
+                # Aggregate fact_refs from all key moments and _note_facts_read
+                fact_refs_set: set[UUID] = set()
+                for moment in session_result.key_moments:
+                    fact_refs_set.update(moment.fact_refs)
+                # Also include any facts noted via _note_facts_read
+                if hasattr(session_result, "_facts_read"):
+                    fact_refs_set.update(session_result._facts_read)
+
                 experience = SessionExperience(
                     id=experience_id,
                     session_id=session_id,
@@ -315,6 +350,7 @@ class SessionManager:
                     importance=0.5,
                     salience=0.5,
                     incomplete_coloring=session_result.incomplete_coloring,
+                    fact_refs=list(fact_refs_set),
                 )
                 experience_record = ExperienceRecord(experience=experience)
                 self._state_store.create_experience(experience_record)

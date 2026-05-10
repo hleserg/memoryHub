@@ -140,6 +140,12 @@ class KeyMoment(BaseModel):
         default=None, description="Contextual information surrounding this moment"
     )
 
+    # FACT REFERENCES (E24.2) - back-links to facts that shaped this moment
+    fact_refs: list[UUID] = Field(
+        default_factory=list,
+        description="IDs of facts that were accessed during this moment",
+    )
+
     @field_validator("what_happened", "why_it_matters")
     @classmethod
     def validate_not_empty(cls, v: str) -> str:
@@ -273,6 +279,12 @@ class SessionExperience(BaseModel):
     reframing_notes: list[ReframingNote] = Field(
         default_factory=list,
         description="Reflection notes added over time - never replaces original",
+    )
+
+    # FACT REFERENCES (E24.2) - aggregated from all key moments
+    fact_refs: list[UUID] = Field(
+        default_factory=list,
+        description="IDs of all facts accessed during this session (deduplicated)",
     )
 
     @field_validator("importance", "salience")

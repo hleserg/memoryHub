@@ -5,9 +5,11 @@ In-memory адаптер для Factual Memory.
 Все данные хранятся в памяти и теряются при завершении процесса.
 """
 
+from datetime import UTC, datetime
 from uuid import UUID
 
 from atman.core.models import FactRecord, Relation
+from atman.core.models.fact import FactStatus
 from atman.core.ports import FactualMemory
 
 
@@ -34,7 +36,11 @@ class InMemoryBackend(FactualMemory):
         return fact.model_copy(deep=True) if fact else None
 
     def search(
-        self, query: str | None = None, tags: list[str] | None = None, limit: int = 10
+        self,
+        query: str | None = None,
+        tags: list[str] | None = None,
+        limit: int = 10,
+        include_invalidated: bool = False,
     ) -> list[FactRecord]:
         """
         Ищет факты по запросу и тегам.
@@ -48,6 +54,10 @@ class InMemoryBackend(FactualMemory):
         normalized_tags = [t.lower() for t in tags] if tags else None
 
         for fact in self._facts.values():
+            # Skip invalidated facts unless explicitly included
+            if not include_invalidated and fact.status == FactStatus.INVALIDATED:
+                continue
+
             # Проверка совпадения по запросу
             if normalized_query and normalized_query not in fact.content.lower():
                 continue
@@ -64,6 +74,43 @@ class InMemoryBackend(FactualMemory):
                 break
 
         return results
+
+    def invalidate_fact(self, fact_id: UUID, reason: str) -> bool:
+        """Mark a fact as invalidated."""
+        fact = self._facts.get(fact_id)
+        if fact is None:
+            return False
+        fact.invalidate(reason)
+        return True
+
+    def list_invalidated(self, limit: int = 10) -> list[FactRecord]:
+        """List invalidated facts."""
+        invalidated = [
+            f for f in self._facts.values() if f.status == FactStatus.INVALIDATED
+        ]
+        invalidated.sort(key=lambda f: f.invalidated_at or datetime.min, reverse=True)
+        return [f.model_copy(deep=True) for f in invalidated[:limit]]
+
+    def confirm_fact(self, fact_id: UUID) -> bool:
+        """Confirm a fact, increasing its confirmation count."""
+        fact = self._facts.get(fact_id)
+        if fact is None:
+            return False
+        fact.confirm()
+        return True
+
+    def decay_stale_facts(self, before: datetime, decay_factor: float = 0.5) -> int:
+        """Decay salience of facts not confirmed since before the given time."""
+        count = 0
+        for fact in self._facts.values():
+            # Skip invalidated facts
+            if fact.status == FactStatus.INVALIDATED:
+                continue
+            # Decay if never confirmed or last confirmation was before cutoff
+            if fact.last_confirmed_at is None or fact.last_confirmed_at < before:
+                fact.salience = max(0.0, fact.salience * decay_factor)
+                count += 1
+        return count
 
     def link(self, source_id: UUID, target_id: UUID, relation_type: str) -> bool:
         """Создает связь между фактами."""

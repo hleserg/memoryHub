@@ -6,10 +6,20 @@
 """
 
 from datetime import UTC, datetime
+from enum import StrEnum
 from typing import Any
 from uuid import UUID, uuid4
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
+
+
+class FactStatus(StrEnum):
+    """Lifecycle status of a fact."""
+
+    ACTIVE = "active"
+    DISPUTED = "disputed"
+    SUPERSEDED = "superseded"
+    INVALIDATED = "invalidated"
 
 
 class FactRecord(BaseModel):
@@ -28,6 +38,20 @@ class FactRecord(BaseModel):
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     metadata: dict[str, Any] = Field(default_factory=dict, description="Дополнительные метаданные")
 
+    # Fact lifecycle and validity fields (E24.1)
+    status: FactStatus = Field(default=FactStatus.ACTIVE, description="Lifecycle status")
+    invalidated_at: datetime | None = Field(default=None, description="When fact was invalidated")
+    invalidated_reason: str | None = Field(default=None, description="Reason for invalidation")
+    superseded_by: UUID | None = Field(default=None, description="ID of fact that replaces this one")
+    disputed_at: datetime | None = Field(default=None, description="When fact was marked disputed")
+
+    # Fact salience fields (E24.3)
+    confirmation_count: int = Field(default=0, ge=0, description="Times this fact was confirmed")
+    last_confirmed_at: datetime | None = Field(default=None, description="Last confirmation time")
+    salience: float = Field(
+        default=0.5, ge=0.0, le=1.0, description="Current salience score (0.0-1.0)"
+    )
+
     @field_validator("content", "source")
     @classmethod
     def validate_not_empty(cls, v: str) -> str:
@@ -42,6 +66,36 @@ class FactRecord(BaseModel):
         """Нормализация тегов."""
         return [tag.strip().lower() for tag in v if tag.strip()]
 
+    @field_validator("confirmation_count")
+    @classmethod
+    def validate_confirmation_count(cls, v: int) -> int:
+        """Ensure confirmation count is non-negative."""
+        if v < 0:
+            raise ValueError("confirmation_count cannot be negative")
+        return v
+
+    @field_validator("salience")
+    @classmethod
+    def validate_salience(cls, v: float) -> float:
+        """Ensure salience is in valid range."""
+        if not 0.0 <= v <= 1.0:
+            raise ValueError("salience must be between 0.0 and 1.0")
+        return v
+
+    def invalidate(self, reason: str) -> None:
+        """Mark this fact as invalidated with a reason."""
+        self.status = FactStatus.INVALIDATED
+        self.invalidated_at = datetime.now(UTC)
+        self.invalidated_reason = reason
+        self.salience = 0.0
+
+    def confirm(self) -> None:
+        """Increment confirmation count and update timestamp."""
+        self.confirmation_count += 1
+        self.last_confirmed_at = datetime.now(UTC)
+        # Increase salience slightly on confirmation, cap at 1.0
+        self.salience = min(1.0, self.salience + 0.1)
+
     model_config = ConfigDict(
         json_schema_extra={
             "example": {
@@ -49,6 +103,9 @@ class FactRecord(BaseModel):
                 "source": "session_2024_01_15",
                 "tags": ["task", "request"],
                 "metadata": {"priority": "high"},
+                "status": "active",
+                "confirmation_count": 1,
+                "salience": 0.5,
             }
         }
     )

@@ -12,10 +12,12 @@ import tempfile
 import warnings
 from collections.abc import Iterator
 from contextlib import contextmanager
+from datetime import UTC, datetime
 from pathlib import Path
 from uuid import UUID
 
 from atman.core.models import FactRecord, Relation
+from atman.core.models.fact import FactStatus
 from atman.core.ports import FactualMemory
 
 
@@ -131,7 +133,11 @@ class FileBackend(FactualMemory):
         return fact.model_copy(deep=True) if fact else None
 
     def search(
-        self, query: str | None = None, tags: list[str] | None = None, limit: int = 10
+        self,
+        query: str | None = None,
+        tags: list[str] | None = None,
+        limit: int = 10,
+        include_invalidated: bool = False,
     ) -> list[FactRecord]:
         """Ищет факты по запросу и тегам."""
         results = []
@@ -140,6 +146,10 @@ class FileBackend(FactualMemory):
         normalized_tags = [t.lower() for t in tags] if tags else None
 
         for fact in self._facts.values():
+            # Skip invalidated facts unless explicitly included
+            if not include_invalidated and fact.status == FactStatus.INVALIDATED:
+                continue
+
             if normalized_query and normalized_query not in fact.content.lower():
                 continue
 
@@ -154,6 +164,58 @@ class FileBackend(FactualMemory):
                 break
 
         return results
+
+    def invalidate_fact(self, fact_id: UUID, reason: str) -> bool:
+        """Mark a fact as invalidated and persist changes."""
+        with self._storage_lock():
+            updated_facts = self._read_facts_from_disk()
+            fact = updated_facts.get(fact_id)
+            if fact is None:
+                self._facts = updated_facts
+                return False
+            fact.invalidate(reason)
+            self._save_facts(updated_facts)
+            self._facts = updated_facts
+        return True
+
+    def list_invalidated(self, limit: int = 10) -> list[FactRecord]:
+        """List invalidated facts sorted by invalidation time."""
+        invalidated = [
+            f for f in self._facts.values() if f.status == FactStatus.INVALIDATED
+        ]
+        invalidated.sort(key=lambda f: f.invalidated_at or datetime.min, reverse=True)
+        return [f.model_copy(deep=True) for f in invalidated[:limit]]
+
+    def confirm_fact(self, fact_id: UUID) -> bool:
+        """Confirm a fact and persist changes."""
+        with self._storage_lock():
+            updated_facts = self._read_facts_from_disk()
+            fact = updated_facts.get(fact_id)
+            if fact is None:
+                self._facts = updated_facts
+                return False
+            fact.confirm()
+            self._save_facts(updated_facts)
+            self._facts = updated_facts
+        return True
+
+    def decay_stale_facts(self, before: datetime, decay_factor: float = 0.5) -> int:
+        """Decay salience of stale facts and persist changes."""
+        count = 0
+        with self._storage_lock():
+            updated_facts = self._read_facts_from_disk()
+            for fact in updated_facts.values():
+                # Skip invalidated facts
+                if fact.status == FactStatus.INVALIDATED:
+                    continue
+                # Decay if never confirmed or last confirmation was before cutoff
+                if fact.last_confirmed_at is None or fact.last_confirmed_at < before:
+                    fact.salience = max(0.0, fact.salience * decay_factor)
+                    count += 1
+            if count > 0:
+                self._save_facts(updated_facts)
+            self._facts = updated_facts
+        return count
 
     def link(self, source_id: UUID, target_id: UUID, relation_type: str) -> bool:
         """Создает связь между фактами и сохраняет в файл."""

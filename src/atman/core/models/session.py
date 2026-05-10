@@ -193,6 +193,12 @@ class KeyMomentInput(BaseModel):
         description="True if couldn't fully capture emotional coloring in the moment",
     )
 
+    # FACT REFERENCES (E24.2) - facts that shaped this moment
+    fact_refs: list[UUID] = Field(
+        default_factory=list,
+        description="IDs of facts that were read/used during this moment",
+    )
+
     @field_validator("what_happened", "why_it_matters")
     @classmethod
     def validate_not_empty(cls, v: str) -> str:
@@ -226,6 +232,7 @@ class KeyMomentInput(BaseModel):
             principles_confirmed=self.principles_confirmed,
             principles_questioned=self.principles_questioned,
             what_changed=self.what_changed,
+            fact_refs=self.fact_refs,
         )
 
     model_config = ConfigDict(

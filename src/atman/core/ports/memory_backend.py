@@ -5,6 +5,7 @@
 """
 
 from abc import ABC, abstractmethod
+from datetime import datetime
 from uuid import UUID
 
 from atman.core.models import FactRecord
@@ -50,7 +51,11 @@ class FactualMemory(ABC):
 
     @abstractmethod
     def search(
-        self, query: str | None = None, tags: list[str] | None = None, limit: int = 10
+        self,
+        query: str | None = None,
+        tags: list[str] | None = None,
+        limit: int = 10,
+        include_invalidated: bool = False,
     ) -> list[FactRecord]:
         """
         Ищет факты по текстовому запросу и/или тегам.
@@ -59,9 +64,64 @@ class FactualMemory(ABC):
             query: Текстовый запрос для поиска в content
             tags: Список тегов для фильтрации
             limit: Максимальное количество результатов
+            include_invalidated: Whether to include invalidated facts in results
 
         Returns:
             list[FactRecord]: Список найденных фактов
+        """
+        pass
+
+    @abstractmethod
+    def invalidate_fact(self, fact_id: UUID, reason: str) -> bool:
+        """
+        Mark a fact as invalidated with a reason.
+
+        Args:
+            fact_id: ID of the fact to invalidate
+            reason: Reason for invalidation
+
+        Returns:
+            bool: True if fact was found and invalidated
+        """
+        pass
+
+    @abstractmethod
+    def list_invalidated(self, limit: int = 10) -> list[FactRecord]:
+        """
+        List invalidated facts.
+
+        Args:
+            limit: Maximum number of results
+
+        Returns:
+            list[FactRecord]: List of invalidated facts
+        """
+        pass
+
+    @abstractmethod
+    def confirm_fact(self, fact_id: UUID) -> bool:
+        """
+        Confirm a fact, increasing its confirmation count and salience.
+
+        Args:
+            fact_id: ID of the fact to confirm
+
+        Returns:
+            bool: True if fact was found and confirmed
+        """
+        pass
+
+    @abstractmethod
+    def decay_stale_facts(self, before: datetime, decay_factor: float = 0.5) -> int:
+        """
+        Decay salience of stale facts not confirmed since before the given time.
+
+        Args:
+            before: Cutoff time - facts not confirmed since this time are decayed
+            decay_factor: Factor to multiply salience by (0.0-1.0)
+
+        Returns:
+            int: Number of facts decayed
         """
         pass
 

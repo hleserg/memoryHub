@@ -12,7 +12,7 @@ from atman.core.models.experience import (
     ReframingNoteAppendResult,
     SessionExperience,
 )
-from atman.core.models.fact import FactRecord, Relation
+from atman.core.models.fact import FactRecord, FactStatus, Relation
 from atman.core.models.governance import GovernanceDecision, GovernanceMode
 from atman.core.models.identity import (
     CoreValue,
@@ -65,6 +65,7 @@ __all__ = [
     "EmotionalDepth",
     "ExperienceRecord",
     "FactRecord",
+    "FactStatus",
     "FeltSense",
     "Goal",
     "GoalHorizon",
