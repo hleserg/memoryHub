@@ -36,6 +36,7 @@ All paths are absolute relative to the repository root.
 | `core/ports/clock.py` | Domain clock for reproducibility | `ClockPort` (Protocol) |
 | `core/ports/state_store.py` | Storage for experience/identity/narrative | `StateStore`, `ExperienceQuery`, `SessionExperienceQuery`, `ValuesTouchedQuery`, `DepthQuery`, `DateRangeQuery` |
 | `core/ports/reflection.py` | Reflection Engine dependencies; `ReflectionModel` returns structured DTOs (#146) | `ExperienceRepository`, `IdentityRepository`, `NarrativeRepository`, `ReflectionModel`, `PatternStore`, `ReflectionEventStore`, `HealthAssessmentStore`, `ReflectionEventPersistenceObserver`, `NarrativeWriteAuditPort` |
+|| **`core/ports/reflection_store.py`** | **E27**: PostgreSQL `reflections` table interface | `ReflectionStore` (ABC): `add`, `get`, `list_by_session`, `list_recent`, `list_by_level`, `list_by_experience` |
 
 ### 1.3. Services (`src/atman/core/services/`)
 
