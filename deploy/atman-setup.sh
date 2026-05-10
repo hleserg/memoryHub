@@ -26,7 +26,7 @@ POSTGRES_USER="atman"
 POSTGRES_PORT="5432"
 QDRANT_PORT="6333"
 QDRANT_VERSION="latest"
-OLLAMA_LLM_MODEL="qwen3:14b"
+OLLAMA_LLM_MODEL="qwen3.5:9b"
 OLLAMA_EMBED_MODEL="qwen3-embedding:1.5b"
 
 # NVMe путь — скрипт определит автоматически или использует дефолт

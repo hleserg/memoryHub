@@ -5,8 +5,7 @@
 # Секреты — НИКОГДА в git
 .secrets
 *.secrets
-*.secret
-secrets.env
+*secrets*
 
 # Сгенерированные файлы (создаются из шаблонов)
 ../docker-compose.yml
@@ -18,7 +17,6 @@ secrets.env
 # Бэкапы
 *.sql.gz
 *.sql
-!schema.sql
 
 # Временные файлы
 *.tmp
