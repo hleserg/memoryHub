@@ -7,13 +7,20 @@ Uses Ollama's local LLM API for structured generation during reflection.
 import json
 import os
 import warnings
-from typing import Any, TypedDict, TypeVar
+from typing import Any, TypeVar
 from urllib.parse import urlparse
 
 import httpx
 import pydantic
 
 from atman.adapters.reflection.exceptions import OllamaReflectionError
+from atman.adapters.reflection.prompts import (
+    OllamaMessage,
+    build_health_messages,
+    build_narrative_messages,
+    build_pattern_messages,
+    build_reframing_messages,
+)
 from atman.core.models.experience import SessionExperience
 from atman.core.models.identity import Identity
 from atman.core.models.narrative import NarrativeDocument
@@ -28,13 +35,6 @@ from atman.core.models.reflection import (
 from atman.core.ports.reflection import ReflectionModel
 
 T = TypeVar("T", bound=pydantic.BaseModel)
-
-
-class OllamaMessage(TypedDict):
-    """Type for Ollama API message."""
-
-    role: str
-    content: str
 
 
 class OllamaReflectionModel(ReflectionModel):
@@ -166,24 +166,18 @@ class OllamaReflectionModel(ReflectionModel):
         experience: SessionExperience,
         context: dict[str, str],
     ) -> ReframingNoteOutput:
-        """
-        Generate a reframing note for an experience.
-
-        NOT IMPLEMENTED: This is part of E21.2.
-        """
-        raise NotImplementedError("E21.2: reflection methods")
+        """Generate a reframing note for an experience via Ollama."""
+        messages = build_reframing_messages(experience, context)
+        return self._call_with_retry(messages, ReframingNoteOutput)
 
     def detect_pattern(
         self,
         experiences: list[SessionExperience],
         context: dict[str, str],
     ) -> PatternDetectionOutput:
-        """
-        Detect and describe a pattern across experiences.
-
-        NOT IMPLEMENTED: This is part of E21.2.
-        """
-        raise NotImplementedError("E21.2: reflection methods")
+        """Detect and describe a pattern across experiences via Ollama."""
+        messages = build_pattern_messages(experiences, context)
+        return self._call_with_retry(messages, PatternDetectionOutput)
 
     def propose_narrative_update(
         self,
@@ -191,12 +185,13 @@ class OllamaReflectionModel(ReflectionModel):
         recent_experiences: list[SessionExperience],
         reflection_level: ReflectionLevel,
     ) -> NarrativeUpdateOutput:
-        """
-        Propose an update to the narrative.
-
-        NOT IMPLEMENTED: This is part of E21.2.
-        """
-        raise NotImplementedError("E21.2: reflection methods")
+        """Propose an update to the narrative via Ollama."""
+        messages = build_narrative_messages(
+            current_narrative,
+            recent_experiences,
+            reflection_level,
+        )
+        return self._call_with_retry(messages, NarrativeUpdateOutput)
 
     def assess_health_criterion(
         self,
@@ -204,9 +199,6 @@ class OllamaReflectionModel(ReflectionModel):
         experiences: list[SessionExperience],
         criterion: JahodaCriterion,
     ) -> HealthCriterionOutput:
-        """
-        Assess one Jahoda health criterion.
-
-        NOT IMPLEMENTED: This is part of E21.2.
-        """
-        raise NotImplementedError("E21.2: reflection methods")
+        """Assess one Jahoda health criterion via Ollama."""
+        messages = build_health_messages(identity, experiences, criterion)
+        return self._call_with_retry(messages, HealthCriterionOutput)
