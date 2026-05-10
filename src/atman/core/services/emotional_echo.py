@@ -154,10 +154,15 @@ class EmotionalEcho:
                 if echo.emotional_valence < -0.2
                 else "neutral"
             )
-            parts.append(
-                f"- {echo.what_happened[:80]}... "
-                f"({tone}, intensity: {echo.emotional_intensity:.1f})"
+            # Only append the truncation indicator when the original
+            # ``what_happened`` actually overflows the display budget;
+            # otherwise short moments would misleadingly read as truncated.
+            display = (
+                f"{echo.what_happened[:80]}..."
+                if len(echo.what_happened) > 80
+                else echo.what_happened
             )
+            parts.append(f"- {display} ({tone}, intensity: {echo.emotional_intensity:.1f})")
 
         return "\n".join(parts)
 

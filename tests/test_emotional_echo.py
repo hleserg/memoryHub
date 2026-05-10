@@ -182,6 +182,39 @@ def test_build_context_summary_renders_tones(now: datetime):
     assert "neutral" in summary
 
 
+def test_build_context_summary_truncation_only_for_long_text(now: datetime):
+    """Short ``what_happened`` strings render verbatim; long ones get a ``...`` suffix."""
+    store = InMemoryStateStore()
+    short_text = "short moment"
+    long_text = "x" * 100  # > 80 chars triggers truncation
+    store.create_experience(
+        ExperienceRecord(
+            experience=_experience(
+                timestamp=now - timedelta(hours=1),
+                valence=0.5,
+                intensity=0.5,
+                what_happened=short_text,
+            )
+        )
+    )
+    store.create_experience(
+        ExperienceRecord(
+            experience=_experience(
+                timestamp=now - timedelta(hours=1),
+                valence=0.5,
+                intensity=0.5,
+                what_happened=long_text,
+            )
+        )
+    )
+    summary = EmotionalEcho(state_store=store).build_context_summary(current_time=now)
+
+    # Short text should appear verbatim with no preceding "..." sentinel.
+    assert f"- {short_text} (" in summary
+    # Long text is truncated to 80 chars and ends with "...".
+    assert f"- {'x' * 80}... (" in summary
+
+
 def test_get_dominant_emotional_tone_zero_when_empty(now: datetime):
     service = EmotionalEcho(state_store=InMemoryStateStore())
     assert service.get_dominant_emotional_tone(current_time=now) == 0.0
