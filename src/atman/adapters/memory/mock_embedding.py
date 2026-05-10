@@ -7,6 +7,7 @@ Uses 2560-dimensional vectors to match qwen3-embedding:4b dimensions.
 
 import hashlib
 import math
+
 from typing_extensions import override
 
 from atman.core.ports.embedding import EmbeddingPort
