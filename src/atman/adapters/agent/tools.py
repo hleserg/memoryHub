@@ -11,6 +11,8 @@ All tools receive RunContext[AtmanDeps] as the first parameter,
 giving them access to services and session state.
 """
 
+from typing import Literal
+
 from pydantic_ai import RunContext
 
 from atman.adapters.agent.deps import AtmanDeps
@@ -24,7 +26,7 @@ def record_key_moment(
     why_it_matters: str,
     emotional_valence: float = 0.0,
     emotional_intensity: float = 0.5,
-    depth: str = "meaningful",
+    depth: Literal["surface", "meaningful", "profound"] = "meaningful",
 ) -> str:
     """
     Record a key moment during the current session.
@@ -55,18 +57,12 @@ def record_key_moment(
         return f"Error: emotional_intensity must be between 0.0 and 1.0, got {emotional_intensity}"
 
     try:
-        emotional_depth = EmotionalDepth(depth)
-    except ValueError:
-        allowed = ", ".join(d.value for d in EmotionalDepth)
-        return f"Error: depth must be one of [{allowed}], got {depth!r}"
-
-    try:
         key_moment = KeyMomentInput(
             what_happened=what_happened,
             why_it_matters=why_it_matters,
             emotional_valence=emotional_valence,
             emotional_intensity=emotional_intensity,
-            depth=emotional_depth,
+            depth=EmotionalDepth(depth),
         )
         ctx.deps.session_manager.record_key_moment(ctx.deps.session_id, key_moment)
         return f"Key moment recorded: {what_happened[:50]}..."

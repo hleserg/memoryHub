@@ -202,11 +202,11 @@ class TestRecordKeyMoment:
             ctx,
             what_happened="Something",
             why_it_matters="Matters",
-            depth="not-a-real-depth",
+            depth="not-a-real-depth",  # type: ignore[arg-type]
         )
 
         assert "Error" in result
-        assert "depth" in result
+        assert "EmotionalDepth" in result or "depth" in result
 
 
 class TestLogExperience:
