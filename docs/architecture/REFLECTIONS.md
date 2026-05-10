@@ -52,7 +52,7 @@ CREATE TABLE public.reflections (
 | `experience_refs` | UUID[] | Array of experience IDs analyzed in this reflection |
 | `reframing_note_ids` | UUID[] | Array of reframing note IDs produced by this reflection |
 | `model_provider` | TEXT | LLM provider (e.g., 'ollama', 'anthropic') |
-| `model_name` | TEXT | Model name (e.g., 'qwen3:14b') |
+| `model_name` | TEXT | Model name (e.g., 'qwen3.5:9b') |
 | `schema_version` | INTEGER | Schema version for migrations (currently 1) |
 | `metadata` | JSONB | Additional metadata as JSONB object |
 
@@ -216,7 +216,7 @@ Prior to E27, reflections were stored only in-memory via `ReflectionEventStore` 
 - Session context (`session_id`) for micro; time period (`period_start`, `period_end`) for daily/deep.
 - Free-form `content` field: stores LLM-generated reflection text.
 - Reference arrays: `experience_refs` (experiences analyzed), `reframing_note_ids` (notes created).
-- Model traceability: `model_provider`, `model_name` (e.g., `ollama` / `qwen3:14b`).
+- Model traceability: `model_provider`, `model_name` (e.g., `ollama` / `qwen3.5:9b`).
 - RLS policy: `agent_id = current_setting('atman.current_agent')` (matches `facts`, `experiences`).
 - Indexes: `(agent_id, created_at DESC)` for timeline, `GIN(experience_refs)` for cross-reference queries.
 
@@ -272,7 +272,7 @@ CREATE TABLE reflections (
 | `experience_refs`   | `UUID[]`          | Array of `experiences.id` analyzed in this reflection |
 | `reframing_note_ids`| `UUID[]`          | Array of `reframing_notes.id` created by this reflection |
 | `model_provider`    | `TEXT`            | LLM provider: `ollama`, `anthropic`, etc. |
-| `model_name`        | `TEXT`            | Specific model: e.g., `qwen3:14b`, `claude-3.5-sonnet` |
+| `model_name`        | `TEXT`            | Specific model: e.g., `qwen3.5:9b`, `claude-3.5-sonnet` |
 | `schema_version`    | `INTEGER`         | Schema version for migrations (current: 1) |
 | `metadata`          | `JSONB`           | Additional structured data (e.g., health assessment references) |
 
@@ -326,7 +326,7 @@ record = persist_micro_reflection(
 >>>>>>> origin/main
     experience_refs=[exp_id1, exp_id2],
     model_provider="ollama",
-    model_name="qwen3:14b",
+    model_name="qwen3.5:9b",
 )
 
 <<<<<<< HEAD
@@ -548,11 +548,11 @@ Future work: services will call `ReflectionStore.add()` after generating reflect
 Once E25 lands, add:
 
 ```sql
-ALTER TABLE reflections ADD COLUMN embedding VECTOR(768);
+ALTER TABLE reflections ADD COLUMN embedding halfvec(2560);
 ALTER TABLE reflections ADD COLUMN embed_model TEXT;
 
 CREATE INDEX idx_reflections_embedding
-    ON reflections USING hnsw(embedding vector_cosine_ops);
+    ON reflections USING hnsw(embedding halfvec_cosine_ops);
 ```
 
 **Purpose:** Semantic search over reflection content ("find reflections similar to X").
@@ -628,10 +628,10 @@ When the EmbeddingPort lands (Epic E25), an embedding column will be added via m
 ```sql
 -- Future migration (E25 follow-up)
 ALTER TABLE public.reflections
-ADD COLUMN embedding VECTOR(768);
+ADD COLUMN embedding halfvec(2560);
 
 CREATE INDEX idx_reflections_embedding
-    ON public.reflections USING hnsw(embedding vector_cosine_ops);
+    ON public.reflections USING hnsw(embedding halfvec_cosine_ops);
 
 COMMENT ON COLUMN public.reflections.embedding IS
     'Vector embedding of reflection content for semantic search';

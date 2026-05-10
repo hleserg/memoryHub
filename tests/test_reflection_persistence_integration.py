@@ -42,7 +42,7 @@ def test_persist_micro_reflection_after_session():
         summary="Positive collaborative session",
         experience_refs=[exp_id1, exp_id2],
         model_provider="ollama",
-        model_name="qwen3:14b",
+        model_name="qwen3.5:9b",
     )
 
     # Verify persistence
@@ -86,7 +86,7 @@ def test_persist_daily_reflection_pattern_detection():
         summary="Pattern: over-explaining when uncertain",
         experience_refs=[uuid4(), uuid4(), uuid4()],
         model_provider="ollama",
-        model_name="qwen3:14b",
+        model_name="qwen3.5:9b",
     )
 
     # Verify persistence
@@ -132,7 +132,7 @@ def test_persist_deep_reflection_with_health_assessment():
         experience_refs=[uuid4() for _ in range(10)],
         reframing_note_ids=[uuid4(), uuid4()],
         model_provider="ollama",
-        model_name="qwen3:14b",
+        model_name="qwen3.5:9b",
     )
 
     # Verify persistence

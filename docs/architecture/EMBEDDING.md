@@ -33,7 +33,7 @@ class EmbeddingPort(ABC):
 
 ### Key Design Decisions
 
-1. **Dimension Consistency**: All adapters must return vectors of the configured dimension (768 for qwen3-embedding:1.5b)
+1. **Dimension Consistency**: All adapters must return vectors of the configured dimension (2560 for qwen3-embedding:4b)
 2. **Determinism**: Mock adapter uses `hash(text) % 2^31` seeding for reproducible test results
 3. **Model Traceability**: `model_name()` enables tracking which model generated each embedding
 
@@ -44,7 +44,7 @@ Embedding configuration is controlled via environment variables:
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `EMBEDDING_BACKEND` | `mock` | Backend to use: `ollama` or `mock` |
-| `EMBEDDING_MODEL` | `qwen3-embedding:1.5b` | Ollama model name |
+| `EMBEDDING_MODEL` | `qwen3-embedding:4b` | Ollama model name |
 | `EMBEDDING_DIMENSION` | `768` | Expected vector dimension |
 | `EMBEDDING_OLLAMA_HOST` | `http://localhost:11434` | Ollama API endpoint |
 | `EMBEDDING_TIMEOUT` | `30.0` | Request timeout in seconds |
@@ -69,18 +69,18 @@ from atman.adapters.memory.ollama_embedding import OllamaEmbeddingAdapter
 
 adapter = OllamaEmbeddingAdapter(
     base_url="http://localhost:11434",
-    model="qwen3-embedding:1.5b",
+    model="qwen3-embedding:4b",
     timeout=30.0,
 )
 
 embedding = adapter.embed("semantic search query")
-assert len(embedding) == 768
-assert adapter.model_name() == "qwen3-embedding:1.5b"
+assert len(embedding) == 2560
+assert adapter.model_name() == "qwen3-embedding:4b"
 ```
 
 **Requirements:**
 - Running Ollama instance
-- Model pulled: `ollama pull qwen3-embedding:1.5b`
+- Model pulled: `ollama pull qwen3-embedding:4b`
 
 ### MockEmbeddingAdapter
 
@@ -89,7 +89,7 @@ Deterministic test adapter with no external dependencies.
 **Features:**
 - Same text always produces same embedding
 - Different texts produce different embeddings
-- 768-dimensional unit vectors
+- 2560-dimensional unit vectors
 - LCG-based deterministic generation
 
 **Usage:**
@@ -101,17 +101,17 @@ adapter = MockEmbeddingAdapter()
 embedding1 = adapter.embed("hello world")
 embedding2 = adapter.embed("hello world")
 assert embedding1 == embedding2  # Deterministic
-assert adapter.dimension() == 768
+assert adapter.dimension() == 2560
 assert adapter.model_name() == "mock-embedding:768d"
 ```
 
-## Model Choice: qwen3-embedding:1.5b
+## Model Choice: qwen3-embedding:4b
 
-The default embedding model is `qwen3-embedding:1.5b` for the following reasons:
+The default embedding model is `qwen3-embedding:4b` for the following reasons:
 
-| Criterion | qwen3-embedding:1.5b |
+| Criterion | qwen3-embedding:4b |
 |-----------|-------------------|
-| **Dimension** | 768 (fits VECTOR(768) schema) |
+| **Dimension** | 2560 |
 | **Quality** | Good performance on MTEB benchmarks |
 | **Speed** | ~50ms per query on consumer GPU |
 | **Size** | 1.5B parameters, ~600MB |
@@ -284,7 +284,7 @@ RuntimeError: Empty embedding received from Ollama
 
 **Solution:** Pull the model:
 ```bash
-ollama pull qwen3-embedding:1.5b
+ollama pull qwen3-embedding:4b
 ```
 
 ### Dimension Mismatch
@@ -298,5 +298,5 @@ ValueError: Vectors must have same dimension
 ## References
 
 - Issue: [#391](https://github.com/hleserg/atman/issues/391) - Epic E25
-- Model: [qwen3-embedding:1.5b](https://ollama.com/library/qwen3-embedding)
+- Model: [qwen3-embedding:4b](https://ollama.com/library/qwen3-embedding)
 - Ollama API: [embed endpoint](https://github.com/ollama/ollama/blob/main/docs/api.md#generate-embeddings)

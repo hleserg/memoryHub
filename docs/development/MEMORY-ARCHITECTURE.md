@@ -36,7 +36,7 @@
 
 **Что хранится:**
 
-Таблица `facts` содержит каждый факт как атомарную единицу: текст (`content`), источник (`source`), теги (`tags[]`), и векторное представление (`embedding VECTOR(768)`). Векторный индекс типа HNSW позволяет делать семантический поиск — находить факты похожие по смыслу даже если слова другие. Дополнительно — полнотекстовый поиск по русскому языку через `pg_trgm`.
+Таблица `facts` содержит каждый факт как атомарную единицу: текст (`content`), источник (`source`), теги (`tags[]`), и векторное представление (`embedding halfvec(2560)`). Векторный индекс типа HNSW позволяет делать семантический поиск — находить факты похожие по смыслу даже если слова другие. Дополнительно — полнотекстовый поиск по русскому языку через `pg_trgm`.
 
 Таблица `fact_relations` хранит направленные связи между фактами: `led_to`, `confirms`, `contradicts`, `supports`. Это граф знаний агента. Связи тоже изолированы по `agent_id`.
 
@@ -44,7 +44,7 @@
 
 **Sharing (выключено):** Таблица `fact_sharing` заложена в схему с флагом `active DEFAULT FALSE`. Когда придёт время экспериментов с общими фактами между агентами — включается для конкретной пары без изменения архитектуры.
 
-**Семантический поиск:** эмбеддинги строятся моделью `qwen3-embedding:1.5b` через Ollama. Размерность 768. HNSW индекс на `facts.embedding` обеспечивает поиск за O(log n). При каждом добавлении факта адаптер автоматически вызывает embedding API и сохраняет вектор.
+**Семантический поиск:** эмбеддинги строятся моделью `qwen3-embedding:4b` через Ollama. Размерность 2560. HNSW индекс на `facts.embedding` обеспечивает поиск за O(log n). При каждом добавлении факта адаптер автоматически вызывает embedding API и сохраняет вектор.
 
 **Порт Atman:** `FactualMemory` с методами `add_fact`, `get_fact`, `search`, `link`, `list_recent`. Atman не знает что за ним PostgreSQL — только контракт порта.
 
@@ -226,7 +226,7 @@ def get_other_agent_experience(self, other_agent_id, experience_id):
 | Основная БД | PostgreSQL | 16 | все таблицы, RLS, триггеры |
 | Векторный поиск | pgvector | latest | HNSW индексы на embedding полях |
 | Векторная база (резерв) | Qdrant | latest | коллекции `atman_facts`, `atman_experiences` |
-| Embedding модель | qwen3-embedding:1.5b | — | 768 dims, мультиязычная, Ollama |
+| Embedding модель | qwen3-embedding:4b | — | 2560 dims, мультиязычная, Ollama |
 | LLM | qwen3.5:9b | — | ReflectionModel, Ollama |
 | ORM / миграции | SQLAlchemy + Alembic | — | схема как код, версионирование |
 
@@ -244,7 +244,7 @@ pgvector отлично работает на размерах которые б
 
 | Этап | Что делается |
 |---|---|
-| **Сейчас** | PostgreSQL схема, Qdrant коллекции, qwen3-embedding:1.5b |
+| **Сейчас** | PostgreSQL схема, Qdrant коллекции, qwen3-embedding:4b |
 | **MODEL-02** | QdrantFactualAdapter, SQLiteExperienceAdapter → PostgresExperienceAdapter |
 | **Reflection Engine** | семантический поиск похожих переживаний, reframing через LLM |
 | **Reality Anchor** | мониторинг дрейфа идентичности в реальном времени |

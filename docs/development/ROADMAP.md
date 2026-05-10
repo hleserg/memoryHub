@@ -35,7 +35,7 @@
 
 - Нет Pydantic AI интеграции
 - Нет PostgreSQL/pgvector адаптера (всё на JSONL)
-- Нет embedding-адаптера (qwen3-embedding:1.5b через Ollama)
+- Нет embedding-адаптера (qwen3-embedding:4b через Ollama)
 - Нет конфигурации агентов A vs B
 - Нет системы метрик для A/B сравнения
 - Нет интерфейса аудита живых сессий
@@ -64,7 +64,7 @@
 | # | Задача | Сложность | Кто | Issue |
 |---|--------|-----------|-----|-------|
 | 0.1 | Ollama адаптер для ReflectionModel (`OllamaReflectionModel`): httpx → localhost:11434, JSON mode, Pydantic валидация, retry макс 2 | M | AI | #147 |
-| 0.2 | Embedding адаптер: порт `EmbeddingModel`, реализация для qwen3-embedding:1.5b (768d), fallback-заглушка для тестов | M | AI | *(нет issue)* |
+| 0.2 | Embedding адаптер: порт `EmbeddingModel`, реализация для qwen3-embedding:4b (768d), fallback-заглушка для тестов | M | AI | *(нет issue)* |
 | 0.3 | Anthropic адаптер для ReflectionModel | S | AI | #148 |
 | 0.4 | Pydantic AI интеграция: враппер над SessionManager + ReflectionEngine как Pydantic AI агент; system prompt из IdentityStore; tools: record_key_moment, log_experience | L | AI + Сергей | *(нет issue)* |
 | 0.5 | ANCHOR-01: модели AgentEvent, IdentityReference, RealitySignal, Intervention; RealityAnchorService с rule-based детекторами (принципы, тон, voice drift) | M | AI | #149 |
@@ -148,7 +148,7 @@
 | Компонент | Технология |
 |-----------|-----------|
 | Агентный фреймворк | Pydantic AI |
-| Embedding | qwen3-embedding:1.5b (Ollama, локально) |
+| Embedding | qwen3-embedding:4b (Ollama, локально) |
 | LLM основной | qwen3.5:9b (Ollama, локально) |
 | LLM тест | Command R 08-2024 (Cohere API) |
 | Rerank | Cohere Rerank 3.5 |

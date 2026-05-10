@@ -1,7 +1,7 @@
 """
 Tests for OllamaEmbeddingAdapter.
 
-Issue: E25.3 - Implement OllamaEmbeddingAdapter against qwen3-embedding:1.5b
+Issue: E25.3 - Implement OllamaEmbeddingAdapter against qwen3-embedding:4b
 Uses mocked HTTP responses to avoid requiring a running Ollama instance.
 """
 
@@ -21,15 +21,15 @@ class TestOllamaEmbeddingAdapter:
         """Provide a fresh OllamaEmbeddingAdapter instance."""
         return OllamaEmbeddingAdapter(
             base_url="http://localhost:11434",
-            model="qwen3-embedding:1.5b",
+            model="qwen3-embedding:4b",
             timeout=30.0,
         )
 
     @pytest.fixture
     def mock_768_embedding(self) -> list[float]:
-        """Generate a fake 768-dim embedding for mocking."""
+        """Generate a fake 2560-dim embedding for mocking."""
         # Deterministic fake embedding
-        return [float(i % 10) / 10.0 for i in range(768)]
+        return [float(i % 10) / 10.0 for i in range(2560)]
 
     # ==========================================================================
     # Basic Functionality Tests
@@ -45,7 +45,7 @@ class TestOllamaEmbeddingAdapter:
 
     def test_model_name_reports_configured_model(self, adapter: OllamaEmbeddingAdapter) -> None:
         """Adapter reports configured model name."""
-        assert adapter.model_name() == "qwen3-embedding:1.5b"
+        assert adapter.model_name() == "qwen3-embedding:4b"
 
     def test_custom_model_name(self) -> None:
         """Custom model name is reported correctly."""
@@ -67,7 +67,7 @@ class TestOllamaEmbeddingAdapter:
         with patch("urllib.request.urlopen", return_value=mock_context):
             dim = adapter.dimension()
 
-        assert dim == 768
+        assert dim == 2560
 
     def test_dimension_caches_result(
         self, adapter: OllamaEmbeddingAdapter, mock_768_embedding: list[float]
@@ -109,7 +109,7 @@ class TestOllamaEmbeddingAdapter:
             result = adapter.embed("hello world")
 
         assert isinstance(result, list)
-        assert len(result) == 768
+        assert len(result) == 2560
         assert all(isinstance(x, float) for x in result)
 
     def test_embed_makes_correct_api_call(
@@ -137,7 +137,7 @@ class TestOllamaEmbeddingAdapter:
 
         # Parse request body
         body = json.loads(request.data.decode("utf-8"))
-        assert body["model"] == "qwen3-embedding:1.5b"
+        assert body["model"] == "qwen3-embedding:4b"
         assert body["input"] == "test text"
 
     def test_embed_handles_embeddings_field_response(
@@ -155,7 +155,7 @@ class TestOllamaEmbeddingAdapter:
         with patch("urllib.request.urlopen", return_value=mock_context):
             result = adapter.embed("hello")
 
-        assert len(result) == 768
+        assert len(result) == 2560
 
     # ==========================================================================
     # Embed Batch Tests
@@ -180,7 +180,7 @@ class TestOllamaEmbeddingAdapter:
         assert len(results) == 3
         for emb in results:
             assert isinstance(emb, list)
-            assert len(emb) == 768
+            assert len(emb) == 2560
 
     def test_embed_batch_makes_correct_api_call(
         self, adapter: OllamaEmbeddingAdapter, mock_768_embedding: list[float]
@@ -304,7 +304,7 @@ class TestOllamaEmbeddingAdapter:
 
     def test_similarity_dimension_mismatch_raises(self, adapter: OllamaEmbeddingAdapter) -> None:
         """Similarity with mismatched dimensions raises ValueError."""
-        vec1 = [1.0] * 768
+        vec1 = [1.0] * 2560
         vec2 = [1.0] * 767
         with pytest.raises(ValueError, match="Vectors must have same dimension"):
             adapter.similarity(vec1, vec2)
@@ -317,7 +317,7 @@ class TestOllamaEmbeddingAdapter:
         """Health check returns True when Ollama is available and model exists."""
         mock_response = MagicMock()
         mock_response.read.return_value = json.dumps(
-            {"models": [{"name": "qwen3-embedding:1.5b"}]}
+            {"models": [{"name": "qwen3-embedding:4b"}]}
         ).encode("utf-8")
         # urlopen is used as context manager: with urlopen(...) as response
         mock_context = MagicMock()

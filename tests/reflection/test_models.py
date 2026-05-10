@@ -56,7 +56,7 @@ class TestReflectionEvent:
             experience_refs=[exp_ref1, exp_ref2],
             reframing_note_ids=[note_ref1],
             model_provider="ollama",
-            model_name="qwen3:14b",
+            model_name="qwen3.5:9b",
             schema_version=1,
             metadata={"key": "value"},
         )
@@ -71,7 +71,7 @@ class TestReflectionEvent:
         assert len(event.experience_refs) == 2
         assert len(event.reframing_note_ids) == 1
         assert event.model_provider == "ollama"
-        assert event.model_name == "qwen3:14b"
+        assert event.model_name == "qwen3.5:9b"
 
     def test_content_cannot_be_empty(self) -> None:
         """Test that content cannot be empty."""
@@ -149,10 +149,10 @@ class TestReflectionEvent:
             agent_id=agent_id,
             level=ReflectionLevel.DAILY,
             content="valid content",
-            model_name="  qwen3:14b  ",
+            model_name="  qwen3.5:9b  ",
         )
 
-        assert event.model_name == "qwen3:14b"
+        assert event.model_name == "qwen3.5:9b"
 
     def test_reflection_level_enum(self) -> None:
         """Test ReflectionLevel enum values."""

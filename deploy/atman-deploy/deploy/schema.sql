@@ -39,16 +39,16 @@ CREATE TABLE IF NOT EXISTS facts (
     content    TEXT NOT NULL,
     source     TEXT NOT NULL,
     tags       TEXT[] NOT NULL DEFAULT '{}',
-    embedding  VECTOR(768),
+    embedding  halfvec(2560),
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     metadata   JSONB NOT NULL DEFAULT '{}'
 );
 COMMENT ON TABLE facts IS 'Фактическая память. Факты без интерпретаций.';
-COMMENT ON COLUMN facts.embedding IS 'Вектор qwen3-embedding:1.5b, 768 dims.';
+COMMENT ON COLUMN facts.embedding IS 'Вектор qwen3-embedding:4b, 2560 dims.';
 
 CREATE INDEX IF NOT EXISTS idx_facts_agent     ON facts(agent_id);
 CREATE INDEX IF NOT EXISTS idx_facts_tags      ON facts USING GIN(tags);
-CREATE INDEX IF NOT EXISTS idx_facts_embedding ON facts USING hnsw(embedding vector_cosine_ops);
+CREATE INDEX IF NOT EXISTS idx_facts_embedding ON facts USING hnsw(embedding halfvec_cosine_ops);
 CREATE INDEX IF NOT EXISTS idx_facts_fts       ON facts USING GIN(to_tsvector('russian', content));
 
 ALTER TABLE facts ENABLE ROW LEVEL SECURITY;
@@ -139,7 +139,7 @@ CREATE TABLE IF NOT EXISTS key_moments (
     experience_id         UUID NOT NULL REFERENCES experiences(id) ON DELETE CASCADE,
     agent_id              UUID NOT NULL REFERENCES agents(id) ON DELETE CASCADE,
     what_happened         TEXT NOT NULL,
-    embedding             VECTOR(768),
+    embedding             halfvec(2560),
     emotional_valence     FLOAT NOT NULL CHECK (emotional_valence BETWEEN -1 AND 1),
     emotional_intensity   FLOAT NOT NULL CHECK (emotional_intensity BETWEEN 0 AND 1),
     depth                 TEXT NOT NULL CHECK (depth IN ('surface', 'meaningful', 'profound')),
@@ -155,7 +155,7 @@ COMMENT ON COLUMN key_moments.embedding IS 'Вектор what_happened — дл�
 
 CREATE INDEX IF NOT EXISTS idx_km_experience ON key_moments(experience_id);
 CREATE INDEX IF NOT EXISTS idx_km_agent      ON key_moments(agent_id);
-CREATE INDEX IF NOT EXISTS idx_km_embedding  ON key_moments USING hnsw(embedding vector_cosine_ops);
+CREATE INDEX IF NOT EXISTS idx_km_embedding  ON key_moments USING hnsw(embedding halfvec_cosine_ops);
 CREATE INDEX IF NOT EXISTS idx_km_values     ON key_moments USING GIN(values_touched);
 CREATE INDEX IF NOT EXISTS idx_km_depth      ON key_moments(agent_id, depth);
 
@@ -242,7 +242,7 @@ COMMENT ON COLUMN public.reflections.summary IS 'Optional short title/summary';
 COMMENT ON COLUMN public.reflections.experience_refs IS 'IDs of experiences analyzed in this reflection';
 COMMENT ON COLUMN public.reflections.reframing_note_ids IS 'IDs of reframing notes produced by this reflection';
 COMMENT ON COLUMN public.reflections.model_provider IS 'LLM provider (ollama, anthropic, etc.)';
-COMMENT ON COLUMN public.reflections.model_name IS 'Model name (e.g., qwen3:14b)';
+COMMENT ON COLUMN public.reflections.model_name IS 'Model name (e.g., qwen3.5:9b)';
 COMMENT ON COLUMN public.reflections.schema_version IS 'Schema version for migrations';
 
 CREATE INDEX IF NOT EXISTS idx_reflections_agent_created ON public.reflections(agent_id, created_at DESC);
@@ -386,7 +386,7 @@ CREATE TABLE IF NOT EXISTS memory_access_log (
         'relation_traverse', 'narrative_read'
     )),
     query_text      TEXT,
-    query_embedding VECTOR(768),
+    query_embedding halfvec(2560),
     filters         JSONB NOT NULL DEFAULT '{}',
     result_count    INT NOT NULL DEFAULT 0,
     top_score       FLOAT,

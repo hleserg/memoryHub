@@ -78,7 +78,7 @@ class ReflectionEvent(BaseModel):
     )
     model_name: str | None = Field(
         default=None,
-        description="Model name (e.g., qwen3:14b)",
+        description="Model name (e.g., qwen3.5:9b)",
     )
     schema_version: int = Field(
         default=1,
@@ -124,7 +124,7 @@ class ReflectionEvent(BaseModel):
                 "experience_refs": [],
                 "reframing_note_ids": [],
                 "model_provider": "ollama",
-                "model_name": "qwen3:14b",
+                "model_name": "qwen3.5:9b",
                 "schema_version": 1,
                 "metadata": {},
             }

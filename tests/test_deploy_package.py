@@ -58,8 +58,8 @@ def test_gen_secrets_writes_restricted_env_file(tmp_path: Path) -> None:
             "atman",
             "5432",
             "6333",
-            "qwen3:14b",
-            "qwen3-embedding:1.5b",
+            "qwen3.5:9b",
+            "qwen3-embedding:4b",
         ],
         capture_output=True,
         text=True,
@@ -82,7 +82,7 @@ def test_gen_secrets_writes_restricted_env_file(tmp_path: Path) -> None:
     assert values["QDRANT_URL"] == "http://localhost:6333"
     assert len(values["POSTGRES_PASSWORD"]) == 32
     assert len(values["QDRANT_API_KEY"]) == 32
-    assert values["ATMAN_OLLAMA_MODEL"] == "qwen3:14b"
-    assert values["ATMAN_EMBED_MODEL"] == "qwen3-embedding:1.5b"
+    assert values["ATMAN_OLLAMA_MODEL"] == "qwen3.5:9b"
+    assert values["ATMAN_EMBED_MODEL"] == "qwen3-embedding:4b"
 
     assert os.access(output, os.R_OK | os.W_OK)

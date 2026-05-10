@@ -33,7 +33,7 @@ class EmbeddingPort(ABC):
 
 ### Ключевые архитектурные решения
 
-1. **Согласованность размерности**: Все адаптеры возвращают векторы заданной размерности (768 для qwen3-embedding:1.5b)
+1. **Согласованность размерности**: Все адаптеры возвращают векторы заданной размерности (2560 для qwen3-embedding:4b)
 2. **Детерминизм**: Mock-адаптер использует сид `hash(text) % 2^31` для воспроизводимых результатов
 3. **Отслеживаемость**: `model_name()` позволяет отслеживать, какая модель сгенерировала каждый эмбеддинг
 
@@ -44,7 +44,7 @@ class EmbeddingPort(ABC):
 | Переменная | Значение по умолчанию | Описание |
 |------------|----------------------|----------|
 | `EMBEDDING_BACKEND` | `mock` | Бэкенд: `ollama` или `mock` |
-| `EMBEDDING_MODEL` | `qwen3-embedding:1.5b` | Название модели Ollama |
+| `EMBEDDING_MODEL` | `qwen3-embedding:4b` | Название модели Ollama |
 | `EMBEDDING_DIMENSION` | `768` | Ожидаемая размерность вектора |
 | `EMBEDDING_OLLAMA_HOST` | `http://localhost:11434` | Эндпоинт API Ollama |
 | `EMBEDDING_TIMEOUT` | `30.0` | Таймаут запроса в секундах |
@@ -69,18 +69,18 @@ from atman.adapters.memory.ollama_embedding import OllamaEmbeddingAdapter
 
 adapter = OllamaEmbeddingAdapter(
     base_url="http://localhost:11434",
-    model="qwen3-embedding:1.5b",
+    model="qwen3-embedding:4b",
     timeout=30.0,
 )
 
 embedding = adapter.embed("семантический поисковый запрос")
-assert len(embedding) == 768
-assert adapter.model_name() == "qwen3-embedding:1.5b"
+assert len(embedding) == 2560
+assert adapter.model_name() == "qwen3-embedding:4b"
 ```
 
 **Требования:**
 - Запущенный экземпляр Ollama
-- Загруженная модель: `ollama pull qwen3-embedding:1.5b`
+- Загруженная модель: `ollama pull qwen3-embedding:4b`
 
 ### MockEmbeddingAdapter
 
@@ -89,7 +89,7 @@ assert adapter.model_name() == "qwen3-embedding:1.5b"
 **Возможности:**
 - Одинаковый текст всегда дает одинаковый эмбеддинг
 - Разные тексты дают разные эмбеддинги
-- 768-мерные единичные векторы
+- 2560-мерные единичные векторы
 - Детерминированная генерация на основе LCG
 
 **Использование:**
@@ -101,17 +101,17 @@ adapter = MockEmbeddingAdapter()
 embedding1 = adapter.embed("привет мир")
 embedding2 = adapter.embed("привет мир")
 assert embedding1 == embedding2  # Детерминизм
-assert adapter.dimension() == 768
+assert adapter.dimension() == 2560
 assert adapter.model_name() == "mock-embedding:768d"
 ```
 
-## Выбор модели: qwen3-embedding:1.5b
+## Выбор модели: qwen3-embedding:4b
 
-Модель по умолчанию — `qwen3-embedding:1.5b` по следующим причинам:
+Модель по умолчанию — `qwen3-embedding:4b` по следующим причинам:
 
-| Критерий | qwen3-embedding:1.5b |
+| Критерий | qwen3-embedding:4b |
 |----------|---------------------|
-| **Размерность** | 768 (соответствует схеме VECTOR(768)) |
+| **Размерность** | 2560 |
 | **Качество** | Хорошая производительность на бенчмарках MTEB |
 | **Скорость** | ~50 мс на запрос на потребительском GPU |
 | **Размер** | 1.5B параметров, ~600 МБ |
@@ -284,7 +284,7 @@ RuntimeError: Empty embedding received from Ollama
 
 **Решение:** Загрузить модель:
 ```bash
-ollama pull qwen3-embedding:1.5b
+ollama pull qwen3-embedding:4b
 ```
 
 ### Несоответствие размерности
@@ -298,5 +298,5 @@ ValueError: Vectors must have same dimension
 ## Ссылки
 
 - Issue: [#391](https://github.com/hleserg/atman/issues/391) - Epic E25
-- Модель: [qwen3-embedding:1.5b](https://ollama.com/library/qwen3-embedding)
+- Модель: [qwen3-embedding:4b](https://ollama.com/library/qwen3-embedding)
 - Ollama API: [embed endpoint](https://github.com/ollama/ollama/blob/main/docs/api.md#generate-embeddings)

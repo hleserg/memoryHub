@@ -78,9 +78,9 @@
 |------|----------------|-----------|
 | `adapters/memory/in_memory_backend.py` (`InMemoryBackend`) | `FactualMemory` | без персистенса |
 | `adapters/memory/file_backend.py` (`FileBackend`) | `FactualMemory` | JSONL + file locking |
-| `adapters/memory/mock_embedding.py` (`MockEmbeddingAdapter`) | `EmbeddingPort` | детерминированные 768-мерные эмбеддинги; seed=`hash(text) % 2^31`; `model_name()` возвращает `"mock-embedding:768d"` |
+| `adapters/memory/mock_embedding.py` (`MockEmbeddingAdapter`) | `EmbeddingPort` | детерминированные 2560-мерные эмбеддинги; seed=`hash(text) % 2^31`; `model_name()` возвращает `"mock-embedding:768d"` |
 | `adapters/memory/bm25_embedding.py` (`BM25EmbeddingAdapter`) | `EmbeddingPort` | разреженные лексические BM25 эмбеддинги |
-| `adapters/memory/ollama_embedding.py` (`OllamaEmbeddingAdapter`) | `EmbeddingPort` | Ollama API эмбеддинги; по умолчанию `qwen3-embedding:1.5b` (768-мерные); `model_name()` возвращает настроенную модель; доступен `health_check()` |
+| `adapters/memory/ollama_embedding.py` (`OllamaEmbeddingAdapter`) | `EmbeddingPort` | Ollama API эмбеддинги; по умолчанию `qwen3-embedding:4b` (2560-мерные); `model_name()` возвращает настроенную модель; доступен `health_check()` |
 | `adapters/memory/in_memory_usage_log.py` (`InMemoryUsageLog`) | `MemoryUsageLog` | in-memory трекинг использования |
 | `adapters/storage/in_memory_experience_store.py` (`InMemoryExperienceStore`) | `StateStore` | в памяти |
 | `adapters/storage/jsonl_experience_store.py` (`JsonlExperienceStore`) | `StateStore` | JSONL для опыта |

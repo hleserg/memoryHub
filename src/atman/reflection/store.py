@@ -52,7 +52,7 @@ class ReflectionStore:
                 level=ReflectionLevel.DAILY,
                 content="I noticed a pattern...",
                 model_provider="ollama",
-                model_name="qwen3:14b",
+                model_name="qwen3.5:9b",
             )
             stored = store.add(event)
     """

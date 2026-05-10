@@ -2,7 +2,7 @@
 OllamaEmbeddingAdapter - embedding via Ollama API.
 
 Requires running Ollama instance with an embedding model.
-Default model: qwen3-embedding:1.5b (lightweight, good quality)
+Default model: qwen3-embedding:4b (lightweight, good quality)
 """
 
 import json
@@ -20,11 +20,11 @@ class OllamaEmbeddingAdapter(EmbeddingPort):
     Embedding adapter using Ollama API.
 
     Requires Ollama to be running locally or at configured host.
-    Default model is qwen3-embedding:1.5b for good quality/speed balance.
+    Default model is qwen3-embedding:4b for good quality/speed balance.
 
     Environment variables:
         OLLAMA_HOST: Ollama server URL (default: http://localhost:11434)
-        OLLAMA_EMBED_MODEL: Model name (default: qwen3-embedding:1.5b)
+        OLLAMA_EMBED_MODEL: Model name (default: qwen3-embedding:4b)
     """
 
     def __init__(
@@ -38,7 +38,7 @@ class OllamaEmbeddingAdapter(EmbeddingPort):
 
         Args:
             base_url: Ollama server URL (defaults to OLLAMA_HOST env var or localhost)
-            model: Model name (defaults to OLLAMA_EMBED_MODEL env var or qwen3-embedding:1.5b)
+            model: Model name (defaults to OLLAMA_EMBED_MODEL env var or qwen3-embedding:4b)
             timeout: Request timeout in seconds
         """
         resolved_url = base_url or os.environ.get("OLLAMA_HOST", "http://localhost:11434")
@@ -47,7 +47,7 @@ class OllamaEmbeddingAdapter(EmbeddingPort):
                 f"OllamaEmbeddingAdapter base_url must be http(s)://, got {resolved_url!r}"
             )
         self.base_url = resolved_url
-        self.model = model or os.environ.get("OLLAMA_EMBED_MODEL", "qwen3-embedding:1.5b")
+        self.model = model or os.environ.get("OLLAMA_EMBED_MODEL", "qwen3-embedding:4b")
         self.timeout = timeout
         self._dimension: int | None = None
 

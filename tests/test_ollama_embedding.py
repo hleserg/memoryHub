@@ -164,9 +164,9 @@ def test_similarity_dimension_mismatch_raises():
 def test_health_check_returns_true_when_model_present():
     adapter = OllamaEmbeddingAdapter(
         base_url="http://localhost:11434",
-        model="qwen3-embedding:1.5b",
+        model="qwen3-embedding:4b",
     )
-    response = _FakeResponse({"models": [{"name": "qwen3-embedding:1.5b"}]})
+    response = _FakeResponse({"models": [{"name": "qwen3-embedding:4b"}]})
     with patch("urllib.request.urlopen", return_value=response):
         assert adapter.health_check() is True
 

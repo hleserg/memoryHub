@@ -155,7 +155,7 @@ class TestPersistedReflectionMethods:
 
         agent_id = uuid4()
         base_model = MagicMock()
-        base_model.model = "qwen3:14b"
+        base_model.model = "qwen3.5:9b"
         base_model.generate_reframing_note.return_value = ReframingNoteOutput(
             reflection="reframed", reflection_type="growth"
         )
@@ -177,7 +177,7 @@ class TestPersistedReflectionMethods:
         from atman.core.models.reflection import ReframingNoteOutput
 
         base_model = MagicMock()
-        base_model.model = "qwen3:14b"
+        base_model.model = "qwen3.5:9b"
         base_model.generate_reframing_note.return_value = ReframingNoteOutput(reflection="reframed")
         store = MagicMock()
         wrapper = _build_model(base_model, store)
@@ -192,7 +192,7 @@ class TestPersistedReflectionMethods:
         from atman.core.models.reflection import ReframingNoteOutput
 
         base_model = MagicMock()
-        base_model.model = "qwen3:14b"
+        base_model.model = "qwen3.5:9b"
         base_model.generate_reframing_note.return_value = ReframingNoteOutput(reflection="")
         store = MagicMock()
         wrapper = _build_model(base_model, store)
@@ -212,7 +212,7 @@ class TestPersistedReflectionMethods:
 
         agent_id = uuid4()
         base_model = MagicMock()
-        base_model.model = "qwen3:14b"
+        base_model.model = "qwen3.5:9b"
         base_model.detect_pattern.return_value = PatternDetectionOutput(
             description="d" * 250,  # >100 chars triggers summary truncation
         )
@@ -232,7 +232,7 @@ class TestPersistedReflectionMethods:
         from atman.core.models.reflection import PatternDetectionOutput
 
         base_model = MagicMock()
-        base_model.model = "qwen3:14b"
+        base_model.model = "qwen3.5:9b"
         base_model.detect_pattern.return_value = PatternDetectionOutput(description="x")
         store = MagicMock()
         wrapper = _build_model(base_model, store)
@@ -249,7 +249,7 @@ class TestPersistedReflectionMethods:
         narrative = self._narrative(ident.id)
 
         base_model = MagicMock()
-        base_model.model = "qwen3:14b"
+        base_model.model = "qwen3.5:9b"
         base_model.propose_narrative_update.return_value = NarrativeUpdateOutput(body="upd")
         store = MagicMock()
         wrapper = _build_model(base_model, store)
@@ -270,7 +270,7 @@ class TestPersistedReflectionMethods:
         narrative = self._narrative(ident.id)
 
         base_model = MagicMock()
-        base_model.model = "qwen3:14b"
+        base_model.model = "qwen3.5:9b"
         base_model.propose_narrative_update.return_value = NarrativeUpdateOutput(body="")
         store = MagicMock()
         wrapper = _build_model(base_model, store)
@@ -287,7 +287,7 @@ class TestPersistedReflectionMethods:
         )
 
         base_model = MagicMock()
-        base_model.model = "qwen3:14b"
+        base_model.model = "qwen3.5:9b"
         base_model.assess_health_criterion.return_value = HealthCriterionOutput(
             score=0.7, evidence=["e1", "e2"], concerns=["c1"]
         )
@@ -316,7 +316,7 @@ class TestPersistReflectionGuards:
         from atman.core.models.reflection import ReflectionLevel
 
         base_model = MagicMock()
-        base_model.model = "qwen3:14b"
+        base_model.model = "qwen3.5:9b"
         store = MagicMock()
         wrapper = _build_model(base_model, store)
         wrapper._persistence_enabled = False
@@ -330,7 +330,7 @@ class TestPersistReflectionGuards:
         from atman.core.models.reflection import ReflectionLevel
 
         base_model = MagicMock()
-        base_model.model = "qwen3:14b"
+        base_model.model = "qwen3.5:9b"
         store = MagicMock()
         store.add.side_effect = RuntimeError("boom")
         wrapper = _build_model(base_model, store)

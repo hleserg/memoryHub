@@ -520,7 +520,7 @@ class ReflectionRecord(BaseModel):
     - experience_refs: UUID[] NOT NULL DEFAULT '{}' -- experiences analyzed
     - reframing_note_ids: UUID[] NOT NULL DEFAULT '{}' -- reframing notes created
     - model_provider: TEXT -- 'ollama', 'anthropic', etc.
-    - model_name: TEXT -- e.g. 'qwen3:14b'
+    - model_name: TEXT -- e.g. 'qwen3.5:9b'
     - schema_version: INTEGER NOT NULL DEFAULT 1
     - metadata: JSONB NOT NULL DEFAULT '{}'
     """
@@ -571,7 +571,7 @@ class ReflectionRecord(BaseModel):
     model_provider: str | None = Field(
         default=None, description="LLM provider: 'ollama', 'anthropic', etc."
     )
-    model_name: str | None = Field(default=None, description="Specific model: e.g. 'qwen3:14b'")
+    model_name: str | None = Field(default=None, description="Specific model: e.g. 'qwen3.5:9b'")
 
     # Schema versioning and metadata
     schema_version: int = Field(
@@ -615,7 +615,7 @@ class ReflectionRecord(BaseModel):
                 "experience_refs": [],
                 "reframing_note_ids": [],
                 "model_provider": "ollama",
-                "model_name": "qwen3:14b",
+                "model_name": "qwen3.5:9b",
                 "schema_version": 1,
                 "metadata": {},
             }

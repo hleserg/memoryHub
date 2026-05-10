@@ -54,7 +54,7 @@ class EmbeddingPort(Protocol):
         Return the name of the embedding model used.
 
         Returns:
-            str: The model identifier (e.g., "qwen3-embedding:1.5b")
+            str: The model identifier (e.g., "qwen3-embedding:4b")
         """
         pass
 

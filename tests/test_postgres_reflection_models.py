@@ -84,7 +84,7 @@ def test_reflection_record_full_fields():
         experience_refs=[exp_id_1, exp_id_2],
         reframing_note_ids=[note_id_1],
         model_provider="ollama",
-        model_name="qwen3:14b",
+        model_name="qwen3.5:9b",
         schema_version=1,
         metadata={"temperature": 0.7, "top_p": 0.9},
     )
@@ -94,7 +94,7 @@ def test_reflection_record_full_fields():
     assert record.experience_refs == [exp_id_1, exp_id_2]
     assert record.reframing_note_ids == [note_id_1]
     assert record.model_provider == "ollama"
-    assert record.model_name == "qwen3:14b"
+    assert record.model_name == "qwen3.5:9b"
     assert record.metadata == {"temperature": 0.7, "top_p": 0.9}
 
 
@@ -161,7 +161,7 @@ def test_reflection_record_json_roundtrip():
         summary="Summary",
         experience_refs=[exp_id],
         model_provider="ollama",
-        model_name="qwen3:14b",
+        model_name="qwen3.5:9b",
         schema_version=1,
         metadata={"key": "value"},
     )
