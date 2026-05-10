@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
+from atman.adapters.memory.bm25_embedding import BM25EmbeddingAdapter
 from atman.adapters.memory.in_memory_backend import InMemoryBackend
 from atman.adapters.memory.mock_embedding import MockEmbeddingAdapter
 from atman.adapters.storage.in_memory_state_store import InMemoryStateStore
@@ -223,6 +224,34 @@ def test_surface_for_context_returns_high_similarity_match():
     )
     surfaced = injector.surface_for_context("real")
     assert len(surfaced) == 1
+
+
+def test_surface_for_context_works_with_bm25_embedding_adapter():
+    """Regression: the real zero-dependency embedding adapter must fit the injector."""
+    backend = InMemoryBackend()
+    fact = backend.add_fact(
+        FactRecord(
+            content="deployment rollback playbook prevents repeated outage",
+            source="runbook",
+        )
+    )
+    backend.add_fact(FactRecord(content="identity narrative review cadence", source="notes"))
+
+    injector = PassiveMemoryInjector(
+        embedding=BM25EmbeddingAdapter(dimension=64),
+        factual_memory=backend,
+        state_store=InMemoryStateStore(),
+        top_k_similarity=1,
+        associative_expand=False,
+        min_similarity_threshold=0.1,
+    )
+
+    surfaced = injector.surface_for_context("deployment rollback")
+
+    assert len(surfaced) == 1
+    assert surfaced[0].item.id == fact.id
+    assert surfaced[0].source == "similarity"
+    assert surfaced[0].score > 0.0
 
 
 def test_surface_experiences_returns_empty_when_no_experiences():

@@ -2,8 +2,14 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
+import pytest
+
+from atman.adapters.memory.file_backend import FileBackend
 from atman.adapters.memory.in_memory_backend import InMemoryBackend
 from atman.core.models.fact import FactRecord, FactStatus
+from atman.core.ports import FactualMemory
 from atman.core.services.conflict_detector import ConflictDetector
 
 
@@ -12,6 +18,14 @@ def _backend_with(*facts: FactRecord) -> InMemoryBackend:
     for fact in facts:
         backend.add_fact(fact)
     return backend
+
+
+@pytest.fixture(params=["in_memory", "file"])
+def persisted_backend(request: pytest.FixtureRequest, tmp_path: Path) -> FactualMemory:
+    """Exercise conflict detection against both volatile and persistent facts."""
+    if request.param == "file":
+        return FileBackend(tmp_path / "facts.jsonl")
+    return InMemoryBackend()
 
 
 def test_check_fact_returns_empty_when_no_other_facts():
@@ -49,6 +63,34 @@ def test_check_fact_detects_negation_contradiction():
     assert len(conflicts) >= 1
     assert conflicts[0].conflict_type == "contradiction"
     assert 0.0 < conflicts[0].confidence <= 0.9
+
+
+def test_check_fact_detects_negation_contradiction_across_backends(
+    persisted_backend: FactualMemory,
+):
+    persisted_backend.add_fact(FactRecord(content="build is healthy not really", source="ci"))
+    detector = ConflictDetector(factual_memory=persisted_backend)
+
+    conflicts = detector.check_fact(FactRecord(content="build is healthy", source="ci"))
+
+    assert len(conflicts) == 1
+    assert conflicts[0].conflict_type == "contradiction"
+
+
+def test_check_fact_does_not_surface_persistent_non_active_candidates(tmp_path: Path):
+    backend = FileBackend(tmp_path / "facts.jsonl")
+    inactive = backend.add_fact(FactRecord(content="build is healthy not really", source="ci"))
+    invalidated = backend.invalidate_fact(
+        inactive.id,
+        status=FactStatus.SUPERSEDED,
+        note="replaced by newer signal",
+    )
+    assert invalidated is not None
+
+    reloaded_backend = FileBackend(tmp_path / "facts.jsonl")
+    detector = ConflictDetector(factual_memory=reloaded_backend)
+
+    assert detector.check_fact(FactRecord(content="build is healthy", source="ci")) == []
 
 
 def test_check_fact_detects_inconsistency_via_shared_tags():

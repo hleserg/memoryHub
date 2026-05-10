@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
+from tempfile import TemporaryDirectory
 
 
 def _ensure_src_on_path() -> Path:
@@ -102,35 +103,36 @@ def main() -> int:
 
         print_section("ДЕМОНСТРАЦИЯ: FileBackend (персистентное хранилище)")
         demo_pace()
-        filepath = Path("/tmp/atman_demo_facts.jsonl")
+        with TemporaryDirectory(prefix="atman_demo_") as tmpdir:
+            filepath = Path(tmpdir) / "facts.jsonl"
 
-        print_info("\n[bold]1.[/bold] Первая сессия: добавление фактов...")
-        memory1 = FileBackend(filepath)
+            print_info("\n[bold]1.[/bold] Первая сессия: добавление фактов...")
+            memory1 = FileBackend(filepath)
 
-        fact1f = memory1.add_fact(
-            FactRecord(
-                content="Демонстрация персистентности",
-                source="demo_session",
-                tags=["demo", "persistence"],
+            fact1f = memory1.add_fact(
+                FactRecord(
+                    content="Демонстрация персистентности",
+                    source="demo_session",
+                    tags=["demo", "persistence"],
+                )
             )
-        )
-        print_ok(f"Добавлен факт: {fact1f.id}")
-        print_ok(f"Файл сохранен: {filepath}")
+            print_ok(f"Добавлен факт: {fact1f.id}")
+            print_ok(f"Файл сохранен: {filepath}")
 
-        print_info("\n[bold]2.[/bold] Вторая сессия: загрузка из файла...")
-        memory2 = FileBackend(filepath)
-        print_ok(f"Загружено фактов: {memory2.count()}")
+            print_info("\n[bold]2.[/bold] Вторая сессия: загрузка из файла...")
+            memory2 = FileBackend(filepath)
+            print_ok(f"Загружено фактов: {memory2.count()}")
 
-        retrieved2 = memory2.get_fact(fact1f.id)
-        if retrieved2:
-            print_ok("Факт успешно загружен из файла:")
-            print_info(f"  • ID: {retrieved2.id}")
-            print_info(f"  • Содержание: {retrieved2.content}")
+            retrieved2 = memory2.get_fact(fact1f.id)
+            if retrieved2:
+                print_ok("Факт успешно загружен из файла:")
+                print_info(f"  • ID: {retrieved2.id}")
+                print_info(f"  • Содержание: {retrieved2.content}")
 
-        print_info("\n[bold]3.[/bold] Очистка демо-файла...")
-        if filepath.exists():
-            filepath.unlink()
-            print_ok("Файл удален")
+            print_info("\n[bold]3.[/bold] Очистка демо-файла...")
+            if filepath.exists():
+                filepath.unlink()
+                print_ok("Файл удален")
 
         print_section("Готово")
         demo_pace()
