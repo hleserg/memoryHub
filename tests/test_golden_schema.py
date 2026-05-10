@@ -44,13 +44,15 @@ _GOLDEN_EXPERIENCE = """{
         },
         "why_it_matters": "schema stability",
         "values_touched": ["honesty"],
-        "reframing_notes": []
+        "reframing_notes": [],
+        "fact_refs": ["33333333-3333-4333-8333-333333333333"]
       }
     ],
     "reframing_notes": [],
     "salience": 1.0,
     "access_count": 0,
-    "last_accessed_at": "2025-01-15T09:00:00+00:00"
+    "last_accessed_at": "2025-01-15T09:00:00+00:00",
+    "fact_refs": ["33333333-3333-4333-8333-333333333333"]
   }
 }"""
 
@@ -62,6 +64,11 @@ def test_golden_experience_record_deserializes() -> None:
     assert record.experience.key_moments[0].how_i_felt.depth.value == "meaningful"
     assert record.experience.salience == 1.0
     assert record.experience.access_count == 0
+    # E24.2: fact_refs lift back-links from facts -> experiences.
+    assert str(record.experience.key_moments[0].fact_refs[0]) == (
+        "33333333-3333-4333-8333-333333333333"
+    )
+    assert str(record.experience.fact_refs[0]) == "33333333-3333-4333-8333-333333333333"
 
 
 # ---------------------------------------------------------------------------
@@ -135,7 +142,75 @@ _GOLDEN_FACT = """{
   "created_at": "2025-01-15T09:00:00+00:00",
   "updated_at": "2025-01-15T09:00:00+00:00",
   "relations": [],
-  "metadata": {}
+  "metadata": {},
+  "status": "active",
+  "invalidation_note": "",
+  "invalidated_at": null,
+  "disputed_at": null,
+  "superseded_by": null,
+  "confirmation_count": 0,
+  "last_confirmed_at": null,
+  "salience": 1.0
+}"""
+
+# E24.1: lifecycle states. The previous OUTDATED/RETRACTED/UNCERTAIN names
+# were renamed to DISPUTED/SUPERSEDED/INVALIDATED — this fixture freezes the
+# new wire values on disk so a future rename is caught immediately.
+_GOLDEN_FACT_DISPUTED = """{
+  "id": "44444444-4444-4444-8444-444444444444",
+  "content": "Disputed fact body",
+  "source": "test",
+  "tags": [],
+  "created_at": "2025-01-15T09:00:00+00:00",
+  "updated_at": "2025-01-15T09:00:00+00:00",
+  "relations": [],
+  "metadata": {},
+  "status": "disputed",
+  "invalidation_note": "conflicts with newer evidence",
+  "invalidated_at": null,
+  "disputed_at": "2025-01-15T10:00:00+00:00",
+  "superseded_by": null,
+  "confirmation_count": 2,
+  "last_confirmed_at": "2025-01-15T08:00:00+00:00",
+  "salience": 0.7
+}"""
+
+_GOLDEN_FACT_SUPERSEDED = """{
+  "id": "55555555-5555-4555-8555-555555555555",
+  "content": "Superseded fact body",
+  "source": "test",
+  "tags": [],
+  "created_at": "2025-01-14T09:00:00+00:00",
+  "updated_at": "2025-01-15T09:00:00+00:00",
+  "relations": [],
+  "metadata": {},
+  "status": "superseded",
+  "invalidation_note": "replaced by newer fact",
+  "invalidated_at": "2025-01-15T09:00:00+00:00",
+  "disputed_at": null,
+  "superseded_by": "66666666-6666-4666-8666-666666666666",
+  "confirmation_count": 0,
+  "last_confirmed_at": null,
+  "salience": 0.0
+}"""
+
+_GOLDEN_FACT_INVALIDATED = """{
+  "id": "77777777-7777-4777-8777-777777777777",
+  "content": "Invalidated fact body",
+  "source": "test",
+  "tags": [],
+  "created_at": "2025-01-14T09:00:00+00:00",
+  "updated_at": "2025-01-15T09:00:00+00:00",
+  "relations": [],
+  "metadata": {},
+  "status": "invalidated",
+  "invalidation_note": "no longer true",
+  "invalidated_at": "2025-01-15T09:00:00+00:00",
+  "disputed_at": null,
+  "superseded_by": null,
+  "confirmation_count": 0,
+  "last_confirmed_at": null,
+  "salience": 0.0
 }"""
 
 
@@ -144,6 +219,40 @@ def test_golden_fact_record_deserializes() -> None:
     assert str(fact.id) == "22222222-2222-4222-8222-222222222222"
     assert fact.content == "Golden fact content"
     assert "knowledge" in fact.tags
+    # E24.1 / E24.3: lifecycle + confirmation/salience fields persist on disk.
+    assert fact.status.value == "active"
+    assert fact.confirmation_count == 0
+    assert fact.last_confirmed_at is None
+    assert fact.disputed_at is None
+    assert fact.salience == 1.0
+
+
+def test_golden_fact_record_disputed_deserializes() -> None:
+    fact = FactRecord.model_validate_json(_GOLDEN_FACT_DISPUTED)
+    assert fact.status.value == "disputed"
+    assert fact.disputed_at is not None
+    assert fact.invalidated_at is None
+    assert fact.confirmation_count == 2
+    # DISPUTED keeps salience non-zero (provisional, not terminal).
+    assert fact.salience == 0.7
+    # ``effective_lifecycle_timestamp`` returns ``disputed_at`` for DISPUTED.
+    assert fact.effective_lifecycle_timestamp == fact.disputed_at
+
+
+def test_golden_fact_record_superseded_deserializes() -> None:
+    fact = FactRecord.model_validate_json(_GOLDEN_FACT_SUPERSEDED)
+    assert fact.status.value == "superseded"
+    assert fact.superseded_by is not None
+    assert fact.salience == 0.0
+    assert fact.effective_lifecycle_timestamp == fact.invalidated_at
+
+
+def test_golden_fact_record_invalidated_deserializes() -> None:
+    fact = FactRecord.model_validate_json(_GOLDEN_FACT_INVALIDATED)
+    assert fact.status.value == "invalidated"
+    assert fact.invalidated_at is not None
+    assert fact.disputed_at is None
+    assert fact.salience == 0.0
 
 
 # ---------------------------------------------------------------------------

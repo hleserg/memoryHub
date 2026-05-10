@@ -2,22 +2,18 @@
 root_packages =
     atman
 
-# Forbid production modules from importing atman.eval
-[importlinter:contract:eval-isolation]
-name = Production code must not import atman.eval
+[importlinter:contract:prod-eval-isolation]
+name = Production code must not import from atman.eval
 type = forbidden
 source_modules =
-    atman.factual_memory
-    atman.experience_store
-    atman.reflection_engine
-    atman.identity_store
-    atman.skill_loop
-    atman.session_manager
-    atman.reality_anchor
-    atman.proactive_engine
-    atman.affective_regulation
+    atman.core
+    atman.adapters
+    atman.cli
+    atman.cli_experience
+    atman.cli_identity
+    atman.cli_reflection
+    atman.tui
+    atman.web_dashboard
 forbidden_modules =
     atman.eval
-ignore_imports =
-    # No exceptions allowed — review this list carefully if you add one.
-
+unmatched_ignore_imports_alerting = warn

@@ -32,7 +32,7 @@ audit:
 	pip-audit -r /tmp/_atman_reqs.txt
 	@rm -f /tmp/_atman_reqs.txt
 
-check: lint format typecheck security test
+check: lint format typecheck security lint-boundary test
 	@echo ""
 	@echo "All checks passed."
 

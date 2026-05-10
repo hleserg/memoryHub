@@ -36,10 +36,10 @@ All paths are absolute relative to the repository root.
 | `core/ports/clock.py` | Domain clock for reproducibility | `ClockPort` (Protocol) |
 | `core/ports/state_store.py` | Storage for experience/identity/narrative | `StateStore`, `ExperienceQuery`, `SessionExperienceQuery`, `ValuesTouchedQuery`, `DepthQuery`, `DateRangeQuery` |
 | `core/ports/reflection.py` | Reflection Engine dependencies; `ReflectionModel` returns structured DTOs (#146) | `ExperienceRepository`, `IdentityRepository`, `NarrativeRepository`, `ReflectionModel`, `PatternStore`, `ReflectionEventStore`, `HealthAssessmentStore`, `ReflectionEventPersistenceObserver`, `NarrativeWriteAuditPort` |
-| `core/ports/embedding.py` | Text embedding interface for semantic search | `EmbeddingPort` (ABC) — `embed()`, `embed_batch()`, `dimension()`, `model_name()`, `similarity()` |
-| `core/ports/memory_middleware.py` | Integration point for live agent memory middleware | `MemoryMiddlewarePort` (Protocol), `MemoryContext` |
-| `core/ports/memory_usage_log.py` | Memory usage tracking for reflection | `MemoryUsageLog` (ABC), `MemoryUsageRecord`, `UsageType` |
-| **`core/ports/reflection_store.py`** | **E27**: PostgreSQL `reflections` table interface | `ReflectionStore` (ABC): `add`, `get`, `list_by_session`, `list_recent`, `list_by_level`, `list_by_experience` |
+| `core/ports/embedding.py` (E24.6) | Text embedding generation for semantic similarity | `EmbeddingPort` (Protocol) |
+| `core/ports/memory_middleware.py` (E24) | Memory surfacing context wrapping | `MemoryMiddlewarePort` (Protocol), `MemoryContext` |
+| `core/ports/memory_usage_log.py` (E24.10) | Audit log for surfaced/used memory items | `MemoryUsageLog` (ABC), `MemoryUsageRecord`, `UsageType` |
+| `core/ports/reflection_store.py` (E27) | PostgreSQL `reflections` table interface | `ReflectionStore` (ABC): `add`, `get`, `list_by_session`, `list_recent`, `list_by_level`, `list_by_experience` |
 
 ### 1.3. Services (`src/atman/core/services/`)
 
@@ -52,22 +52,20 @@ All paths are absolute relative to the repository root.
 | `core/services/session_manager.py` | Session runtime: start, record events/key moments, finish with eigenstate (thread-safe registry, optional `max_active_sessions`) | `SessionManager`, `MAX_EIGENSTATE_ITEMS`; session errors live in `core/exceptions.py` |
 | `core/services/reflection_service.py` | Three reflection levels: micro, daily, deep | `MicroReflectionService`, `DailyReflectionService`, `DeepReflectionService` |
 | `core/services/principle_advisor.py` | Distinguish habit vs principle; advise on principle revision | `PrincipleRevisionAdvisor` |
-| `core/services/session_working_memory.py` | In-session cache preventing repeated searches | `SessionWorkingMemory`, `CachedItem` |
-| `core/services/passive_memory_injector.py` | Automatic surfacing via embedding similarity + associative expand | `PassiveMemoryInjector`, `SurfacedMemory` |
-| `core/services/emotional_echo.py` | Historical emotional context builder | `EmotionalEcho`, `EchoItem` |
-| `core/services/conflict_detector.py` | Detects contradictions between active facts | `ConflictDetector`, `FactConflict` |
+| `core/services/conflict_detector.py` (E24.5) | Detect contradictions between active facts; produces small cognitive tension signals | `ConflictDetector`, `FactConflict` |
+| `core/services/emotional_echo.py` (E24.7) | Build historical emotional context from recent experiences (recency × intensity) | `EmotionalEcho`, `EchoItem` |
+| `core/services/passive_memory_injector.py` (E24.6, E24.8) | Surface relevant facts/experiences via embedding similarity + 1-hop graph expansion | `PassiveMemoryInjector`, `SurfacedMemory` |
+| `core/services/session_working_memory.py` (E24.9) | In-session LRU cache of surfaced facts/experiences to avoid duplicate surfacing | `SessionWorkingMemory`, `CachedItem` |
 
 ### 1.4. Core utilities
 
 | File | Purpose |
 |------|---------|
-| `config.py` | Pydantic Settings: `EmbeddingSettings` with `EMBEDDING_BACKEND`, `EMBEDDING_MODEL`, `EMBEDDING_DIMENSION`, `EMBEDDING_OLLAMA_HOST`, `EMBEDDING_TIMEOUT` |
 | `core/exceptions.py` | `AtmanError`, `GovernanceRejectedError`, `NarrativePersistenceConflictError`, `SessionNotFoundError`, `SessionAlreadyFinishedError`, `TooManyActiveSessionsError` |
 | `core/clock_impl.py` | `SystemClock`, `FrozenClock` |
 | `core/narrative_write_audit.py` | Narrative commit audit hooks |
 | `core/reflection_event_audit.py` | Reflection event persistence observers |
 | `core/reflection_run_keys.py` | Deterministic reflection run keys |
-| `eval/migrations/versions/0001_add_embed_model_column.sql` | SQL migration: adds `embed_model TEXT` column to `facts`, `key_moments`, `identity_snapshots` for model traceability (E25.4) |
 
 ### 1.5. Adapters (`src/atman/adapters/`)
 
@@ -75,10 +73,10 @@ All paths are absolute relative to the repository root.
 |------|-----------------|----------|
 | `adapters/memory/in_memory_backend.py` (`InMemoryBackend`) | `FactualMemory` | no persistence |
 | `adapters/memory/file_backend.py` (`FileBackend`) | `FactualMemory` | JSONL + file locking |
-| `adapters/memory/mock_embedding.py` (`MockEmbeddingAdapter`) | `EmbeddingPort` | deterministic 768-dim embeddings; seed=`hash(text) % 2^31`; `model_name()` returns `"mock-embedding:768d"` |
-| `adapters/memory/bm25_embedding.py` (`BM25EmbeddingAdapter`) | `EmbeddingPort` | sparse lexical BM25 embeddings |
-| `adapters/memory/ollama_embedding.py` (`OllamaEmbeddingAdapter`) | `EmbeddingPort` | Ollama API embeddings; default `qwen3-embedding:1.5b` (768-dim); `model_name()` returns configured model; `health_check()` available |
-| `adapters/memory/in_memory_usage_log.py` (`InMemoryUsageLog`) | `MemoryUsageLog` | in-memory usage tracking |
+| `adapters/memory/mock_embedding.py` (`MockEmbeddingAdapter`) | `EmbeddingPort` | deterministic SHA-256-seeded embeddings; no external deps; for tests/CI |
+| `adapters/memory/bm25_embedding.py` (`BM25EmbeddingAdapter`) | `EmbeddingPort` | local BM25 sparse vectors via fixed-dimension feature hashing (Unicode-aware tokenizer); corpus stats from `embed_batch`/`embed_with_corpus` are reused by later `embed` calls |
+| `adapters/memory/ollama_embedding.py` (`OllamaEmbeddingAdapter`) | `EmbeddingPort` | Ollama HTTP `/api/embeddings`; configurable host/model/timeout |
+| `adapters/memory/in_memory_usage_log.py` (`InMemoryUsageLog`) | `MemoryUsageLog` | in-memory append-only list with filtering by item/usage_type/time (no eviction) |
 | `adapters/storage/in_memory_experience_store.py` (`InMemoryExperienceStore`) | `StateStore` | in-memory |
 | `adapters/storage/jsonl_experience_store.py` (`JsonlExperienceStore`) | `StateStore` | JSONL for experience |
 | `adapters/storage/file_state_store.py` (`FileStateStore`) | `StateStore` | JSON files (experience + identity + narrative + eigenstate) |
@@ -87,6 +85,10 @@ All paths are absolute relative to the repository root.
 | `adapters/storage/reflection_persistence_helper.py` | — | **E27**: helper functions for persisting reflections (`persist_micro_reflection`, `persist_daily_reflection`, `persist_deep_reflection`) |
 | `adapters/reflection/mock_reflection_model.py` (`MockReflectionModel`) | `ReflectionModel` | deterministic mock |
 | `adapters/reflection/fixture_loader.py` | — | load fixtures for demos |
+| `adapters/agent/config.py` (`ModelConfig`, `AgentConfig`) | — | Pydantic AI model + agent runtime config (E26-R1, E26-R2, E26-R4) |
+| `adapters/agent/deps.py` (`AtmanDeps`, `AtmanDeps.from_config`) | — | frozen DI container wiring `SessionManager`, `IdentityService`, `ExperienceService`, `MicroReflectionService`, `StateStore`; `from_config` factory transfers validated limits from `AgentConfig` |
+| `adapters/agent/instructions.py` (`build_instructions`) | — | builds dynamic system prompt from current `Identity` + `NarrativeDocument` (truncated per `AtmanDeps.truncate_narrative_*`) |
+| `adapters/agent/tools.py` (`record_key_moment`, `log_experience`) | — | Pydantic AI tools for recording key moments / pointing log_experience at the session-end flow |
 
 ### 1.6. CLI / TUI / Web / Demos
 
@@ -137,6 +139,9 @@ Connections between two or more parts. These are seams that may break independen
 | `DailyReflectionService` ↔ `ExperienceRepository` + `PatternStore` + `ReflectionEventStore` | `core/services/reflection_service.py` | pattern detection |
 | `DeepReflectionService` ↔ all reflection ports | `core/services/reflection_service.py` | health + identity + narrative update |
 | `PrincipleRevisionAdvisor` ↔ `PatternCandidate` + `Identity` | `core/services/principle_advisor.py` | analyzes patterns in identity context |
+| `ConflictDetector` ↔ `FactualMemory` | `core/services/conflict_detector.py` → `core/ports/memory_backend.py` | DI; lightweight contradiction scan over ACTIVE candidates returned by `search()` |
+| `EmotionalEcho` ↔ `StateStore` | `core/services/emotional_echo.py` → `core/ports/state_store.py` | DI; `lookback_days` window via `search_experiences` |
+| `PassiveMemoryInjector` ↔ `EmbeddingPort` + `FactualMemory` + `StateStore` | `core/services/passive_memory_injector.py` → `core/ports/embedding.py`, `core/ports/memory_backend.py`, `core/ports/state_store.py` | DI; top-K similarity + 1-hop associative graph expansion; optional `SessionWorkingMemory` cache |
 
 ### 2.2. Adapter ↔ port
 
@@ -146,7 +151,17 @@ Connections between two or more parts. These are seams that may break independen
 | `InMemoryExperienceStore`, `JsonlExperienceStore`, `FileStateStore` | `StateStore` |
 | `MockReflectionModel` | `ReflectionModel` |
 | `InMemoryPatternStore`, `InMemoryReflectionEventStore`, `InMemoryHealthAssessmentStore` | corresponding ports |
-| **`InMemoryReflectionStore`** | **`ReflectionStore`** (E27) |
+| `MockEmbeddingAdapter`, `BM25EmbeddingAdapter`, `OllamaEmbeddingAdapter` | `EmbeddingPort` |
+| `InMemoryUsageLog` | `MemoryUsageLog` |
+| `InMemoryReflectionStore` (`adapters/storage/in_memory_postgres_reflection_store.py`) | `ReflectionStore` (E27) |
+
+### 2.2a. Agent adapter ↔ services
+
+| Connection | Files | Type |
+|-----------|-------|------|
+| `AtmanDeps` ↔ `SessionManager`, `IdentityService`, `ExperienceService`, `MicroReflectionService`, `StateStore` | `adapters/agent/deps.py` | DI container (frozen dataclass) |
+| `record_key_moment` / `log_experience` ↔ `SessionManager.record_key_moment` | `adapters/agent/tools.py` → `core/services/session_manager.py` | Pydantic AI tool → service call |
+| `build_instructions` ↔ `StateStore.load_identity` / `load_narrative` | `adapters/agent/instructions.py` → `core/ports/state_store.py` | dynamic system-prompt builder |
 
 ### 2.3. CLI ↔ service
 
@@ -422,8 +437,7 @@ No explicit `TODO`/`FIXME`/`HACK` markers in source. Known limitations are recor
 
 ### Tests
 
-- 26 test modules in `tests/` + 1 integration module.
-- Embedding tests: `tests/memory/test_embedding_mock.py` (≥25 tests), `tests/memory/test_embedding_ollama.py` (≥20 tests) — E25 coverage.
+- 24 test modules in `tests/` + 1 integration module.
 - Integration tests: `tests/integration/test_full_lifecycle.py` — full lifecycle from session start to reflection with FileStateStore.
 - Target ≥90% coverage.
 - CLI excluded from coverage (see `pyproject.toml`).

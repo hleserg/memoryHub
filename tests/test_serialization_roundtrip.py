@@ -22,6 +22,7 @@ from atman.core.models import (
     Eigenstate,
     EmotionalDepth,
     ExperienceRecord,
+    FactRecord,
     FeltSense,
     HealthCriterionOutput,
     Identity,
@@ -36,6 +37,7 @@ from atman.core.models import (
     ReframingNoteOutput,
     SessionExperience,
 )
+from atman.core.models.fact import FactStatus
 from atman.core.services import IdentityService
 
 # ---------------------------------------------------------------------------
@@ -352,3 +354,120 @@ def test_known_good_experience_json_still_deserializes() -> None:
     record = ExperienceRecord.model_validate_json(_MINIMAL_EXPERIENCE_JSON)
     assert str(record.experience.id) == "11111111-1111-4111-8111-111111111111"
     assert record.experience.key_moments[0].what_happened == "schema stability test"
+    # Pre-E24 JSON omits ``fact_refs``; new field defaults to ``[]`` so old
+    # on-disk experiences continue to load without migration.
+    assert record.experience.fact_refs == []
+    assert record.experience.key_moments[0].fact_refs == []
+
+
+# ---------------------------------------------------------------------------
+# E24: FactRecord lifecycle + confirmation/decay round-trips
+# ---------------------------------------------------------------------------
+
+
+def test_fact_record_active_json_roundtrip() -> None:
+    """Default-constructed (ACTIVE) FactRecord survives JSON round-trip."""
+    fact = FactRecord(content="roundtrip", source="unit", tags=["a", "b"])
+    j = fact.model_dump_json()
+    restored = FactRecord.model_validate_json(j)
+
+    assert restored.id == fact.id
+    assert restored.content == fact.content
+    assert restored.status == FactStatus.ACTIVE
+    assert restored.confirmation_count == 0
+    assert restored.last_confirmed_at is None
+    assert restored.disputed_at is None
+    # Default salience is 0.5 (mid-range so confirm/decay can move in both
+    # directions before hitting clamps).
+    assert restored.salience == 0.5
+
+
+def test_fact_record_after_confirm_json_roundtrip() -> None:
+    """confirm() bumps confirmation_count + salience and stamps last_confirmed_at;
+    those mutations must serialize."""
+    fact = FactRecord(content="to-confirm", source="unit", salience=0.5)
+    fact.confirm()
+    fact.confirm()
+    j = fact.model_dump_json()
+    restored = FactRecord.model_validate_json(j)
+
+    assert restored.confirmation_count == 2
+    assert restored.last_confirmed_at is not None
+    assert restored.salience == fact.salience
+
+
+def test_fact_record_disputed_json_roundtrip() -> None:
+    """DISPUTED facts preserve ``disputed_at`` (separate from ``invalidated_at``)."""
+    fact = FactRecord(content="to-dispute", source="unit")
+    fact.status = FactStatus.DISPUTED
+    fact.disputed_at = datetime.now(UTC)
+    fact.invalidation_note = "conflicting evidence"
+
+    j = fact.model_dump_json()
+    restored = FactRecord.model_validate_json(j)
+
+    assert restored.status == FactStatus.DISPUTED
+    assert restored.disputed_at is not None
+    assert restored.invalidated_at is None
+    assert restored.effective_lifecycle_timestamp == restored.disputed_at
+
+
+def test_fact_record_invalidated_json_roundtrip() -> None:
+    """INVALIDATED facts preserve ``invalidated_at`` and zero salience."""
+    fact = FactRecord(content="to-invalidate", source="unit")
+    fact.invalidate(reason="no longer true")
+
+    j = fact.model_dump_json()
+    restored = FactRecord.model_validate_json(j)
+
+    assert restored.status == FactStatus.INVALIDATED
+    assert restored.invalidated_at is not None
+    assert restored.salience == 0.0
+
+
+def test_fact_record_persists_across_file_backend_restart(tmp_path: Path) -> None:
+    """FactRecord with all E24 fields survives a FileBackend reload."""
+    from atman.adapters.memory.file_backend import FileBackend
+
+    backend1 = FileBackend(tmp_path / "facts.jsonl")
+    fact = FactRecord(content="persisted", source="unit", salience=0.5)
+    saved = backend1.add_fact(fact)
+    backend1.confirm_fact(saved.id)
+
+    backend2 = FileBackend(tmp_path / "facts.jsonl")
+    loaded = backend2.get_fact(saved.id)
+    assert loaded is not None
+    assert loaded.confirmation_count == 1
+    assert loaded.last_confirmed_at is not None
+    # confirm() bumps salience by 0.1 (capped at 1.0) on every call.
+    assert loaded.salience == 0.6
+
+
+def test_session_experience_with_fact_refs_json_roundtrip() -> None:
+    """E24.2: KeyMoment.fact_refs and SessionExperience.fact_refs round-trip."""
+    fact_id = uuid4()
+    record = ExperienceRecord(
+        experience=SessionExperience(
+            session_id=uuid4(),
+            timestamp=datetime.now(UTC),
+            key_moments=[
+                KeyMoment(
+                    what_happened="used a fact",
+                    how_i_felt=FeltSense(
+                        emotional_valence=0.1,
+                        emotional_intensity=0.2,
+                        depth=EmotionalDepth.SURFACE,
+                    ),
+                    why_it_matters="context",
+                    values_touched=["honesty"],
+                    fact_refs=[fact_id],
+                )
+            ],
+            fact_refs=[fact_id],
+        )
+    )
+    j = record.model_dump_json()
+    restored = ExperienceRecord.model_validate_json(j)
+
+    assert restored.experience.fact_refs == [fact_id]
+    assert restored.experience.key_moments[0].fact_refs == [fact_id]

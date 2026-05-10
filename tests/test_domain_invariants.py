@@ -15,6 +15,12 @@ Invariants covered:
 6. Micro reflection over the same session twice produces the same level.
 7. ExperienceRecord.salience starts at 1.0 and can only decrease with time.
 8. Access count increments by exactly 1 per mark_accessed call.
+9. (E24) FactRecord.salience stays in [0.0, 1.0] across all mutation paths.
+10. (E24) FactRecord.confirm() bumps confirmation_count by 1 and bumps
+    salience by +0.1, capped at 1.0.
+11. (E24) FactRecord.invalidate() zeroes salience for terminal states.
+12. (E24) confirm_fact() at the backend port is a no-op for non-ACTIVE facts.
+13. (E24) decay_stale_facts() only decays ACTIVE facts; non-ACTIVE are skipped.
 
 SYSTEM_MAP §2.1 / §3 B–E / §4.2 / §5.3 regression freeze.
 """
@@ -25,15 +31,18 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from uuid import uuid4
 
+from atman.adapters.memory import InMemoryBackend
 from atman.adapters.storage import FileStateStore
 from atman.core.models import (
     EmotionalDepth,
     ExperienceRecord,
+    FactRecord,
     FeltSense,
     KeyMoment,
     ReframingNote,
     SessionExperience,
 )
+from atman.core.models.fact import FactStatus
 from atman.core.ports.state_store import DateRangeQuery
 
 
@@ -225,3 +234,122 @@ def test_invariant_reflection_run_key_differs_by_identity() -> None:
     assert daily_reflection_run_key_for_identity(
         date, uuid4()
     ) != daily_reflection_run_key_for_identity(date, uuid4())
+
+
+# ---------------------------------------------------------------------------
+# Invariant 9 (E24): FactRecord.salience stays in [0.0, 1.0] across all
+# mutation paths.
+# ---------------------------------------------------------------------------
+
+
+def test_invariant_fact_salience_in_unit_interval_after_confirm_and_invalidate() -> None:
+    """Across confirm() and invalidate(), salience must never escape [0, 1]."""
+    fact = FactRecord(content="x", source="unit", salience=0.95)
+    # 50 confirms must clamp at 1.0 (each adds +0.1 capped at 1.0).
+    for _ in range(50):
+        fact.confirm()
+        assert 0.0 <= fact.salience <= 1.0
+    assert fact.salience == 1.0
+
+    fact.invalidate(reason="zero")
+    assert fact.salience == 0.0
+
+
+# ---------------------------------------------------------------------------
+# Invariant 10 (E24): confirm() bumps confirmation_count by 1 and salience
+# by +0.1 capped at 1.0.
+# ---------------------------------------------------------------------------
+
+
+def test_invariant_fact_confirm_increments_count_and_salience_step() -> None:
+    """Each confirm() call: count += 1; salience += 0.1 (clamped at 1.0)."""
+    fact = FactRecord(content="x", source="unit", salience=0.5)
+    assert fact.confirmation_count == 0
+
+    fact.confirm()
+    assert fact.confirmation_count == 1
+    # 0.5 + 0.1 with float jitter; allow 1e-9 tolerance.
+    assert abs(fact.salience - 0.6) < 1e-9
+    assert fact.last_confirmed_at is not None
+
+
+# ---------------------------------------------------------------------------
+# Invariant 11 (E24): invalidate() zeros salience for terminal states.
+# ---------------------------------------------------------------------------
+
+
+def test_invariant_fact_invalidate_zeros_salience() -> None:
+    """invalidate() must zero salience and stamp invalidated_at."""
+    fact = FactRecord(content="x", source="unit", salience=0.95)
+    fact.invalidate(reason="superseded by experiment")
+
+    assert fact.status == FactStatus.INVALIDATED
+    assert fact.salience == 0.0
+    assert fact.invalidated_at is not None
+    assert fact.invalidation_note == "superseded by experiment"
+
+
+# ---------------------------------------------------------------------------
+# Invariant 12 (E24): backend confirm_fact is a no-op for non-ACTIVE facts.
+# A non-ACTIVE fact whose salience was already zeroed by invalidate() must
+# not be silently resurrected to 0.1 on a stray confirm() call.
+# ---------------------------------------------------------------------------
+
+
+def test_invariant_backend_confirm_fact_is_noop_for_non_active() -> None:
+    backend = InMemoryBackend()
+
+    # ACTIVE → confirmable.
+    active = FactRecord(content="active", source="unit", salience=0.5)
+    backend.add_fact(active)
+    assert backend.confirm_fact(active.id) is True
+
+    # DISPUTED / SUPERSEDED / INVALIDATED → MUST be skipped.
+    for status in (FactStatus.DISPUTED, FactStatus.SUPERSEDED, FactStatus.INVALIDATED):
+        fact = FactRecord(content=f"f-{status.value}", source="unit", salience=0.5)
+        backend.add_fact(fact)
+        backend.invalidate_fact(fact.id, status=status, note="test")
+        before = backend.get_fact(fact.id)
+        assert before is not None
+        assert backend.confirm_fact(fact.id) is False, (
+            f"confirm_fact must skip {status.value} facts"
+        )
+        after = backend.get_fact(fact.id)
+        assert after is not None
+        assert after.confirmation_count == before.confirmation_count
+        assert after.salience == before.salience
+        assert after.last_confirmed_at == before.last_confirmed_at
+
+
+# ---------------------------------------------------------------------------
+# Invariant 13 (E24): decay_stale_facts only touches ACTIVE facts; the
+# salience of DISPUTED/SUPERSEDED/INVALIDATED facts is preserved as-is.
+# ---------------------------------------------------------------------------
+
+
+def test_invariant_decay_stale_facts_only_decays_active() -> None:
+    backend = InMemoryBackend()
+
+    # ACTIVE fact, never confirmed → stale and should decay.
+    stale_active = FactRecord(content="stale-active", source="unit", salience=0.8)
+    backend.add_fact(stale_active)
+
+    # DISPUTED fact preserved at salience 0.7 — must NOT decay.
+    disputed = FactRecord(content="disputed", source="unit", salience=0.7)
+    backend.add_fact(disputed)
+    backend.invalidate_fact(disputed.id, status=FactStatus.DISPUTED, note="why")
+    disputed_before = backend.get_fact(disputed.id)
+    assert disputed_before is not None
+
+    cutoff = datetime.now(UTC) + timedelta(seconds=1)
+    decayed_count = backend.decay_stale_facts(before=cutoff, decay_factor=0.5)
+
+    decayed_active = backend.get_fact(stale_active.id)
+    assert decayed_active is not None
+    assert decayed_count >= 1
+    assert decayed_active.salience < 0.8  # strictly decayed
+
+    disputed_after = backend.get_fact(disputed.id)
+    assert disputed_after is not None
+    # Non-ACTIVE facts are untouched: salience preserved exactly.
+    assert disputed_after.salience == disputed_before.salience

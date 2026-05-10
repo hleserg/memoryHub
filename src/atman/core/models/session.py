@@ -314,12 +314,9 @@ class SessionResult(BaseModel):
         default=None, description="ID of the identity this session belongs to"
     )
 
-    # Fact IDs that were surfaced/read during the session.  Stored as a
-    # ``PrivateAttr`` so it is excluded from ``model_dump`` / serialization
-    # and survives ``model_copy`` (private attrs are copied across), but is
-    # not part of the public schema.  Populated by
-    # ``SessionManager._note_facts_read`` and consumed at ``finish_session``
-    # to back-link the resulting experience to source facts.
+    # PrivateAttr-backed (E24.2): facts noted via SessionManager._note_facts_read.
+    # Aggregated into SessionExperience.fact_refs at finish_session.
+    # Not serialized; reset to empty set on each new SessionResult instance.
     _facts_read: set[UUID] = PrivateAttr(default_factory=set)
 
     model_config = ConfigDict(

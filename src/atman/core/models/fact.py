@@ -122,6 +122,25 @@ class FactRecord(BaseModel):
         # Increase salience slightly on confirmation, cap at 1.0
         self.salience = min(1.0, self.salience + 0.1)
 
+    @property
+    def effective_lifecycle_timestamp(self) -> datetime | None:
+        """
+        Timestamp at which the fact entered its current non-ACTIVE status.
+
+        ``DISPUTED`` facts are stamped with ``disputed_at``;
+        ``INVALIDATED`` and ``SUPERSEDED`` facts are stamped with
+        ``invalidated_at``. ``ACTIVE`` facts have no lifecycle timestamp.
+        """
+        if self.status == FactStatus.DISPUTED:
+            return self.disputed_at
+        if self.status in (FactStatus.INVALIDATED, FactStatus.SUPERSEDED):
+            return self.invalidated_at
+        return None
+
+    # ``validate_assignment=True`` re-runs field validators on every attribute
+    # assignment so mutating helpers (``confirm()``, ``invalidate()``, the
+    # ``decay_stale_facts`` paths in the backends) cannot silently bypass the
+    # ``ge``/``le`` field constraints on ``salience``/``confirmation_count``.
     model_config = ConfigDict(
         validate_assignment=True,
         json_schema_extra={

@@ -18,9 +18,11 @@ repos:
       - id: pyright
         additional_dependencies:
           - pydantic>=2.0.0
+          - pydantic-ai>=1.88.0,<2.0
           - pytest>=7.0.0
           - pytest-asyncio>=0.21.0
           - anthropic>=0.42.0
+          - opentelemetry-api>=1.20.0
           - respx>=0.21.1
           - psycopg[binary]>=3.1
 
