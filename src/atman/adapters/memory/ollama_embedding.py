@@ -76,8 +76,15 @@ class OllamaEmbeddingAdapter(EmbeddingPort):
             # Scheme validated in __init__; safe to call urlopen.
             with urllib.request.urlopen(req, timeout=self.timeout) as response:  # nosec B310
                 data = json.loads(response.read().decode("utf-8"))
-                # Ollama returns embedding in "embedding" field for single input
-                embedding = data.get("embedding") or data.get("embeddings", [[]])[0]
+                # Ollama returns the vector under "embedding" for single-input
+                # responses and under "embeddings" for batch responses. Use
+                # ``or`` so the case where ``embeddings`` is present but an
+                # empty list still falls through to the empty-vector
+                # RuntimeError below instead of raising IndexError.
+                embedding = data.get("embedding")
+                if not embedding:
+                    embeddings = data.get("embeddings") or [[]]
+                    embedding = embeddings[0]
                 if not embedding:
                     raise RuntimeError("Empty embedding received from Ollama")
                 return embedding

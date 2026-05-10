@@ -64,6 +64,28 @@ def test_embed_raises_when_ollama_returns_empty_payload():
         adapter.embed("hello")
 
 
+def test_embed_raises_runtime_error_on_empty_embeddings_list():
+    """``{"embeddings": []}`` must raise RuntimeError, not IndexError."""
+    adapter = OllamaEmbeddingAdapter(base_url="http://localhost:11434")
+    response = _FakeResponse({"embeddings": []})
+    with (
+        patch("urllib.request.urlopen", return_value=response),
+        pytest.raises(RuntimeError, match="Empty embedding"),
+    ):
+        adapter.embed("hello")
+
+
+def test_embed_raises_runtime_error_when_embeddings_list_is_empty():
+    """`{"embeddings": []}` returns a clean RuntimeError, not IndexError."""
+    adapter = OllamaEmbeddingAdapter(base_url="http://localhost:11434")
+    response = _FakeResponse({"embeddings": []})
+    with (
+        patch("urllib.request.urlopen", return_value=response),
+        pytest.raises(RuntimeError, match="Empty embedding"),
+    ):
+        adapter.embed("hello")
+
+
 def test_embed_wraps_url_errors():
     adapter = OllamaEmbeddingAdapter(base_url="http://localhost:11434")
     with (

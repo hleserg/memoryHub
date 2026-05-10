@@ -116,3 +116,52 @@ def test_cli_factual_memory_get_unknown_uuid_reports_not_found():
         )
         assert result.returncode == 0
         assert "не найден" in result.stderr
+
+
+def test_cli_factual_memory_invalidate_and_list_invalidated():
+    """SYSTEM_MAP §3 F: ``invalidate`` moves a fact out of ACTIVE; ``list-invalidated`` surfaces it."""
+    with TemporaryDirectory() as tmp:
+        home = Path(tmp)
+        # Add a fact, invalidate it, list invalidated.
+        first = _run_cli(
+            "\n".join(
+                [
+                    "add Устаревший факт session_1 task",
+                    "exit",
+                ]
+            )
+            + "\n",
+            home=home,
+        )
+        assert first.returncode == 0, first.stderr
+        added_ids = _extract_uuids(first.stdout)
+        assert added_ids, first.stdout
+
+        second = _run_cli(
+            "\n".join(
+                [
+                    f"invalidate {added_ids[0]} reason text",
+                    "list-invalidated",
+                    "exit",
+                ]
+            )
+            + "\n",
+            home=home,
+        )
+        assert second.returncode == 0, second.stderr
+        assert "помечен как недействительный" in second.stdout
+        assert "reason text" in second.stdout
+        # list-invalidated must surface the invalidated fact.
+        assert "Недействительных фактов: 1" in second.stdout
+
+
+def test_cli_factual_memory_invalidate_invalid_uuid_does_not_crash():
+    """``invalidate`` with a malformed UUID surfaces a clear error and continues."""
+    with TemporaryDirectory() as tmp:
+        home = Path(tmp)
+        result = _run_cli(
+            "\n".join(["invalidate not-a-uuid because", "exit"]) + "\n",
+            home=home,
+        )
+        assert result.returncode == 0
+        assert "неверный формат UUID" in result.stderr

@@ -93,12 +93,15 @@ class InMemoryBackend(FactualMemory):
         fact.invalidation_note = note
         # Set the timestamp appropriate to the new lifecycle status: DISPUTED
         # populates ``disputed_at``; INVALIDATED / SUPERSEDED populate
-        # ``invalidated_at``.
+        # ``invalidated_at``. Terminal states (INVALIDATED / SUPERSEDED)
+        # also drop salience to zero, matching :meth:`FactRecord.invalidate`;
+        # DISPUTED is provisional and keeps salience unchanged.
         now = datetime.now(UTC)
         if new_status == FactStatus.DISPUTED:
             fact.disputed_at = now
         else:
             fact.invalidated_at = now
+            fact.salience = 0.0
         fact.superseded_by = superseded_by
 
         if superseded_by is not None:
