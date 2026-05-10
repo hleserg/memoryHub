@@ -72,6 +72,27 @@ class ExperienceService:
         """
         return self.store.get_experience(experience_id)
 
+    # PLAYBOOK-START
+    # id: append-only-records-with-annotation-layers
+    # category: design-patterns
+    # title: Append-Only Records with Annotation Layers
+    # status: refined
+    #
+    # Pattern: original records are immutable after creation — no update methods
+    # exist on the core model. Derived perspectives (corrections, reframings,
+    # commentary) accumulate in a separate append-only list. Callers see both
+    # the original record and all annotations; they can choose which view to use.
+    #
+    # Why generalizable: any domain where original records have audit or
+    # authenticity value — medical records, financial ledgers, legal documents,
+    # content moderation decisions, ML training labels. Mutation loses the
+    # "what actually happened" layer. This pattern keeps both the original and
+    # all derived interpretations without conflict.
+    #
+    # Trade-offs: queries that need "latest value" must walk the annotation list;
+    # storage grows monotonically. Worthwhile when original authenticity matters
+    # more than storage efficiency.
+    # PLAYBOOK-END
     def add_reframing_note(
         self,
         experience_id: UUID,

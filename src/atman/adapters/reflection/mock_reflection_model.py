@@ -4,6 +4,30 @@ Mock implementation of ReflectionModel for testing.
 This provides deterministic, template-based responses instead of LLM generation.
 Useful for testing reflection logic without external dependencies.
 """
+# PLAYBOOK-START
+# id: port-deterministic-mock-for-llm-dependencies
+# category: design-patterns
+# title: Port + Deterministic Mock Adapter for LLM-Dependent Logic
+# status: refined
+#
+# Pattern: define an abstract port that the service depends on (here:
+# ReflectionModel). Provide a deterministic mock implementation that returns
+# template-based, semantically meaningful responses based on input content —
+# NOT random, NOT a stub that returns empty strings, NOT a spy. The mock
+# exercises the same code paths as a real LLM adapter, including output
+# parsing, error routing, and result handling, but with zero network calls
+# and zero stochastic behavior. All business logic is testable at unit speed.
+#
+# Why generalizable: any feature calling an LLM, embedding model, external
+# API, or other probabilistic service. Without deterministic mocks, tests
+# either skip the integration entirely (low confidence) or hit real APIs
+# (slow, expensive, flaky). This pattern provides a third path: full
+# integration test coverage at unit test speed.
+#
+# Trade-offs: mock must be maintained alongside the real adapter; divergence
+# between mock behavior and real LLM output can hide integration bugs.
+# Mitigate by running a small set of real-API smoke tests separately.
+# PLAYBOOK-END
 
 from atman.core.models.experience import SessionExperience
 from atman.core.models.identity import Identity

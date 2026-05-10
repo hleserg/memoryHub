@@ -1,4 +1,4 @@
-.PHONY: lint format typecheck security test test-fast test-all test-integration audit check all sync-site-content docs-preview demo-experience demo-factual demo-identity demo-reflection demo-session demo-full-corpus demo-webui demo-experience-fast demo-factual-fast demo-identity-fast demo-reflection-fast demo-session-fast demo-full-corpus-fast demo-webui-fast demo-experience-paced demo-factual-paced demo-identity-paced demo-reflection-paced demo-session-paced demo-full-corpus-paced demo-webui-paced webui demo-e2e-scenario
+.PHONY: lint format typecheck security test test-fast test-all test-integration audit check all sync-site-content docs-preview demo-experience demo-factual demo-identity demo-reflection demo-session demo-full-corpus demo-webui demo-experience-fast demo-factual-fast demo-identity-fast demo-reflection-fast demo-session-fast demo-full-corpus-fast demo-webui-fast demo-experience-paced demo-factual-paced demo-identity-paced demo-reflection-paced demo-session-paced demo-full-corpus-paced demo-webui-paced webui demo-e2e-scenario playbook-extract playbook-check playbook-audit
 
 lint:
 	ruff check src/ tests/ e2e/
@@ -112,3 +112,14 @@ webui:
 # See e2e/scenarios/value_drift_under_pressure.py and docs/features/demo-e2e/README.md.
 demo-e2e-scenario:
 	PYTHONPATH=. python3 e2e/scenarios/value_drift_under_pressure.py
+
+# PLAYBOOK marker extraction and validation.
+# See docs/development/PLAYBOOK_MARKERS.md for syntax and setup.
+playbook-extract:
+	python3 scripts/extract_playbook.py --target ../agent-playbook/raw/extracted-from-atman.md
+
+playbook-check:
+	python3 scripts/extract_playbook.py --check
+
+playbook-audit:
+	python3 scripts/suggest_playbook.py

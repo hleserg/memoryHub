@@ -1,3 +1,13 @@
+## PLAYBOOK markers
+
+- [ ] I introduced new generalizable patterns and added PLAYBOOK markers
+- [ ] I introduced no generalizable patterns (pure refactoring / project-specific changes)
+- [ ] I'm uncertain — flagged in the PR description for author review
+
+*See `AGENTS.md` § "PLAYBOOK markers" and `docs/development/PLAYBOOK_MARKERS.md` for criteria.*
+
+---
+
 ## Что сделано
 
 Кратко: смысл изменений для ревьюера.

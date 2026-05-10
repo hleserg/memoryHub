@@ -29,3 +29,12 @@ repos:
         args: [-c, pyproject.toml]
         files: ^src/atman/
         additional_dependencies: ["bandit[toml]"]
+
+  - repo: local
+    hooks:
+      - id: playbook-check
+        name: Validate PLAYBOOK markers
+        entry: python scripts/extract_playbook.py --check
+        language: system
+        pass_filenames: false
+        files: \.(py|md)$

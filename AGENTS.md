@@ -195,6 +195,73 @@ Cloud agents only see repo files: put demo instructions in **this file**, the **
 - Pre-commit хуки настроены в `.pre-commit-config.yaml` (ruff, pyright, bandit).
 - `Makefile` содержит все проверки: `make check` запускает полный набор, `make test-fast` — параллельные тесты.
 
+## PLAYBOOK markers — when and how to add
+
+When you implement code or write documentation that introduces a
+**generalizable engineering pattern** — a solution applicable beyond
+this project — you MUST add a PLAYBOOK marker.
+
+### How to recognize a generalizable pattern
+
+Apply the substitution test: rewrite your description without project-specific
+terms ("reflection engine", "session manager", "atman", "experience store").
+If the description still makes sense as a general engineering practice —
+it's generalizable. Add a marker.
+
+If the description becomes meaningless without project terms — it's
+project-specific. Don't add a marker.
+
+### Examples that DESERVE a marker
+
+- "Idempotent long-running async operations via deterministic run keys computed from input parameters"
+- "Append-only data structures with annotation layers instead of mutation for preserving authenticity of original records"
+- "Optimistic concurrency for text documents using last-seen-revision tokens"
+- "Port + adapter + deterministic mock as testable abstraction over LLM-dependent logic"
+- "Outcome-coded events (`outcome=foo_ok` / `outcome=foo_failed reason=bar`) for control flow that needs offline analysis"
+- "Two-tier affective regulation (acute level 1 + homeostasis level 2) for stateful systems"
+
+### Examples that DON'T deserve a marker
+
+- "Service uses asyncio" (standard library, not a pattern)
+- "Tests use pytest fixtures" (framework usage, not a pattern)
+- "Function returns Pydantic model" (idiomatic, not a pattern)
+- "`ReflectionEvent` has `identity_snapshot_id` field" (project-specific data model)
+
+### Marker format
+
+See `docs/development/PLAYBOOK_MARKERS.md` for the syntax.
+
+### Where to put markers
+
+PUT THE MARKER NEXT TO THE CODE OR DOCUMENT THAT ILLUSTRATES THE PATTERN.
+Not in a separate file. The marker should sit in the file where the
+pattern is actually applied.
+
+For Python: as a `# PLAYBOOK-START` / `# PLAYBOOK-END` comment block
+immediately above the function, class, or module-level code that
+implements the pattern.
+
+For Markdown docs: as an HTML comment immediately before the section
+that describes the pattern.
+
+### When in doubt
+
+If you're not sure whether something is generalizable — write a marker
+with `status: draft`. The author will review and either promote to
+`status: refined` or remove. Erring on the side of MORE markers is
+preferred over missing real patterns.
+
+DO NOT add markers for changes that are pure refactoring without
+introducing new conceptual structure.
+
+### Reference: known patterns awaiting markers
+
+If you're working on a component listed in `reports/playbook-candidates.md`,
+check whether the pattern is already marked at the relevant code location.
+If not — add the marker.
+
+---
+
 ## Local Agent Instructions
 
 **For local Cursor agents** (not cloud agents), read the master prompt before starting any work:

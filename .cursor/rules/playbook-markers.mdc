@@ -1,0 +1,22 @@
+---
+description: Reminds agents to add PLAYBOOK markers for generalizable patterns
+globs:
+  - "src/**/*.py"
+  - "docs/**/*.md"
+alwaysApply: false
+---
+
+# PLAYBOOK markers
+
+When implementing new code or writing new docs, check if you're introducing
+a generalizable engineering pattern (one that's applicable beyond this
+specific project).
+
+If yes — add a PLAYBOOK marker. See `AGENTS.md` section "PLAYBOOK markers"
+for criteria and format.
+
+Apply the substitution test: rewrite the pattern description without
+project-specific terms. If it still makes sense — it's generalizable.
+
+When in doubt, add the marker with `status: draft`. Better to over-mark
+than under-mark.

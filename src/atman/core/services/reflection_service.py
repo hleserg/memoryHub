@@ -55,6 +55,30 @@ from atman.core.reflection_run_keys import (
 from atman.core.services.narrative_revision import NarrativeRevisionService
 
 
+# PLAYBOOK-START
+# id: idempotent-long-running-operations
+# category: design-patterns
+# title: Idempotent Long-Running Operations via Deterministic Run Keys
+# status: refined
+#
+# Pattern: compute a deterministic run_key from the operation's input
+# parameters (date + identity id + scope). Before executing side effects,
+# check whether a terminal success event with this key already exists in
+# the event store. If yes — return the existing result immediately. If no
+# — execute, then persist the success event with outcome=*_ok / *_empty /
+# *_skipped. The operation is now safe to retry, replay, and schedule
+# redundantly without producing duplicate side effects.
+#
+# Why generalizable: any long-running job (batch processing, scheduled LLM
+# calls, nightly aggregations, webhook processing) needs this. Exception-
+# based "just retry" loses context; mutable "update a status flag" creates
+# race conditions. Deterministic keys + terminal success events solve both
+# without distributed locks or two-phase commits.
+#
+# Trade-offs: requires a queryable event store with run_key index; adds one
+# read before every execution. Worth it whenever the operation has observable
+# side effects that must not be repeated.
+# PLAYBOOK-END
 def _daily_run_terminal_success(notes: str) -> bool:
     return any(
         x in notes for x in ("outcome=daily_ok", "outcome=daily_empty", "outcome=daily_skipped")
