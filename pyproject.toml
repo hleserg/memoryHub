@@ -40,8 +40,10 @@ eval = [
     "pandas>=2.1.0",
     "scikit-learn>=1.3.0",
     "alembic>=1.13.0",
-    "sqlalchemy>=2.0.0",
-    "psycopg2-binary>=2.9.0",
+    "sqlalchemy[postgresql]>=2.0.0",
+    "psycopg[binary]>=3.2",
+    "click>=8.1",
+    "python-dateutil>=2.8.0",
 ]
 webui = [
     "streamlit>=1.30.0",

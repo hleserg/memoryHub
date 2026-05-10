@@ -20,7 +20,11 @@ CREATE TABLE IF NOT EXISTS eval.benchmark_runs (
     passed_items INTEGER DEFAULT 0,
     failed_items INTEGER DEFAULT 0,
     metadata JSONB DEFAULT '{}'::jsonb,
-    PRIMARY KEY (id, started_at)
+    PRIMARY KEY (id, started_at),
+    CONSTRAINT fk_benchmark_runs_identity_snapshot
+        FOREIGN KEY (identity_snapshot_id)
+        REFERENCES public.identity_snapshots(id)
+        ON DELETE SET NULL
 ) PARTITION BY RANGE (started_at);
 
 -- ── Indexes ─────────────────────────────────────────────────────────────────
@@ -32,6 +36,9 @@ CREATE INDEX IF NOT EXISTS idx_benchmark_runs_identity_snapshot
     ON eval.benchmark_runs (identity_snapshot_id);
 CREATE INDEX IF NOT EXISTS idx_benchmark_runs_status
     ON eval.benchmark_runs (status);
+
+-- Note: Foreign key constraint to public.identity_snapshots requires
+-- that the main app schema has identity_snapshots table with stable IDs.
 
 -- ── Comments ────────────────────────────────────────────────────────────────
 COMMENT ON TABLE eval.benchmark_runs IS

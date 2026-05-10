@@ -24,13 +24,15 @@ See docs/architecture/PROD_EVAL_BOUNDARY.md.
 
 import argparse
 import sys
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 
 try:
     import psycopg
+    from psycopg import sql
+    from dateutil.relativedelta import relativedelta
 except ImportError:
     print(
-        "Error: psycopg not installed. Run: pip install 'atman[eval]'",
+        "Error: required packages not installed. Run: pip install 'atman[eval]'",
         file=sys.stderr,
     )
     sys.exit(1)
@@ -46,6 +48,23 @@ def get_db_url() -> str:
     import os
 
     return os.environ.get("POSTGRES_URL", DEFAULT_DB_URL)
+
+
+def safe_db_url_for_logging(db_url: str) -> str:
+    """Return safe version of DB URL for logging (without credentials)."""
+    from urllib.parse import urlparse
+    
+    try:
+        parsed = urlparse(db_url)
+        hostname = parsed.hostname or "localhost"
+        port = parsed.port or 5432
+        database = parsed.path.lstrip("/") or "postgres"
+        return f"{hostname}:{port}/{database}"
+    except Exception:
+        # Fallback: try to hide password
+        if "@" in db_url:
+            return db_url.split("@")[-1]
+        return "***"
 
 
 def list_existing_partitions(conn: psycopg.Connection) -> list[str]:
@@ -108,7 +127,7 @@ def create_future_partitions(
     existing = list_existing_partitions(conn)
     now = datetime.now(UTC)
     for offset in range(months):
-        target_date = now + timedelta(days=30 * offset)
+        target_date = now + relativedelta(months=offset)
         year = target_date.year
         month = target_date.month
         suffix = f"{year:04d}_{month:02d}"
@@ -124,7 +143,7 @@ def detach_old_partitions(
     """Detach partitions older than retention_months."""
     existing = list_existing_partitions(conn)
     now = datetime.now(UTC)
-    cutoff = now - timedelta(days=30 * retention_months)
+    cutoff = now - relativedelta(months=retention_months)
     cutoff_suffix = f"{cutoff.year:04d}_{cutoff.month:02d}"
 
     old_partitions = [p for p in existing if p.replace("benchmark_runs_", "") < cutoff_suffix]
@@ -146,8 +165,12 @@ def show_status(conn: psycopg.Connection) -> None:
 
     print("Existing partitions:")
     for partition in partitions:
-        # Get row count for each partition
-        cur = conn.execute(f"SELECT COUNT(*) FROM eval.{partition};")
+        # Get row count for each partition (safe identifier quoting)
+        query = sql.SQL("SELECT COUNT(*) FROM {}.{}").format(
+            sql.Identifier("eval"),
+            sql.Identifier(partition)
+        )
+        cur = conn.execute(query)
         count = cur.fetchone()[0]  # type: ignore[index]
         print(f"  {partition:30s} {count:>10,d} rows")
 
@@ -198,12 +221,18 @@ def main() -> None:
 
     args = parser.parse_args()
 
+    # Validate arguments
+    if args.future_months < 1 or args.future_months > 120:
+        parser.error("--future-months must be between 1 and 120")
+    if args.retention_months < 1 or args.retention_months > 240:
+        parser.error("--retention-months must be between 1 and 240")
+
     if not (args.create_future or args.detach_old or args.status):
         parser.print_help()
         sys.exit(1)
 
     db_url = args.db_url or get_db_url()
-    print(f"Connecting to: {db_url.split('@')[-1] if '@' in db_url else db_url}")
+    print(f"Connecting to: {safe_db_url_for_logging(db_url)}")
 
     try:
         with psycopg.connect(db_url) as conn:

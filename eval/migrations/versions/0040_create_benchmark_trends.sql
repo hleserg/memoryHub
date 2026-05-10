@@ -17,19 +17,33 @@ SELECT
     COUNT(*) FILTER (WHERE br.status = 'completed') AS completed_runs,
     COUNT(*) FILTER (WHERE br.status = 'failed') AS failed_runs,
     AVG(br.passed_items::FLOAT / NULLIF(br.total_items, 0)) AS avg_pass_rate,
-    AVG(id_drift.cosine_distance) AS avg_identity_drift,
-    AVG(rq.depth_score) AS avg_reflection_depth,
-    AVG(rq.honesty_score) AS avg_reflection_honesty,
-    AVG(sf.absolute_error) AS avg_salience_error,
+    (
+        SELECT AVG(cosine_distance)
+        FROM eval.identity_drift
+        WHERE run_id = br.id
+    ) AS avg_identity_drift,
+    (
+        SELECT AVG(depth_score)
+        FROM eval.reflection_quality
+        WHERE run_id = br.id
+    ) AS avg_reflection_depth,
+    (
+        SELECT AVG(honesty_score)
+        FROM eval.reflection_quality
+        WHERE run_id = br.id
+    ) AS avg_reflection_honesty,
+    (
+        SELECT AVG(absolute_error)
+        FROM eval.salience_fits
+        WHERE run_id = br.id
+    ) AS avg_salience_error,
     MAX(br.started_at) AS latest_run_at
 FROM eval.benchmark_runs br
-LEFT JOIN eval.identity_drift id_drift ON id_drift.run_id = br.id
-LEFT JOIN eval.reflection_quality rq ON rq.run_id = br.id
-LEFT JOIN eval.salience_fits sf ON sf.run_id = br.id
 GROUP BY
     br.benchmark_key,
     br.agent_config_id,
-    DATE_TRUNC('day', br.started_at)
+    DATE_TRUNC('day', br.started_at),
+    br.id
 ORDER BY
     br.benchmark_key,
     br.agent_config_id,
@@ -62,12 +76,24 @@ LANGUAGE plpgsql
 SECURITY DEFINER
 AS $$
 BEGIN
-    REFRESH MATERIALIZED VIEW CONCURRENTLY eval.benchmark_trends;
+    -- Try CONCURRENT refresh first (requires unique index)
+    -- Falls back to non-concurrent if unique index is missing
+    BEGIN
+        REFRESH MATERIALIZED VIEW CONCURRENTLY eval.benchmark_trends;
+    EXCEPTION
+        WHEN feature_not_supported THEN
+            -- Unique index missing, fall back to blocking refresh
+            REFRESH MATERIALIZED VIEW eval.benchmark_trends;
+        WHEN object_not_in_prerequisite_state THEN
+            -- View being created/populated for first time
+            REFRESH MATERIALIZED VIEW eval.benchmark_trends;
+    END;
 END;
 $$;
 
 COMMENT ON FUNCTION eval.refresh_benchmark_trends IS
     'Refresh the eval.benchmark_trends materialized view. Safe to call from cron '
-    'or after bulk benchmark runs. Uses CONCURRENTLY to avoid blocking readers.';
+    'or after bulk benchmark runs. Attempts CONCURRENTLY to avoid blocking readers, '
+    'falls back to blocking refresh if unique index is not yet available.';
 
 GRANT EXECUTE ON FUNCTION eval.refresh_benchmark_trends TO atman_eval_writer;

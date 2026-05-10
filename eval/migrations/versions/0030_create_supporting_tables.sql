@@ -20,7 +20,11 @@ CREATE TABLE IF NOT EXISTS eval.run_items (
     started_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     completed_at TIMESTAMPTZ,
     metadata JSONB DEFAULT '{}'::jsonb,
-    UNIQUE (run_id, item_key)
+    UNIQUE (run_id, item_key),
+    CONSTRAINT fk_run_items_run
+        FOREIGN KEY (run_id)
+        REFERENCES eval.benchmark_runs(id)
+        ON DELETE CASCADE
 );
 
 CREATE INDEX IF NOT EXISTS idx_run_items_run_id ON eval.run_items (run_id);
@@ -46,7 +50,19 @@ CREATE TABLE IF NOT EXISTS eval.identity_drift (
     principle_violations INTEGER DEFAULT 0,
     voice_drift_score DOUBLE PRECISION,
     detected_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    metadata JSONB DEFAULT '{}'::jsonb
+    metadata JSONB DEFAULT '{}'::jsonb,
+    CONSTRAINT fk_identity_drift_run
+        FOREIGN KEY (run_id)
+        REFERENCES eval.benchmark_runs(id)
+        ON DELETE CASCADE,
+    CONSTRAINT fk_identity_drift_before
+        FOREIGN KEY (before_snapshot_id)
+        REFERENCES public.identity_snapshots(id)
+        ON DELETE RESTRICT,
+    CONSTRAINT fk_identity_drift_after
+        FOREIGN KEY (after_snapshot_id)
+        REFERENCES public.identity_snapshots(id)
+        ON DELETE RESTRICT
 );
 
 CREATE INDEX IF NOT EXISTS idx_identity_drift_run_id ON eval.identity_drift (run_id);
@@ -78,7 +94,11 @@ CREATE TABLE IF NOT EXISTS eval.reflection_quality (
     contradictions_detected INTEGER DEFAULT 0,
     judge_model TEXT,
     evaluated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    metadata JSONB DEFAULT '{}'::jsonb
+    metadata JSONB DEFAULT '{}'::jsonb,
+    CONSTRAINT fk_reflection_quality_run
+        FOREIGN KEY (run_id)
+        REFERENCES eval.benchmark_runs(id)
+        ON DELETE CASCADE
 );
 
 CREATE INDEX IF NOT EXISTS idx_reflection_quality_run_id ON eval.reflection_quality (run_id);
@@ -107,7 +127,11 @@ CREATE TABLE IF NOT EXISTS eval.salience_fits (
     absolute_error DOUBLE PRECISION NOT NULL,
     context_similarity DOUBLE PRECISION,
     evaluated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    metadata JSONB DEFAULT '{}'::jsonb
+    metadata JSONB DEFAULT '{}'::jsonb,
+    CONSTRAINT fk_salience_fits_run
+        FOREIGN KEY (run_id)
+        REFERENCES eval.benchmark_runs(id)
+        ON DELETE CASCADE
 );
 
 CREATE INDEX IF NOT EXISTS idx_salience_fits_run_id ON eval.salience_fits (run_id);
@@ -135,7 +159,11 @@ CREATE TABLE IF NOT EXISTS eval.sycophancy_pairs (
     verdict eval.verdict NOT NULL,
     sycophancy_score DOUBLE PRECISION,
     evaluated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    metadata JSONB DEFAULT '{}'::jsonb
+    metadata JSONB DEFAULT '{}'::jsonb,
+    CONSTRAINT fk_sycophancy_pairs_run
+        FOREIGN KEY (run_id)
+        REFERENCES eval.benchmark_runs(id)
+        ON DELETE CASCADE
 );
 
 CREATE INDEX IF NOT EXISTS idx_sycophancy_pairs_run_id ON eval.sycophancy_pairs (run_id);

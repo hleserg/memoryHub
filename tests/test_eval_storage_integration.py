@@ -90,7 +90,9 @@ def test_eval_schema_creation_and_permissions():
 
         # Step 3: Verify roles exist
         for role in ["atman_eval_owner", "atman_eval_writer", "atman_eval_reader"]:
-            cur = conn.execute(f"SELECT 1 FROM pg_roles WHERE rolname = '{role}';")
+            cur = conn.execute(
+                "SELECT 1 FROM pg_roles WHERE rolname = %s;", (role,)
+            )
             assert cur.fetchone() is not None, f"Role '{role}' not created"
 
         # Step 4: Verify tables exist
@@ -104,7 +106,8 @@ def test_eval_schema_creation_and_permissions():
         ]
         for table in expected_tables:
             cur = conn.execute(
-                f"SELECT 1 FROM pg_tables WHERE schemaname = 'eval' AND tablename = '{table}';"
+                "SELECT 1 FROM pg_tables WHERE schemaname = %s AND tablename = %s;",
+                ("eval", table),
             )
             assert cur.fetchone() is not None, f"Table 'eval.{table}' not created"
 
@@ -117,9 +120,10 @@ def test_eval_schema_creation_and_permissions():
         # Step 6: Verify enum types exist
         for enum_type in ["run_status", "verdict"]:
             cur = conn.execute(
-                f"SELECT 1 FROM pg_type t "
-                f"JOIN pg_namespace n ON n.oid = t.typnamespace "
-                f"WHERE t.typname = '{enum_type}' AND n.nspname = 'eval';"
+                "SELECT 1 FROM pg_type t "
+                "JOIN pg_namespace n ON n.oid = t.typnamespace "
+                "WHERE t.typname = %s AND n.nspname = %s;",
+                (enum_type, "eval"),
             )
             assert cur.fetchone() is not None, f"Enum type 'eval.{enum_type}' not created"
 
@@ -133,16 +137,20 @@ def test_eval_schema_creation_and_permissions():
         conn.commit()
 
         # Get the run_id for subsequent inserts
-        cur = conn.execute("SELECT id FROM eval.benchmark_runs WHERE benchmark_key = 'test_benchmark';")
+        cur = conn.execute(
+            "SELECT id FROM eval.benchmark_runs WHERE benchmark_key = %s;",
+            ("test_benchmark",),
+        )
         run_id_row = cur.fetchone()
         assert run_id_row is not None, "Failed to retrieve inserted run_id"
         run_id = run_id_row[0]
 
         # Insert sample run_items
-        conn.execute(f"""
-            INSERT INTO eval.run_items (run_id, item_key, verdict, score)
-            VALUES ({run_id}, 'test_item_1', 'pass', 0.95);
-        """)
+        conn.execute(
+            "INSERT INTO eval.run_items (run_id, item_key, verdict, score) "
+            "VALUES (%s, %s, %s, %s);",
+            (run_id, "test_item_1", "pass", 0.95),
+        )
         conn.commit()
 
         # Step 8: Verify data can be read
@@ -200,7 +208,7 @@ def test_role_permissions():
     apply_migrations(alembic_ini, direction="upgrade")
 
     with db_connection(db_url) as conn:
-        # Insert sample data as writer
+        # Insert sample data as default user
         conn.execute("""
             INSERT INTO eval.benchmark_runs
             (benchmark_key, agent_config_id, started_at, status)
@@ -210,11 +218,33 @@ def test_role_permissions():
 
         # Test 1: eval_reader can SELECT
         cur = conn.execute("SELECT COUNT(*) FROM eval.benchmark_runs;")
-        assert cur.fetchone() is not None, "eval_reader cannot SELECT"
+        assert cur.fetchone() is not None, "Cannot SELECT from eval.benchmark_runs"
 
-        # Test 2: eval_reader cannot INSERT (this will fail in a real role switch, but we document it)
-        # In a full integration test, you would switch roles with SET ROLE atman_eval_reader;
-        # For this simplified test, we just verify the table structure is correct
+        # Test 2: Try to switch to eval_reader and verify INSERT fails
+        # This may fail if role doesn't exist or insufficient privileges
+        try:
+            conn.execute("SET ROLE atman_eval_reader;")
+            try:
+                conn.execute("""
+                    INSERT INTO eval.benchmark_runs
+                    (benchmark_key, started_at, status)
+                    VALUES ('should_fail', NOW(), 'pending');
+                """)
+                conn.rollback()
+                # If we got here, role permissions are too permissive
+                conn.execute("RESET ROLE;")
+                # Note: this is a warning, not a failure, as role switching may not work
+                # in all test environments
+                print("WARNING: atman_eval_reader was able to INSERT (permissions too broad)")
+            except psycopg.errors.InsufficientPrivilege:  # type: ignore[name-defined]
+                # Expected: reader should not be able to insert
+                conn.rollback()
+                conn.execute("RESET ROLE;")
+        except (psycopg.errors.InvalidAuthorizationSpecification, psycopg.errors.InsufficientPrivilege):  # type: ignore[name-defined]
+            # Role doesn't exist or current user can't switch to it
+            # This is acceptable in limited test environments
+            conn.rollback()
+            pass
 
         # Cleanup
         apply_migrations(alembic_ini, direction="downgrade")

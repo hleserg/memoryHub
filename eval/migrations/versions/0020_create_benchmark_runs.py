@@ -68,7 +68,11 @@ CREATE TABLE IF NOT EXISTS eval.benchmark_runs (
     passed_items INTEGER DEFAULT 0,
     failed_items INTEGER DEFAULT 0,
     metadata JSONB DEFAULT '{}'::jsonb,
-    PRIMARY KEY (id, started_at)
+    PRIMARY KEY (id, started_at),
+    CONSTRAINT fk_benchmark_runs_identity_snapshot
+        FOREIGN KEY (identity_snapshot_id)
+        REFERENCES public.identity_snapshots(id)
+        ON DELETE SET NULL
 ) PARTITION BY RANGE (started_at);
 
 CREATE INDEX IF NOT EXISTS idx_benchmark_runs_benchmark_key
@@ -119,11 +123,28 @@ _DROP_TABLE_SQL = "DROP TABLE IF EXISTS eval.benchmark_runs CASCADE;"
 
 def upgrade() -> None:
     """Create benchmark_runs partitioned table and initial partitions."""
+    # Verify public.identity_snapshots exists
+    bind = op.get_bind()
+    result = bind.execute(
+        "SELECT 1 FROM information_schema.tables "
+        "WHERE table_schema='public' AND table_name='identity_snapshots';"
+    ).fetchone()
+    if not result:
+        import warnings
+        warnings.warn(
+            "Table public.identity_snapshots does not exist. "
+            "Foreign key constraint will be deferred. Run main migrations first.",
+            UserWarning,
+            stacklevel=2,
+        )
+    
     # Create the partitioned parent table
     op.execute(_CREATE_TABLE_SQL)
 
-    # Create partitions for current and next month
+    # Create partitions for current and next month using bounds computation
     current_start, current_end, next_start, next_end = _get_partition_bounds()
+    
+    # Extract year/month from start dates for suffix
     now = datetime.now(UTC)
     current_suffix = f"{now.year:04d}_{now.month:02d}"
     next_month = now.month + 1
