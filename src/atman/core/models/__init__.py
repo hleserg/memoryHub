@@ -46,6 +46,7 @@ from atman.core.models.reflection import (
     PatternType,
     ReflectionEvent,
     ReflectionLevel,
+    ReflectionRecord,
     ReframingNoteOutput,
 )
 from atman.core.models.session import (
@@ -95,6 +96,7 @@ __all__ = [
     "Principle",
     "ReflectionEvent",
     "ReflectionLevel",
+    "ReflectionRecord",
     "ReframingNote",
     "ReframingNoteAppendResult",
     "ReframingNoteOutput",
