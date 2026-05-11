@@ -225,6 +225,7 @@ def test_add_fact_persists_embedding_relations_and_agent_context(
     assert insert_params is not None
     assert insert_params[-1] == "[0.25,0.75]"
     assert "INSERT INTO public.fact_relations" in relation_query
+    assert relation_params is not None
     assert relation_params[:3] == [str(record.id), str(target_id), "supports"]
 
 
@@ -257,7 +258,11 @@ def test_invalidate_fact_links_supersession_and_reloads() -> None:
     assert result is not None
     assert result.id == fact_id
     assert conn.commits == 2
-    relation_params = [params for query, params in cursor.executed if "fact_relations" in query]
+    relation_params = [
+        params
+        for query, params in cursor.executed
+        if "fact_relations" in query and params is not None
+    ]
     assert relation_params[0][:3] == [str(fact_id), str(superseded_by), "superseded_by"]
     assert relation_params[1][:3] == [str(superseded_by), str(fact_id), "supersedes"]
 
@@ -283,7 +288,9 @@ def test_link_inserts_relation_when_both_facts_exist() -> None:
 
     assert conn.commits == 1
     assert len(cursor.executed) == 2
-    assert cursor.executed[1][1][:3] == [str(source_id), str(target_id), "related_to"]
+    relation_params = cursor.executed[1][1]
+    assert relation_params is not None
+    assert relation_params[:3] == [str(source_id), str(target_id), "related_to"]
 
 
 def test_confirm_fact_and_decay_stale_facts_return_database_results() -> None:
