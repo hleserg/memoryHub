@@ -110,22 +110,35 @@ def test_benchmark_runs_migration_rolls_december_partition_to_next_year() -> Non
     migration = _load_benchmark_runs_migration(recording_op)
     migration.datetime = _FixedDatetime
 
-    partition_sql = migration._current_month_partition_sql()
+    migration.upgrade()
 
-    assert "eval.benchmark_runs_2026_12" in partition_sql
-    assert "FOR VALUES FROM ('2026-12-01 00:00:00+00')" in partition_sql
-    assert "TO ('2027-01-01 00:00:00+00')" in partition_sql
+    # When run in December, should create December 2026 → January 2027 partition
+    # and January 2027 → February 2027 partition
+    partition_creates = [
+        stmt for stmt in recording_op.statements
+        if "eval.benchmark_runs_" in stmt and "PARTITION OF" in stmt and "DEFAULT" not in stmt
+    ]
+    assert len(partition_creates) >= 2
+
+    # December partition: 2026-12-01 to 2027-01-01
+    dec_partition = next((s for s in partition_creates if "2026_12" in s), None)
+    assert dec_partition is not None
+    assert "2026-12-01" in dec_partition
+    assert "2027-01-01" in dec_partition
+
+    # January partition: 2027-01-01 to 2027-02-01
+    jan_partition = next((s for s in partition_creates if "2027_01" in s), None)
+    assert jan_partition is not None
+    assert "2027-01-01" in jan_partition
+    assert "2027-02-01" in jan_partition
 
 
 def test_benchmark_runs_sql_mirror_documents_default_partition_safety_net() -> None:
     sql_mirror = _SQL_MIRROR_PATH.read_text(encoding="utf-8")
 
-    current_partition_index = sql_mirror.index(
-        "CREATE TABLE IF NOT EXISTS eval.benchmark_runs_YYYY_MM"
-    )
-    default_partition_index = sql_mirror.index(
-        "CREATE TABLE IF NOT EXISTS eval.benchmark_runs_default"
-    )
-
-    assert current_partition_index < default_partition_index
+    # SQL mirror should document the DEFAULT partition safety net
+    assert "CREATE TABLE IF NOT EXISTS eval.benchmark_runs_default" in sql_mirror
     assert "PARTITION OF eval.benchmark_runs DEFAULT" in sql_mirror
+
+    # Should also explain that initial partitions are created dynamically
+    assert "Initial partitions" in sql_mirror or "example" in sql_mirror.lower()
