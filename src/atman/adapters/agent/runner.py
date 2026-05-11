@@ -34,7 +34,7 @@ def _safe_str(s: str | None) -> str:
     return s.encode("utf-8", errors="replace").decode("utf-8")
 
 
-def _make_agent(model_config: ModelConfig) -> Agent[AtmanDeps, str]:
+def _make_agent(model_config: ModelConfig, thinking: bool = False) -> Agent[AtmanDeps, str]:
     model_str = model_config.model
 
     if model_str == "test":
@@ -56,6 +56,7 @@ def _make_agent(model_config: ModelConfig) -> Agent[AtmanDeps, str]:
         deps_type=AtmanDeps,
         tools=[record_key_moment, log_experience],
         instructions=lambda ctx: _safe_str(build_instructions(ctx.deps)),
+        model_settings={"thinking": thinking},
     )
 
 
@@ -74,7 +75,7 @@ class AtmanRunner:
         self._deps, self._session_manager, self._state_store = build_deps(
             self._workspace, agent_id, self._config
         )
-        self._agent = _make_agent(self._config.model)
+        self._agent = _make_agent(self._config.model, thinking=self._config.thinking)
 
     def ensure_identity(self) -> None:
         """Bootstrap identity + narrative if this agent has never run before."""
