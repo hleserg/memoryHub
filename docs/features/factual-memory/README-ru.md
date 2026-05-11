@@ -16,7 +16,7 @@ make demo-factual
 
 `make demo-factual` по умолчанию делает короткие паузы между шагами (`ATMAN_DEMO_PACE=1`). Мгновенный вывод: `make demo-factual-fast` или `ATMAN_DEMO_PACE=off python3 src/demo.py`. Вывод в консоль — **Rich** через `atman.term` (см. **`AGENTS.md`**).
 
-Интерактивный CLI: `python3 -m atman.cli` или установленная команда `atman`. Бэкенд определяется конфигом (по умолчанию PostgreSQL).
+Интерактивный CLI: `python3 -m atman.cli` или установленная команда `atman`. Бэкенд выбирает `atman.config.build_memory_backend()`; по умолчанию используется file backend (`~/.atman/facts.jsonl`), чтобы локальные запуски не требовали PostgreSQL.
 
 ## Обзор
 
@@ -131,29 +131,35 @@ memory.add_fact(fact)
 
 ## Выбор бэкенда
 
-Бэкенд настраивается в `src/atman/config.py`, **не через переменные окружения** — чтобы выбор был явным и версионировался в git.
+CLI и общие entrypoint'ы вызывают `atman.config.build_memory_backend()`. Значение по умолчанию — `file`, для локальной разработки и тестов без внешних сервисов. Для одного процесса выбор можно переопределить через `ATMAN_MEMORY_BACKEND`.
 
 ```python
 # src/atman/config.py
 class MemorySettings(BaseModel):
-    backend: str = "postgres"   # ← меняй здесь
+    backend: str = "file"
     file_path: str = "~/.atman/facts.jsonl"
 ```
 
 | Значение | Класс | Когда использовать |
 |---|---|---|
-| `"postgres"` | `PostgresFactualMemory` | Продакшн, интеграционные тесты |
 | `"file"` | `FileBackend` | Локальная работа без PostgreSQL |
 | `"inmemory"` | `InMemoryBackend` | Быстрые unit-тесты, прототипирование |
+| `"postgres"` | `PostgresFactualMemory` | Деплой или интеграционные тесты с RLS и SQL-хранилищем |
 
-Фабрика `build_memory_backend()` из `atman.config` создаёт нужный экземпляр. CLI и все точки входа используют её автоматически.
+Фабрика `build_memory_backend()` из `atman.config` создаёт нужный экземпляр. Пример запуска с PostgreSQL:
+
+```bash
+ATMAN_MEMORY_BACKEND=postgres DATABASE_URL=postgresql://atman_app:...@localhost:5432/atman atman
+```
+
+При прямом создании адаптера `PostgresFactualMemory` берёт URL из аргумента `db_url`, затем `ATMAN_DB_URL`, затем `DATABASE_URL`, затем из локального значения по умолчанию.
 
 ## PostgreSQL бэкенд
 
 ### Требования
 
-- PostgreSQL 16+ с расширениями `pgvector` и `pg_trgm`
-- `psycopg[binary]` (входит в `.[dev]`)
+- PostgreSQL с расширениями `vector` и `pg_trgm`
+- `psycopg[binary]` (входит в `.[dev]` / `.[eval]`; для продакшн-профиля с PostgreSQL добавьте зависимость явно)
 - Применённая миграция `migrations/versions/0002_create_facts_table.sql`
 
 ### Подключение
@@ -202,8 +208,8 @@ mem = PostgresFactualMemory(
 )
 ```
 
-- Если `embedding` передан и Ollama доступна → поиск через `halfvec(2560)` cosine similarity (HNSW индекс)
-- Если Ollama недоступна или упала → автоматический fallback на `ILIKE` текстовый поиск, `warnings.warn`
+- Если `embedding` передан и провайдер доступен → поиск через `halfvec(2560)` cosine similarity (HNSW индекс)
+- Если embedding-провайдер недоступен или упал → автоматический fallback на `ILIKE` текстовый поиск, `warnings.warn`
 - Факты без эмбеддинга хранятся нормально, метрика `facts_without_embedding` считает их
 
 ### Row-Level Security (RLS)
@@ -282,6 +288,13 @@ class FactualMemory(ABC):
 - Автоматическая загрузка при старте
 - Автоматическое сохранение при изменениях
 - Подходит для локального запуска без внешних сервисов
+
+#### PostgresFactualMemory
+
+- Реализует тот же порт `FactualMemory` поверх PostgreSQL
+- Использует RLS по `agent_id`; приложение должно подключаться не суперпользователем (`atman_app`)
+- Поддерживает опциональный `EmbeddingPort` и fallback на `ILIKE`, если embedding-провайдер недоступен
+- Требует миграцию `migrations/versions/0002_create_facts_table.sql`
 
 ## Примеры использования
 
@@ -405,6 +418,9 @@ pytest -v
 # Запустить конкретный тест
 pytest tests/test_models.py::test_fact_record_creation
 
+# Интеграция PostgreSQL (нужны тестовые URL/БД)
+pytest tests/integration/test_postgres_facts.py -v
+
 # Запустить тесты с покрытием
 pytest --cov=atman --cov-report=html
 ```
@@ -415,6 +431,7 @@ pytest --cov=atman --cov-report=html
 - `tests/test_in_memory_backend.py` - тесты InMemoryBackend
 - `tests/test_file_backend.py` - тесты FileBackend
 - `tests/test_backend_interface.py` - общие тесты для всех backend'ов
+- `tests/integration/test_postgres_facts.py` - интеграционные тесты PostgreSQL backend
 
 Все тесты проверяют:
 
@@ -453,7 +470,7 @@ pytest --cov=atman --cov-report=html
 
 ### Embeddings и семантический поиск
 
-Можно добавить адаптер с векторным поиском:
+PostgreSQL backend уже поддерживает опциональный `EmbeddingPort`. Будущие backend'ы могут реализовать тот же порт иначе:
 
 ```python
 class VectorBackend(FactualMemory):
@@ -521,6 +538,7 @@ atman/
 ├── src/atman/
 │   ├── __init__.py
 │   ├── cli.py                          # CLI для ручной проверки
+│   ├── config.py                       # выбор backend'а и env-настройки
 │   ├── core/
 │   │   ├── models/
 │   │   │   ├── __init__.py
@@ -532,13 +550,18 @@ atman/
 │       └── memory/
 │           ├── __init__.py
 │           ├── in_memory_backend.py    # In-memory реализация
-│           └── file_backend.py         # File-based реализация
+│           ├── file_backend.py         # File-based реализация
+│           └── postgres_backend.py     # PostgreSQL + RLS + optional embeddings
+├── migrations/
+│   └── versions/
+│       └── 0002_create_facts_table.sql # PostgreSQL схема facts/fact_relations
 ├── tests/
 │   ├── __init__.py
 │   ├── test_models.py
 │   ├── test_in_memory_backend.py
 │   ├── test_file_backend.py
-│   └── test_backend_interface.py
+│   ├── test_backend_interface.py
+│   └── integration/test_postgres_facts.py
 ├── pyproject.toml
 └── docs/features/factual-memory/   # README.md + README-ru.md (это руководство)
 ```

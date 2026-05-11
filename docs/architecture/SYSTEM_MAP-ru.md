@@ -64,7 +64,7 @@
 
 | Файл | Назначение |
 |------|------------|
-| `config.py` | Pydantic Settings: `EmbeddingSettings` с `EMBEDDING_BACKEND`, `EMBEDDING_MODEL`, `EMBEDDING_DIMENSION`, `EMBEDDING_OLLAMA_HOST`, `EMBEDDING_TIMEOUT` |
+| `config.py` | Pydantic settings и фабрика `build_memory_backend()`; factual memory по умолчанию использует `FileBackend`, поддерживает `ATMAN_MEMORY_BACKEND=postgres|file|inmemory` |
 | `core/exceptions.py` | `AtmanError`, `GovernanceRejectedError`, `NarrativePersistenceConflictError`, `SessionNotFoundError`, `SessionAlreadyFinishedError`, `TooManyActiveSessionsError` |
 | `core/clock_impl.py` | `SystemClock`, `FrozenClock` |
 | `core/narrative_write_audit.py` | Хуки аудита коммитов нарратива |
@@ -88,6 +88,7 @@
 |------|----------------|-----------|
 | `adapters/memory/in_memory_backend.py` (`InMemoryBackend`) | `FactualMemory` | без персистенса |
 | `adapters/memory/file_backend.py` (`FileBackend`) | `FactualMemory` | JSONL + file locking |
+| `adapters/memory/postgres_backend.py` (`PostgresFactualMemory`) | `FactualMemory` | PostgreSQL `public.facts` / `public.fact_relations`, RLS через `ATMAN_CURRENT_AGENT`, опциональный `EmbeddingPort` с fallback на `ILIKE` |
 | `adapters/memory/mock_embedding.py` (`MockEmbeddingAdapter`) | `EmbeddingPort` | детерминированные 2560-мерные эмбеддинги; seed=`hash(text) % 2^31`; `model_name()` возвращает `"mock-embedding:768d"` |
 | `adapters/memory/bm25_embedding.py` (`BM25EmbeddingAdapter`) | `EmbeddingPort` | разреженные лексические BM25 эмбеддинги |
 | `adapters/memory/ollama_embedding.py` (`OllamaEmbeddingAdapter`) | `EmbeddingPort` | Ollama API эмбеддинги; по умолчанию `qwen3-embedding:4b` (2560-мерные); `model_name()` возвращает настроенную модель; доступен `health_check()` |
@@ -131,6 +132,16 @@
 | `docs/demo-data/` | данные сайта | 11 JSON-файлов, генерируемых `make demo-e2e-scenario`; используются `docs/demo.html` |
 | `docs/demo.html` | сайт | статическая страница E2E-прогона; 11 шагов; двуязычная EN/RU; загружает JSON из `docs/demo-data/`; без build step, без React |
 
+### 1.7. Оценочная подсистема (`src/atman/eval/`, `eval/`, `scripts/eval/`)
+
+| Путь | Категория | Назначение |
+|------|-----------|------------|
+| `src/atman/eval/__init__.py` | optional namespace | импортирует `_deps_check`; `import atman.eval` быстро падает без extra `eval` |
+| `src/atman/eval/_deps_check.py` | dependency guard | проверяет canary-зависимости из `[project.optional-dependencies].eval` и показывает понятную подсказку установки |
+| `eval/migrations/alembic.ini`, `eval/migrations/env.py` | eval storage | конфигурация Alembic для изолированной PostgreSQL-схемы `eval` |
+| `eval/migrations/versions/0010_*` ... `0040_*` | eval storage | идемпотентная схема eval, таблицы benchmark run, supporting tables и materialized view трендов |
+| `scripts/eval/partition_manager.py` | операции | создаёт будущие partitions, отсоединяет старые partitions и показывает статус partitions `eval.benchmark_runs` |
+
 ---
 
 ## 2. Интеграции
@@ -155,7 +166,7 @@
 
 | Адаптер | Реализует |
 |---------|-----------|
-| `InMemoryBackend`, `FileBackend` | `FactualMemory` |
+| `InMemoryBackend`, `FileBackend`, `PostgresFactualMemory` | `FactualMemory` |
 | `InMemoryExperienceStore`, `JsonlExperienceStore`, `FileStateStore` | `StateStore` |
 | `MockReflectionModel` | `ReflectionModel` |
 | `InMemoryPatternStore`, `InMemoryReflectionEventStore`, `InMemoryHealthAssessmentStore` | соответствующие порты |
@@ -165,7 +176,7 @@
 
 | CLI | Проводка | Файл |
 |-----|----------|------|
-| `cli.py` | `FileBackend` напрямую как `FactualMemory` | `cli.py:14-24` |
+| `cli.py` | фабрика `build_memory_backend()` (`FileBackend` по умолчанию, выбор `postgres|file|inmemory` через env) | `config.py`, `cli.py` |
 | `cli_experience.py` | `ExperienceService(JsonlExperienceStore)` | `cli_experience.py:17-29` |
 | `cli_identity.py` | `IdentityService(FileStateStore)` + `NarrativeService(FileStateStore)` | `cli_identity.py:15-29` |
 | `cli_reflection.py` | `Micro/Daily/DeepReflectionService` + fixture_loader | `cli_reflection.py:18-47` |

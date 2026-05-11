@@ -109,7 +109,7 @@ webui:
 	python3 -m streamlit run src/atman/web_dashboard/app.py
 
 # E2E demo scenario: generates docs/demo-data/*.json for atmanai.dev/demo.html.
-# See e2e/scenarios/value_drift_under_pressure.py and docs/features/demo-e2e/README.md.
+# See e2e/scenarios/value_drift_under_pressure.py and docs/demo.html.
 demo-e2e-scenario:
 	PYTHONPATH=. python3 e2e/scenarios/value_drift_under_pressure.py
 
