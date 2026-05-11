@@ -148,7 +148,7 @@ class AtmanRunner:
         if active and not active.key_moments:
             from atman.core.models import KeyMomentInput
             from atman.core.models.experience import EmotionalDepth
-            self._session_manager.record_key_moment(
+            self._session_manager.append_key_moment_input(
                 session_id,
                 KeyMomentInput(
                     what_happened="Сессия завершена без выраженных эмоциональных моментов.",
@@ -218,7 +218,7 @@ class AtmanRunner:
             if active and not active.key_moments:
                 from atman.core.models import KeyMomentInput
                 from atman.core.models.experience import EmotionalDepth
-                self._session_manager.record_key_moment(session_id, KeyMomentInput(
+                self._session_manager.append_key_moment_input(session_id, KeyMomentInput(
                     what_happened="Обмен завершён без выраженных эмоций.",
                     emotional_valence=0.0,
                     emotional_intensity=0.1,
