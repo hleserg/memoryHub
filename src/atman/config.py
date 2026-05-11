@@ -75,6 +75,7 @@ def build_memory_backend():
 
     if backend == "file":
         from pathlib import Path
+
         from atman.adapters.memory import FileBackend
 
         return FileBackend(Path(settings.memory.file_path).expanduser())

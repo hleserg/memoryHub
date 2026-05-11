@@ -8,11 +8,11 @@ maintenance exists.
 
 from __future__ import annotations
 
+from datetime import UTC, datetime, tzinfo
 import importlib.util
 import sys
 import types
 from importlib.abc import Loader
-from datetime import UTC, datetime, tzinfo
 from pathlib import Path
 from typing import Protocol, cast
 

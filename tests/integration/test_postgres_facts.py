@@ -121,8 +121,9 @@ def _agent() -> str:
 
 
 def _make_fact(agent_id=None, **kwargs):
-    from atman.core.models.fact import FactRecord
     from uuid import UUID
+
+    from atman.core.models.fact import FactRecord
 
     if agent_id is None:
         agent_id = UUID(os.environ.get("ATMAN_CURRENT_AGENT") or str(uuid4()))
@@ -393,8 +394,9 @@ def test_rls_isolation(pg_store):
     agent_a = str(uuid4())
     agent_b = str(uuid4())
 
-    from atman.core.models.fact import FactRecord
     from uuid import UUID
+
+    from atman.core.models.fact import FactRecord
 
     # Write facts as the superuser owner — RLS is not enforced for the owner,
     # but facts land in the table with the correct agent_id FK.
