@@ -31,7 +31,7 @@ class EmbeddingSettings(BaseSettings):
 class MemorySettings(BaseModel):
     """Factual memory backend selection.
 
-    Default is ``file`` for CLI and local use. Production can set
+    Default is ``file`` for CLI, tests, and local development. Production can set
     ``ATMAN_MEMORY_BACKEND=postgres`` (see :func:`build_memory_backend`).
 
     backend options:
@@ -64,7 +64,12 @@ settings = Settings()
 
 
 def build_memory_backend():
-    """Instantiate the factual memory backend selected in config.memory.backend."""
+    """Instantiate the factual memory backend selected in config.memory.backend.
+
+    Can be overridden via ATMAN_MEMORY_BACKEND environment variable.
+    """
+    import os
+
     from atman.core.ports import FactualMemory  # noqa: F401 (type hint target)
 
     # Subprocess-friendly override for tests and local tooling (see tests/test_cli_factual_memory.py).

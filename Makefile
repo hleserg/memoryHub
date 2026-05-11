@@ -127,7 +127,7 @@ playbook-audit:
 # ===== Eval / Production isolation =====
 # (added by setup_prod_eval_boundary.sh — see docs/architecture/PROD_EVAL_BOUNDARY.md)
 
-.PHONY: lint-boundary verify-prod-isolation eval-db-init eval-db-migrate eval-db-downgrade eval-up eval-down
+.PHONY: lint-boundary verify-prod-isolation eval-db-init eval-db-migrate eval-db-downgrade eval-db-test eval-up eval-down
 
 lint-boundary:
 	lint-imports
@@ -143,6 +143,9 @@ eval-db-migrate:
 
 eval-db-downgrade:
 	alembic -c eval/migrations/alembic.ini downgrade -1
+
+eval-db-test:
+	pytest tests/test_eval_storage_integration.py -v
 
 COMPOSE_EVAL = docker compose -f docker-compose.yml -f docker-compose.eval.yml
 

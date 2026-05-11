@@ -73,7 +73,7 @@ def pg_store():
     admin_url = _test_admin_db_url()
     if not app_url:
         pytest.skip("No test DB URL (set TEST_DATABASE_URL or DATABASE_URL in .env)")
-    assert admin_url is not None
+    assert admin_url is not None, "DATABASE_URL must be set for integration tests"
 
     # Apply migration as superuser (CREATE TABLE, CREATE INDEX, etc.)
     migration_sql = (
@@ -101,7 +101,7 @@ def pg_admin_conn():
     from psycopg.rows import dict_row
 
     admin_url = _test_admin_db_url()
-    assert admin_url is not None
+    assert admin_url is not None, "DATABASE_URL must be set for integration tests"
     conn = psycopg.connect(admin_url, row_factory=cast(Any, dict_row))
     yield conn
     conn.close()
@@ -417,7 +417,7 @@ def test_rls_isolation(pg_store):
     from psycopg.rows import dict_row
 
     url = _test_db_url()
-    assert url is not None
+    assert url is not None, "DATABASE_URL must be set for integration tests"
     # autocommit=True so that SET ROLE is session-level (not rolled back with the transaction)
     # and set_config(..., false) persists across statements.
     with psycopg.connect(url, row_factory=cast(Any, dict_row), autocommit=True) as rls_conn:
