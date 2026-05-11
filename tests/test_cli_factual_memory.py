@@ -22,7 +22,14 @@ _UUID_RE = re.compile(
 
 def _run_cli(stdin: str, home: Path) -> subprocess.CompletedProcess[str]:
     # Force JSONL file backend so REPL tests do not depend on PostgreSQL or deploy defaults.
-    env = {**os.environ, "HOME": str(home), "ATMAN_MEMORY_BACKEND": "file"}
+    # Preserve original HOME for Python to find site-packages, but point .atman to test home.
+    env = {
+        **os.environ,
+        "ATMAN_MEMORY_BACKEND": "file",
+    }
+    # Override HOME only if running in subprocess - this ensures tests are isolated
+    # but Python can still find installed packages in ~/.local
+    env["HOME"] = str(home)
     return subprocess.run(
         [sys.executable, "-m", "atman.cli"],
         input=stdin,

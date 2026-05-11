@@ -28,8 +28,8 @@ class EmbeddingSettings(BaseSettings):
 class MemorySettings(BaseModel):
     """Factual memory backend selection.
 
-    Edit this class directly to switch backends — intentionally NOT read from
-    environment variables so the choice is explicit and version-controlled.
+    Defaults to "file" for safety in tests and local development.
+    Production deployments should set ATMAN_MEMORY_BACKEND=postgres in environment.
 
     backend options:
       "postgres"  — PostgresFactualMemory (DATABASE_URL from env)
@@ -37,7 +37,7 @@ class MemorySettings(BaseModel):
       "inmemory"  — InMemoryBackend (lost on restart, useful for quick tests)
     """
 
-    backend: str = "postgres"
+    backend: str = "file"
     file_path: str = "~/.atman/facts.jsonl"
 
 
@@ -61,10 +61,14 @@ settings = Settings()
 
 
 def build_memory_backend():
-    """Instantiate the factual memory backend selected in config.memory.backend."""
+    """Instantiate the factual memory backend selected in config.memory.backend.
+    
+    Can be overridden via ATMAN_MEMORY_BACKEND environment variable.
+    """
+    import os
     from atman.core.ports import FactualMemory  # noqa: F401 (type hint target)
 
-    backend = settings.memory.backend
+    backend = os.environ.get("ATMAN_MEMORY_BACKEND", settings.memory.backend)
 
     if backend == "postgres":
         from atman.adapters.memory.postgres_backend import PostgresFactualMemory
