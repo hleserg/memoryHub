@@ -68,7 +68,6 @@ def pg_store():
     Tables are NOT dropped at the end so results can be inspected.
     """
     import psycopg
-    from psycopg import sql
 
     app_url = _test_db_url()
     admin_url = _test_admin_db_url()
@@ -82,7 +81,7 @@ def pg_store():
     ).read_text()
 
     with psycopg.connect(admin_url) as conn:
-        conn.execute(sql.SQL(migration_sql))
+        conn.execute(cast(Any, migration_sql))
         conn.commit()
 
     from atman.adapters.memory.postgres_backend import PostgresFactualMemory
@@ -103,7 +102,7 @@ def pg_admin_conn():
     admin_url = _test_admin_db_url()
     if admin_url is None:
         pytest.skip("No admin DB URL (set TEST_ADMIN_DATABASE_URL or TEST_DATABASE_URL)")
-    conn = psycopg.connect(admin_url, row_factory=dict_row)
+    conn = psycopg.connect(admin_url, row_factory=cast(Any, dict_row))
     yield conn
     conn.close()
 
@@ -421,7 +420,7 @@ def test_rls_isolation(pg_store):
         pytest.skip("No test DB URL (set TEST_DATABASE_URL or DATABASE_URL in .env)")
     # autocommit=True so that SET ROLE is session-level (not rolled back with the transaction)
     # and set_config(..., false) persists across statements.
-    with psycopg.connect(url, row_factory=dict_row, autocommit=True) as rls_conn:
+    with psycopg.connect(url, row_factory=cast(Any, dict_row), autocommit=True) as rls_conn:
         try:
             rls_conn.execute("SET ROLE atman_app")
         except psycopg.errors.UndefinedObject:

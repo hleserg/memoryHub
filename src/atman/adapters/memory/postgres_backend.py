@@ -11,7 +11,7 @@ import json
 import os
 import warnings
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 from uuid import UUID
 
 if TYPE_CHECKING:
@@ -166,7 +166,7 @@ class PostgresFactualMemory(FactualMemory):
     def connect(self) -> None:
         """Open a database connection."""
         if self._conn is None or self._conn.closed:
-            self._conn = psycopg.connect(self.db_url, row_factory=dict_row)
+            self._conn = psycopg.connect(self.db_url, row_factory=cast(Any, dict_row))
 
     def close(self) -> None:
         """Close the database connection."""
