@@ -155,7 +155,7 @@ class PostgresFactualMemory(FactualMemory):
             or "postgresql://atman@localhost:5432/atman"
         )
         self._embedding = embedding
-        self._conn: "psycopg.Connection[Any] | None" = None
+        self._conn: psycopg.Connection[Any] | None = None
         self._closed = False
 
     # ── Connection management ─────────────────────────────────────────────────
@@ -234,7 +234,7 @@ class PostgresFactualMemory(FactualMemory):
         query = _FACT_SELECT + f" WHERE {where_sql} GROUP BY f.id ORDER BY {order_sql}"
         if limit is not None:
             query += " LIMIT %s"
-            params = list(params) + [limit]
+            params = [*list(params), limit]
         cur.execute(query, params)
         return [_parse_fact(row) for row in cur.fetchall()]
 

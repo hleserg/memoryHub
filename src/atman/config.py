@@ -62,10 +62,11 @@ settings = Settings()
 
 def build_memory_backend():
     """Instantiate the factual memory backend selected in config.memory.backend.
-    
+
     Can be overridden via ATMAN_MEMORY_BACKEND environment variable.
     """
     import os
+
     from atman.core.ports import FactualMemory  # noqa: F401 (type hint target)
 
     backend = os.environ.get("ATMAN_MEMORY_BACKEND", settings.memory.backend)
@@ -79,6 +80,7 @@ def build_memory_backend():
 
     if backend == "file":
         from pathlib import Path
+
         from atman.adapters.memory import FileBackend
 
         return FileBackend(Path(settings.memory.file_path).expanduser())
