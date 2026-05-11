@@ -33,8 +33,8 @@ if os.environ.get("SKIP_EVAL_STORAGE_TEST") == "1":
 else:
     try:
         import psycopg
-        from alembic import command
-        from alembic.config import Config
+        from alembic import command  # type: ignore[import-not-found]
+        from alembic.config import Config  # type: ignore[import-not-found]
     except ImportError:
         SKIP_REASON = "psycopg or alembic not installed (install 'atman[eval]')"
 
@@ -239,9 +239,9 @@ def test_role_permissions():
                 conn.rollback()
                 conn.execute("RESET ROLE;")
         except (
-            psycopg.errors.InvalidAuthorizationSpecification,
-            psycopg.errors.InsufficientPrivilege,
-        ):  # type: ignore[name-defined]
+            psycopg.errors.InvalidAuthorizationSpecification,  # type: ignore[possibly-unbound]
+            psycopg.errors.InsufficientPrivilege,  # type: ignore[possibly-unbound]
+        ):
             # Role doesn't exist or current user can't switch to it
             # This is acceptable in limited test environments
             conn.rollback()

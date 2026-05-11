@@ -30,7 +30,7 @@ if not SKIP_REASON:
     sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "scripts", "eval"))
 
     try:
-        from partition_manager import safe_db_url_for_logging
+        from partition_manager import safe_db_url_for_logging  # type: ignore[import-not-found]
     except ImportError:
         # If import fails, define dummy for test discovery
         def safe_db_url_for_logging(url: str) -> str:
