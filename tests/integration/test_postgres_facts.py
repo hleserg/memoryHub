@@ -417,8 +417,6 @@ def test_rls_isolation(pg_store):
     os.environ["ATMAN_CURRENT_AGENT"] = agent_b
     pg_store.add_fact(FactRecord(agent_id=UUID(agent_b), content="Agent B data", source="s"))
 
-    from psycopg.rows import dict_row
-
     url = _test_db_url()
     if url is None:
         pytest.skip("No test DB URL (set TEST_DATABASE_URL or DATABASE_URL in .env)")
