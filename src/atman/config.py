@@ -68,8 +68,6 @@ def build_memory_backend():
 
     Can be overridden via ATMAN_MEMORY_BACKEND environment variable.
     """
-    import os
-
     from atman.core.ports import FactualMemory  # noqa: F401 (type hint target)
 
     # Subprocess-friendly override for tests and local tooling (see tests/test_cli_factual_memory.py).
