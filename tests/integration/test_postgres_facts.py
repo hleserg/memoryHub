@@ -73,7 +73,8 @@ def pg_store():
     admin_url = _test_admin_db_url()
     if not app_url:
         pytest.skip("No test DB URL (set TEST_DATABASE_URL or DATABASE_URL in .env)")
-    assert admin_url is not None, "DATABASE_URL must be set for integration tests"
+    if admin_url is None:
+        pytest.skip("No admin DB URL (set TEST_ADMIN_DATABASE_URL or ATMAN_ADMIN_DATABASE_URL)")
 
     # Apply migration as superuser (CREATE TABLE, CREATE INDEX, etc.)
     migration_sql = (
@@ -101,7 +102,8 @@ def pg_admin_conn():
     from psycopg.rows import dict_row
 
     admin_url = _test_admin_db_url()
-    assert admin_url is not None, "DATABASE_URL must be set for integration tests"
+    if admin_url is None:
+        pytest.skip("No admin DB URL (set TEST_ADMIN_DATABASE_URL or ATMAN_ADMIN_DATABASE_URL)")
     conn = psycopg.connect(admin_url, row_factory=cast(Any, dict_row))
     yield conn
     conn.close()
@@ -399,6 +401,7 @@ def test_rls_isolation(pg_store):
     SQL applied by the pg_store fixture above).
     """
     import psycopg
+    from psycopg.rows import dict_row
 
     agent_a = str(uuid4())
     agent_b = str(uuid4())
@@ -414,10 +417,9 @@ def test_rls_isolation(pg_store):
     os.environ["ATMAN_CURRENT_AGENT"] = agent_b
     pg_store.add_fact(FactRecord(agent_id=UUID(agent_b), content="Agent B data", source="s"))
 
-    from psycopg.rows import dict_row
-
     url = _test_db_url()
-    assert url is not None, "DATABASE_URL must be set for integration tests"
+    if url is None:
+        pytest.skip("No test DB URL (set TEST_DATABASE_URL or DATABASE_URL in .env)")
     # autocommit=True so that SET ROLE is session-level (not rolled back with the transaction)
     # and set_config(..., false) persists across statements.
     with psycopg.connect(url, row_factory=cast(Any, dict_row), autocommit=True) as rls_conn:

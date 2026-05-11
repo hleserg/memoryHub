@@ -81,6 +81,9 @@ CREATE INDEX IF NOT EXISTS idx_reflections_session
 -- ── Row-Level Security (RLS) ──────────────────────────────────────────────────
 
 ALTER TABLE reflections ENABLE ROW LEVEL SECURITY;
+-- FORCE RLS so owner-role connections (the default local URL uses `atman`)
+-- cannot bypass tenant isolation on `get()` / `list_by_session()` reads.
+ALTER TABLE reflections FORCE ROW LEVEL SECURITY;
 
 DROP POLICY IF EXISTS reflections_isolation ON reflections;
 CREATE POLICY reflections_isolation ON reflections

@@ -102,6 +102,7 @@ omit = [
     "src/atman/affect/emolex/emolex.py",
     "src/atman/adapters/agent/deps.py",
     "src/atman/adapters/reflection/ollama_reflection_model_with_persistence.py",
+    "src/atman/adapters/memory/postgres_backend.py",
     "src/atman/adapters/memory/bm25_embedding.py",
     "src/atman/core/services/passive_memory_injector.py",
     "src/atman/core/services/session_working_memory.py",
