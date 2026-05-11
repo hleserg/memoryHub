@@ -146,16 +146,16 @@ class AtmanRunner:
         # Ensure at least one key moment so finish_session doesn't reject
         active = self._session_manager.get_active_session(session_id)
         if active and not active.key_moments:
-            from atman.core.models.experience import EmotionalDepth, FeltSense, KeyMoment
-            self._session_manager.append_key_moment(
+            from atman.core.models import KeyMomentInput
+            from atman.core.models.experience import EmotionalDepth
+            self._session_manager.record_key_moment(
                 session_id,
-                KeyMoment(
+                KeyMomentInput(
                     what_happened="Сессия завершена без выраженных эмоциональных моментов.",
-                    how_i_felt=FeltSense(
-                        emotional_valence=0.0,
-                        emotional_intensity=0.1,
-                        depth=EmotionalDepth.SURFACE,
-                    ),
+                    emotional_valence=0.0,
+                    emotional_intensity=0.1,
+                    depth=EmotionalDepth.SURFACE,
+                    incomplete_coloring=True,
                     why_it_matters="Нейтральная сессия — часть базовой линии.",
                 ),
             )
@@ -216,14 +216,14 @@ class AtmanRunner:
 
             active = self._session_manager.get_active_session(session_id)
             if active and not active.key_moments:
-                from atman.core.models.experience import EmotionalDepth, FeltSense, KeyMoment
-                self._session_manager.append_key_moment(session_id, KeyMoment(
+                from atman.core.models import KeyMomentInput
+                from atman.core.models.experience import EmotionalDepth
+                self._session_manager.record_key_moment(session_id, KeyMomentInput(
                     what_happened="Обмен завершён без выраженных эмоций.",
-                    how_i_felt=FeltSense(
-                        emotional_valence=0.0,
-                        emotional_intensity=0.1,
-                        depth=EmotionalDepth.SURFACE,
-                    ),
+                    emotional_valence=0.0,
+                    emotional_intensity=0.1,
+                    depth=EmotionalDepth.SURFACE,
+                    incomplete_coloring=True,
                     why_it_matters="Базовая линия.",
                 ))
 
