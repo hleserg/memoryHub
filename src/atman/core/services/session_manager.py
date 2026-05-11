@@ -21,9 +21,9 @@ import asyncio
 import logging
 import threading
 from pathlib import Path
+from typing import TYPE_CHECKING
 from uuid import UUID, uuid5
 
-from atman.affect.detector import AffectDetector, AffectDetectorConfig
 from atman.core.clock_impl import SystemClock
 from atman.core.exceptions import (
     SessionAlreadyFinishedError,
@@ -43,6 +43,9 @@ from atman.core.models import (
 )
 from atman.core.ports.clock import ClockPort
 from atman.core.ports.state_store import StateStore
+
+if TYPE_CHECKING:
+    from atman.affect.detector import AffectDetector, AffectDetectorConfig
 
 # Cap for eigenstate list fields; order is insertion-derived until salience ranking exists.
 MAX_EIGENSTATE_ITEMS = 5
@@ -101,6 +104,8 @@ class SessionManager:
         self._lock = threading.Lock()
         self._affect_detector: AffectDetector | None = None
         if affect_workspace is not None and affect_config is not None:
+            from atman.affect.detector import AffectDetector
+
             self._affect_detector = AffectDetector(
                 affect_config,
                 workspace=affect_workspace,
@@ -211,7 +216,13 @@ class SessionManager:
         self._schedule_affect_processing(session_id, event_copy)
 
     def _schedule_affect_processing(self, session_id: UUID, event: SessionEvent) -> None:
-        """Fire-and-forget :class:`AffectDetector` run after ``record_event``."""
+        """Schedule :class:`AffectDetector` after ``record_event``.
+
+        With a running asyncio loop this is fire-and-forget via ``create_task``.
+        Without a loop, ``asyncio.run`` executes the detector synchronously on this
+        thread (blocking until scoring finishes) — avoid configuring affect for
+        latency-sensitive synchronous ``record_event`` callers without an event loop.
+        """
         det = self._affect_detector
         if det is None:
             return

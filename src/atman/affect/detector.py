@@ -163,7 +163,7 @@ class AffectDetector:
 
         if thinking and thinking.strip():
             t_lang = _detect_lang(thinking, self.config.default_lang)
-            m_score = nrc_emotion_score(text, lang)
+            m_score = metrics.nrc_valence
             th_score = nrc_emotion_score(thinking, t_lang)
             divergence = abs(m_score - th_score)
             if not cold and divergence > self.config.divergence_threshold:

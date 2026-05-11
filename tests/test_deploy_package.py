@@ -78,7 +78,7 @@ def test_gen_secrets_writes_restricted_env_file(tmp_path: Path) -> None:
     assert values["POSTGRES_USER"] == "atman"
     assert values["POSTGRES_DB"] == "atman"
     assert values["POSTGRES_PORT"] == "5432"
-    assert values["DATABASE_URL"].startswith("postgresql://atman:")
+    assert values["DATABASE_URL"].startswith("postgresql://atman_app:")
     assert values["QDRANT_URL"] == "http://localhost:6333"
     assert len(values["POSTGRES_PASSWORD"]) == 32
     assert len(values["QDRANT_API_KEY"]) == 32

@@ -75,7 +75,9 @@ EN_SELF = frozenset(
     }
 )
 
-RU_DISCLAIMERS = frozenset({"но", "однако", "хотя", "зато", "впрочем", "тем", "не", "менее"})
+# Token-level markers only (no standalone "не"/"тем"/"менее" — too common in Russian).
+# Phrase "тем не менее" is detected separately in _disclaimer_hit_count.
+RU_DISCLAIMERS = frozenset({"но", "однако", "хотя", "зато", "впрочем"})
 EN_DISCLAIMERS = frozenset(
     {"but", "however", "although", "though", "yet", "still", "nevertheless", "nonetheless"}
 )
@@ -115,8 +117,6 @@ RU_POSITIVE_SINCERITY_MARKERS = frozenset(
         "признаю",
         "сомневаюсь",
         "неуверен",
-        "не",
-        "знаю",
     }
 )
 EN_POSITIVE_SINCERITY_MARKERS = frozenset(
@@ -190,13 +190,24 @@ def self_reference_density(tokens: Sequence[str], lang: str) -> float:
     return hits / len(tokens)
 
 
-def disclaimer_density(tokens: Sequence[str], lang: str) -> float:
+def _disclaimer_hit_count(tokens: Sequence[str], lang: str) -> int:
+    """Token-aligned disclaimer hits (plus Russian trigram 'тем не менее')."""
     if not tokens:
-        return 0.0
+        return 0
     bag = RU_DISCLAIMERS if lang == "ru" else EN_DISCLAIMERS
     lowered = [t.lower() for t in tokens]
     hits = sum(1 for t in lowered if t in bag)
-    return hits / len(tokens)
+    if lang == "ru" and len(lowered) >= 3:
+        for i in range(len(lowered) - 2):
+            if lowered[i] == "тем" and lowered[i + 1] == "не" and lowered[i + 2] == "менее":
+                hits += 1
+    return hits
+
+
+def disclaimer_density(tokens: Sequence[str], lang: str) -> float:
+    if not tokens:
+        return 0.0
+    return _disclaimer_hit_count(tokens, lang) / len(tokens)
 
 
 def negation_inversion_valence(text: str, lang: str, base_valence: float) -> float:
@@ -235,28 +246,40 @@ def sincerity_score(text: str, tokens: Sequence[str], lang: str) -> int:
     A: early positive sincerity marker; B: elaboration after marker / length / questions;
     C: disclaimer presence.
     """
-    lowered = text.lower()
     markers = RU_POSITIVE_SINCERITY_MARKERS if lang == "ru" else EN_POSITIVE_SINCERITY_MARKERS
     expansion = RU_EXPANSION_AFTER if lang == "ru" else EN_EXPANSION_AFTER
-    disclaimers = RU_DISCLAIMERS if lang == "ru" else EN_DISCLAIMERS
+    lowered_tokens = [t.lower() for t in tokens]
 
     score = 0
     first_idx: int | None = None
-    for i, tok in enumerate(t.lower() for t in tokens):
+    i = 0
+    while i < len(lowered_tokens):
+        tok = lowered_tokens[i]
+        if lang == "ru" and i + 1 < len(lowered_tokens) and tok == "не" and lowered_tokens[i + 1] == "знаю":
+            first_idx = i
+            score += 1
+            break
         if tok in markers:
             first_idx = i
             score += 1
             break
+        i += 1
 
     if first_idx is not None:
-        after = tokens[first_idx + 1 :]
+        skip_after = 2 if (
+            lang == "ru"
+            and first_idx + 1 < len(lowered_tokens)
+            and lowered_tokens[first_idx] == "не"
+            and lowered_tokens[first_idx + 1] == "знаю"
+        ) else 1
+        after = tokens[first_idx + skip_after :]
         wc_after = len(after)
         has_q = "?" in text
         has_exp = any(t.lower() in expansion for t in after)
         if wc_after >= 4 or has_q or has_exp:
             score += 1
 
-    if any(d in lowered for d in disclaimers):
+    if _disclaimer_hit_count(tokens, lang) > 0:
         score += 1
 
     # Penalise very short performative praise without substance
