@@ -358,7 +358,7 @@ def test_save_identity_expected_version_mismatch_raises(store: StateStore) -> No
     ident = _make_identity()
     store.save_identity(ident)
     stale = ident.model_copy(update={"self_description": "changed"})
-    with pytest.raises(ValueError, match="version|Version|mismatch"):
+    with pytest.raises(ValueError, match=r"version|Version|mismatch"):
         store.save_identity(stale, expected_version="definitely-wrong")
 
 
@@ -384,7 +384,7 @@ def test_save_narrative_optimistic_lock_mismatch_raises(store: StateStore) -> No
             )
         }
     )
-    with pytest.raises(ValueError, match="updated_at|mismatch|Version|version"):
+    with pytest.raises(ValueError, match=r"updated_at|mismatch|Version|version"):
         store.save_narrative(
             stale,
             expected_version=loaded_v1.schema_version,
