@@ -4,6 +4,9 @@ Atman configuration management via Pydantic Settings.
 Centralizes all environment variable configuration with type validation.
 """
 
+import os
+from pathlib import Path
+
 from pydantic import BaseModel
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -28,8 +31,8 @@ class EmbeddingSettings(BaseSettings):
 class MemorySettings(BaseModel):
     """Factual memory backend selection.
 
-    Edit this class directly to switch backends — intentionally NOT read from
-    environment variables so the choice is explicit and version-controlled.
+    Default is ``file`` for CLI, tests, and local development. Production can set
+    ``ATMAN_MEMORY_BACKEND=postgres`` (see :func:`build_memory_backend`).
 
     backend options:
       "postgres"  — PostgresFactualMemory (DATABASE_URL from env)
@@ -37,7 +40,7 @@ class MemorySettings(BaseModel):
       "inmemory"  — InMemoryBackend (lost on restart, useful for quick tests)
     """
 
-    backend: str = "postgres"
+    backend: str = "file"
     file_path: str = "~/.atman/facts.jsonl"
 
 
@@ -61,10 +64,14 @@ settings = Settings()
 
 
 def build_memory_backend():
-    """Instantiate the factual memory backend selected in config.memory.backend."""
+    """Instantiate the factual memory backend selected in config.memory.backend.
+
+    Can be overridden via ATMAN_MEMORY_BACKEND environment variable.
+    """
     from atman.core.ports import FactualMemory  # noqa: F401 (type hint target)
 
-    backend = settings.memory.backend
+    # Subprocess-friendly override for tests and local tooling (see tests/test_cli_factual_memory.py).
+    backend = os.environ.get("ATMAN_MEMORY_BACKEND", settings.memory.backend)
 
     if backend == "postgres":
         from atman.adapters.memory.postgres_backend import PostgresFactualMemory
@@ -74,8 +81,6 @@ def build_memory_backend():
         return mem
 
     if backend == "file":
-        from pathlib import Path
-
         from atman.adapters.memory import FileBackend
 
         return FileBackend(Path(settings.memory.file_path).expanduser())

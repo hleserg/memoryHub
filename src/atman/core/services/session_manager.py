@@ -17,7 +17,11 @@ Critical design principle:
 
 from __future__ import annotations
 
+import asyncio
+import logging
 import threading
+from pathlib import Path
+from typing import TYPE_CHECKING
 from uuid import UUID, uuid5
 
 from atman.core.clock_impl import SystemClock
@@ -30,6 +34,7 @@ from atman.core.models import (
     ActiveSessionSummary,
     Eigenstate,
     ExperienceRecord,
+    KeyMoment,
     KeyMomentInput,
     SessionContext,
     SessionEvent,
@@ -39,6 +44,9 @@ from atman.core.models import (
 from atman.core.ports.clock import ClockPort
 from atman.core.ports.state_store import StateStore
 
+if TYPE_CHECKING:
+    from atman.affect.detector import AffectDetector, AffectDetectorConfig
+
 # Cap for eigenstate list fields; order is insertion-derived until salience ranking exists.
 MAX_EIGENSTATE_ITEMS = 5
 
@@ -46,6 +54,8 @@ MAX_EIGENSTATE_ITEMS = 5
 _SESSION_EXPERIENCE_ID_NS = UUID("018e5a2b-7c3d-7b2a-9f01-2a3b4c5d6e7f")
 
 _NARRATIVE_SAVE_RETRIES = 5
+
+_LOG = logging.getLogger(__name__)
 
 
 def _session_finish_marker(session_id: UUID) -> str:
@@ -64,8 +74,8 @@ class SessionManager:
 
     Manages the complete session lifecycle:
     - start_session: loads personality context
-    - record_event: tracks raw events
-    - record_key_moment: captures significant moments with emotional coloring
+    - record_event: tracks raw events and schedules AffectDetector (when configured)
+    - append_key_moment / append_key_moment_input: programmatic key moments
     - finish_session: creates SessionExperience + Eigenstate
     """
 
@@ -74,6 +84,8 @@ class SessionManager:
         state_store: StateStore,
         max_active_sessions: int | None = None,
         clock: ClockPort | None = None,
+        affect_workspace: Path | None = None,
+        affect_config: AffectDetectorConfig | None = None,
     ) -> None:
         """
         Initialize Session Manager.
@@ -82,12 +94,28 @@ class SessionManager:
             state_store: Storage for identity, narrative, experience, eigenstate
             max_active_sessions: If set, ``start_session`` raises when this many sessions are active.
             clock: Clock for reproducible timestamps (defaults to SystemClock)
+            affect_workspace: Optional workspace directory for affect baseline JSONL
+            affect_config: Optional :class:`AffectDetectorConfig` (requires ``affect_workspace``)
         """
         self._state_store = state_store
         self._max_active_sessions = max_active_sessions
         self._clock = clock or SystemClock()
         self._active_sessions: dict[UUID, SessionResult] = {}
         self._lock = threading.Lock()
+        self._affect_detector: AffectDetector | None = None
+        if affect_workspace is not None and affect_config is not None:
+            from atman.affect.detector import AffectDetector
+
+            self._affect_detector = AffectDetector(
+                affect_config,
+                workspace=affect_workspace,
+                append_moment=self.append_key_moment,
+            )
+
+    @property
+    def affect_detector(self) -> AffectDetector | None:
+        """Optional behavioural detector wired to :meth:`append_key_moment`."""
+        return self._affect_detector
 
     def start_session(self, agent_id: UUID) -> SessionContext:
         """
@@ -185,26 +213,61 @@ class SessionManager:
             if session_result.is_finished:
                 raise SessionAlreadyFinishedError(f"Session {session_id} already finished")
             session_result.events.append(event_copy)
+        self._schedule_affect_processing(session_id, event_copy)
 
-    def record_key_moment(self, session_id: UUID, moment: KeyMomentInput) -> None:
+    def _schedule_affect_processing(self, session_id: UUID, event: SessionEvent) -> None:
+        """Schedule :class:`AffectDetector` after ``record_event``.
+
+        With a running asyncio loop this is fire-and-forget via ``create_task``.
+        Without a loop, ``asyncio.run`` executes the detector synchronously on this
+        thread (blocking until scoring finishes) — avoid configuring affect for
+        latency-sensitive synchronous ``record_event`` callers without an event loop.
         """
-        Record a key moment with emotional coloring.
+        det = self._affect_detector
+        if det is None:
+            return
+        text = event.description
+        thinking = event.thinking
 
-        This is the CRITICAL method - where first-hand experience is captured.
+        async def _run() -> None:
+            try:
+                await det.process(text, thinking=thinking, session_id=session_id)
+            except Exception:
+                _LOG.exception("AffectDetector.process failed for session %s", session_id)
 
-        IMPORTANT:
-        - Emotional coloring MUST be present (valence, intensity, depth)
-        - If coloring couldn't be captured fully, set incomplete_coloring=True
-        - This method does NOT guess emotions - it records what was experienced
+        try:
+            loop = asyncio.get_running_loop()
+            loop.create_task(_run())  # noqa: RUF006 — fire-and-forget affect hook
+        except RuntimeError:
+            try:
+                asyncio.run(_run())
+            except RuntimeError:
+                _LOG.warning(
+                    "AffectDetector could not be scheduled (no usable event loop); session_id=%s",
+                    session_id,
+                )
 
-        Args:
-            session_id: UUID of the session
-            moment: Key moment input with mandatory emotional coloring
+    def append_key_moment(self, session_id: UUID, moment: KeyMoment) -> None:
+        """
+        Append a fully materialised key moment (used by AffectDetector and tests).
 
         Raises:
             SessionNotFoundError: If session not found
             SessionAlreadyFinishedError: If session already finished
-            ValueError: If emotional coloring is missing without incomplete_coloring flag
+        """
+        with self._lock:
+            session_result = self._active_sessions.get(session_id)
+            if session_result is None:
+                raise SessionNotFoundError(f"Session {session_id} not found")
+            if session_result.is_finished:
+                raise SessionAlreadyFinishedError(f"Session {session_id} already finished")
+            session_result.key_moments.append(moment)
+
+    def append_key_moment_input(self, session_id: UUID, moment: KeyMomentInput) -> None:
+        """
+        Validate :class:`KeyMomentInput` and append the resulting :class:`KeyMoment`.
+
+        This replaces the removed :meth:`record_key_moment` for programmatic callers.
         """
         with self._lock:
             session_result = self._active_sessions.get(session_id)
@@ -213,8 +276,6 @@ class SessionManager:
             if session_result.is_finished:
                 raise SessionAlreadyFinishedError(f"Session {session_id} already finished")
 
-            # Both valence and intensity zero => no coloring unless incomplete_coloring.
-            # Valence 0 with intensity > 0 is allowed (arousal without hedonic tone).
             if (
                 moment.emotional_valence == 0.0
                 and moment.emotional_intensity == 0.0
@@ -225,7 +286,6 @@ class SessionManager:
                     "If coloring couldn't be captured, set incomplete_coloring=True"
                 )
 
-            # Fix recorded_at to Clock time for reproducible timestamps in tests
             moment_with_time = moment.model_copy(update={"recorded_at": self._clock.now()})
             key_moment = moment_with_time.to_key_moment()
 
@@ -233,6 +293,18 @@ class SessionManager:
                 session_result.incomplete_coloring = True
 
             session_result.key_moments.append(key_moment)
+
+    def record_key_moment(self, session_id: UUID, moment: KeyMomentInput) -> None:
+        """
+        Removed — use :class:`~atman.affect.detector.AffectDetector` or
+        :meth:`append_key_moment_input`.
+        """
+        _ = (session_id, moment)
+        raise AttributeError(
+            "SessionManager.record_key_moment was removed. Use AffectDetector.submit_self_report "
+            "for agent-authored key moments, or append_key_moment / append_key_moment_input for "
+            "programmatic recording. See atman.affect.AffectDetector."
+        )
 
     def _note_facts_read(self, session_id: UUID, fact_ids: list[UUID]) -> None:
         """

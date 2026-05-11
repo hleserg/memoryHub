@@ -352,3 +352,52 @@ def test_load_latest_eigenstate_filters_by_identity(store: StateStore) -> None:
 
     assert store.load_latest_eigenstate(identity_id=iid) is not None
     assert store.load_latest_eigenstate(identity_id=uuid4()) is None
+
+
+def test_save_identity_expected_version_mismatch_raises(store: StateStore) -> None:
+    ident = _make_identity()
+    store.save_identity(ident)
+    stale = ident.model_copy(update={"self_description": "changed"})
+    with pytest.raises(ValueError, match=r"version|Version|mismatch"):
+        store.save_identity(stale, expected_version="definitely-wrong")
+
+
+def test_save_narrative_optimistic_lock_mismatch_raises(store: StateStore) -> None:
+    ident = _make_identity()
+    narrative = _make_narrative(ident.id)
+    store.save_narrative(narrative)
+    loaded_v1 = store.load_narrative(ident.id)
+    assert loaded_v1 is not None
+    winner = loaded_v1.model_copy(
+        update={
+            "recent_layer": loaded_v1.recent_layer.model_copy(
+                update={"content": "winner branch saves first"}
+            ),
+            "updated_at": loaded_v1.updated_at + timedelta(seconds=1),
+        }
+    )
+    store.save_narrative(winner)
+    stale = loaded_v1.model_copy(
+        update={
+            "recent_layer": loaded_v1.recent_layer.model_copy(
+                update={"content": "stale branch loses optimistic lock"}
+            )
+        }
+    )
+    with pytest.raises(ValueError, match=r"updated_at|mismatch|Version|version"):
+        store.save_narrative(
+            stale,
+            expected_version=loaded_v1.schema_version,
+            expected_updated_at=loaded_v1.updated_at,
+        )
+
+
+def test_archive_narrative_and_list(store: StateStore) -> None:
+    ident = _make_identity()
+    narrative = _make_narrative(ident.id)
+    store.save_narrative(narrative)
+    store.archive_narrative(narrative.id, "integration test archive")
+    archived = store.list_archived_narratives(ident.id, limit=5)
+    assert len(archived) >= 1
+    assert archived[0][0].id == narrative.id
+    assert "integration test archive" in archived[0][1]

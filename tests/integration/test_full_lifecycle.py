@@ -214,7 +214,7 @@ def test_full_lifecycle_invariants():
             recorded_at=base_time + timedelta(minutes=5),
         )
 
-        session_manager.record_key_moment(context.session_id, moment1)
+        session_manager.append_key_moment_input(context.session_id, moment1)
 
         moment2 = KeyMomentInput(
             what_happened="Helped a colleague",
@@ -226,7 +226,7 @@ def test_full_lifecycle_invariants():
             recorded_at=base_time + timedelta(minutes=10),
         )
 
-        session_manager.record_key_moment(context.session_id, moment2)
+        session_manager.append_key_moment_input(context.session_id, moment2)
 
         # Finish session - use a new clock for finish time
         finish_clock = FrozenClock(base_time + timedelta(minutes=20))
@@ -380,7 +380,7 @@ def test_immutability_enforcement():
             values_touched=["test"],
         )
 
-        session_manager.record_key_moment(context.session_id, moment)
+        session_manager.append_key_moment_input(context.session_id, moment)
 
         session_manager.finish_session(
             context.session_id,

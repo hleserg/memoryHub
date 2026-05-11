@@ -171,7 +171,7 @@ def main() -> None:
         "not guessing them later",
     )
 
-    session_manager.record_key_moment(context.session_id, moment1)
+    session_manager.append_key_moment_input(context.session_id, moment1)
     term.print_ok("Key moment 1 recorded")
     term.print_info(f"  What: {moment1.what_happened[:60]}...")
     term.print_info(
@@ -194,7 +194,7 @@ def main() -> None:
         what_changed="Increased confidence in my ability to handle architectural complexity",
     )
 
-    session_manager.record_key_moment(context.session_id, moment2)
+    session_manager.append_key_moment_input(context.session_id, moment2)
     term.print_ok("Key moment 2 recorded")
     term.print_info(f"  What: {moment2.what_happened[:60]}...")
     term.print_info(

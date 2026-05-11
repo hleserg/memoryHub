@@ -25,7 +25,8 @@ The Factual Memory adapter is the foundation of Atman’s memory stack. It:
 - Stores **only facts and relations** (no emotional coloring)
 - Keeps `fact.content` separate from any interpretation
 - Validates non-empty `content` and `source`
-- Stays extensible toward embeddings / graph memory (without requiring them today)
+- Runs local-first with file/in-memory backends, and can use PostgreSQL when a
+  deployment needs RLS and semantic search
 
 ## Requirements
 
@@ -96,6 +97,65 @@ memory = FileBackend(storage_path)
 memory.add_fact(FactRecord(content="Fact", source="test"))
 ```
 
+### Backend selection
+
+The CLI and shared entrypoints call `atman.config.build_memory_backend()`.
+Default selection is the file backend (`~/.atman/facts.jsonl`) so local runs and
+tests do not require PostgreSQL.
+
+| Value | Class | Use when |
+|-------|-------|----------|
+| `file` | `FileBackend` | Local development and demos without external services |
+| `inmemory` | `InMemoryBackend` | Fast unit tests and prototypes |
+| `postgres` | `PostgresFactualMemory` | Deployments or integration tests that need RLS and SQL storage |
+
+Override for a process:
+
+```bash
+ATMAN_MEMORY_BACKEND=postgres DATABASE_URL=postgresql://atman_app:...@localhost:5432/atman atman
+```
+
+When constructing the adapter directly, `PostgresFactualMemory` reads the
+database URL from the `db_url` argument, `ATMAN_DB_URL`, `DATABASE_URL`, or its
+local default, in that order.
+
+### PostgreSQL backend
+
+`PostgresFactualMemory` implements the same `FactualMemory` port using
+PostgreSQL, `psycopg3`, `pgvector`, and `pg_trgm`.
+
+Requirements:
+
+- PostgreSQL with `vector` and `pg_trgm` extensions.
+- `psycopg[binary]` installed (included in `.[dev]` / `.[eval]`; add it to a
+  deployment profile if PostgreSQL is used in production).
+- Main factual-memory migration applied:
+  `migrations/versions/0002_create_facts_table.sql`.
+- Application connections should use the non-superuser `atman_app` role created
+  by the migration so row-level security is enforced.
+
+Semantic search is optional:
+
+```python
+from atman.adapters.memory.postgres_backend import PostgresFactualMemory
+from atman.adapters.memory.ollama_embedding import OllamaEmbeddingAdapter
+
+with PostgresFactualMemory(
+    db_url="postgresql://atman_app:...@localhost:5432/atman",
+    embedding=OllamaEmbeddingAdapter(),
+) as memory:
+    results = memory.search(query="concise answers", limit=5)
+```
+
+If an `EmbeddingPort` is provided and succeeds, the adapter stores/searches
+`halfvec(2560)` embeddings with a cosine HNSW index. If embedding generation is
+missing or fails, the adapter emits a warning and falls back to `ILIKE` text
+search; facts are still stored.
+
+Row-level security is scoped by `agent_id`. Set `ATMAN_CURRENT_AGENT` before
+queries so the adapter can set the PostgreSQL `atman.current_agent` session
+variable.
+
 ## Architecture
 
 ### Models
@@ -119,12 +179,14 @@ class FactualMemory(ABC):
 
 - **InMemoryBackend** — dict-backed, not persistent; ideal for unit tests (`clear()`, `count()`).
 - **FileBackend** — JSON Lines file, load on start, persist on change; no external services.
+- **PostgresFactualMemory** — PostgreSQL + RLS; optional embeddings with text-search fallback.
 
 ## Testing
 
 ```bash
 pytest tests/ -v
 pytest tests/test_models.py tests/test_in_memory_backend.py tests/test_file_backend.py tests/test_backend_interface.py
+pytest tests/integration/test_postgres_facts.py -v  # requires PostgreSQL test URLs
 pytest --cov=atman --cov-report=html
 ```
 
@@ -138,7 +200,9 @@ Key areas: CRUD, search by text/tags, links, `list_recent`, validation, immutabi
 
 ## Extensibility
 
-Future adapters may add vector search (`FactualMemory` subclass), graph stores, or mem0-backed implementations — Core keeps depending only on the port.
+Future adapters may add graph stores or mem0-backed implementations. Core keeps
+depending only on the `FactualMemory` port; optional capabilities such as
+PostgreSQL vector search stay behind adapter boundaries.
 
 ## Related work packages
 
@@ -161,10 +225,14 @@ src/atman/
   core/ports/memory_backend.py
   adapters/memory/in_memory_backend.py
   adapters/memory/file_backend.py
+  adapters/memory/postgres_backend.py
+  config.py
+migrations/versions/0002_create_facts_table.sql
 tests/test_models.py
 tests/test_in_memory_backend.py
 tests/test_file_backend.py
 tests/test_backend_interface.py
+tests/integration/test_postgres_facts.py
 ```
 
 ## Related documentation

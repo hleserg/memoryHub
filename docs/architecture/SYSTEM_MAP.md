@@ -49,7 +49,7 @@ All paths are absolute relative to the repository root.
 | `core/services/identity_service.py` | Identity lifecycle: bootstrap, update, snapshot | `IdentityService` |
 | `core/services/narrative_service.py` | Narrative document: create, update, archive, validate | `NarrativeService` |
 | `core/services/narrative_revision.py` | Narrative updates during reflection with concurrency control | `NarrativeRevisionService` |
-| `core/services/session_manager.py` | Session runtime: start, record events/key moments, finish with eigenstate (thread-safe registry, optional `max_active_sessions`) | `SessionManager`, `MAX_EIGENSTATE_ITEMS`; session errors live in `core/exceptions.py` |
+| `core/services/session_manager.py` | Session runtime: start, `record_event` (optional async **AffectDetector** hook), `append_key_moment` / `append_key_moment_input`, finish with eigenstate (thread-safe registry, optional `max_active_sessions`, optional `affect_workspace` + `AffectDetectorConfig`) | `SessionManager`, `MAX_EIGENSTATE_ITEMS`; session errors live in `core/exceptions.py` |
 | `core/services/reflection_service.py` | Three reflection levels: micro, daily, deep | `MicroReflectionService`, `DailyReflectionService`, `DeepReflectionService` |
 | `core/services/principle_advisor.py` | Distinguish habit vs principle; advise on principle revision | `PrincipleRevisionAdvisor` |
 | `core/services/conflict_detector.py` (E24.5) | Detect contradictions between active facts; produces small cognitive tension signals | `ConflictDetector`, `FactConflict` |
@@ -57,10 +57,21 @@ All paths are absolute relative to the repository root.
 | `core/services/passive_memory_injector.py` (E24.6, E24.8) | Surface relevant facts/experiences via embedding similarity + 1-hop graph expansion | `PassiveMemoryInjector`, `SurfacedMemory` |
 | `core/services/session_working_memory.py` (E24.9) | In-session LRU cache of surfaced facts/experiences to avoid duplicate surfacing | `SessionWorkingMemory`, `CachedItem` |
 
+### 1.4a. Affect detector (`src/atman/affect/`, E21)
+
+| File | Purpose | Public surface |
+|------|---------|----------------|
+| `affect/models.py` | DTOs for metrics, detector output, agent self-report | `AffectMetrics`, `AffectRecord`, `AgentMemoryReport` (optional `emotional_depth` → `KeyMoment.how_i_felt.depth`), `TriggerReason` |
+| `affect/metrics.py` | Eight behavioural floats + sincerity heuristic over tokens | `nrc_emotion_score`, density helpers, `min_length_gate`, `sincerity_score`, … |
+| `affect/baseline.py` | Rolling z-scores + `{workspace}/affect_baseline.jsonl` persistence | `RollingBaseline` |
+| `affect/detector.py` | Language sniff, trigger logic (anomaly / random sample / divergence / self-report), `KeyMoment` writes via callback | `AffectDetector`, `AffectDetectorConfig`; CLI `python -m atman.affect.detector --demo` |
+| `affect/emolex/` | Vendored NRC Emotion Lexicon (ru/en) + pymorphy3 lemmatisation | `emotion_score`, `tokenize`, JSON lexicons |
+
 ### 1.4. Core utilities
 
 | File | Purpose |
 |------|---------|
+| `config.py` | Pydantic settings and `build_memory_backend()` factory; defaults factual memory to `FileBackend`, supports `ATMAN_MEMORY_BACKEND=postgres|file|inmemory` |
 | `core/exceptions.py` | `AtmanError`, `GovernanceRejectedError`, `NarrativePersistenceConflictError`, `SessionNotFoundError`, `SessionAlreadyFinishedError`, `TooManyActiveSessionsError` |
 | `core/clock_impl.py` | `SystemClock`, `FrozenClock` |
 | `core/narrative_write_audit.py` | Narrative commit audit hooks |
@@ -73,6 +84,7 @@ All paths are absolute relative to the repository root.
 |------|-----------------|----------|
 | `adapters/memory/in_memory_backend.py` (`InMemoryBackend`) | `FactualMemory` | no persistence |
 | `adapters/memory/file_backend.py` (`FileBackend`) | `FactualMemory` | JSONL + file locking |
+| `adapters/memory/postgres_backend.py` (`PostgresFactualMemory`) | `FactualMemory` | PostgreSQL `public.facts` / `public.fact_relations`, RLS via `ATMAN_CURRENT_AGENT`, optional `EmbeddingPort` with `ILIKE` fallback |
 | `adapters/memory/mock_embedding.py` (`MockEmbeddingAdapter`) | `EmbeddingPort` | deterministic SHA-256-seeded embeddings; no external deps; for tests/CI |
 | `adapters/memory/bm25_embedding.py` (`BM25EmbeddingAdapter`) | `EmbeddingPort` | local BM25 sparse vectors via fixed-dimension feature hashing (Unicode-aware tokenizer); corpus stats from `embed_batch`/`embed_with_corpus` are reused by later `embed` calls |
 | `adapters/memory/ollama_embedding.py` (`OllamaEmbeddingAdapter`) | `EmbeddingPort` | Ollama HTTP `/api/embeddings`; configurable host/model/timeout |
@@ -88,7 +100,7 @@ All paths are absolute relative to the repository root.
 | `adapters/agent/config.py` (`ModelConfig`, `AgentConfig`) | — | Pydantic AI model + agent runtime config (E26-R1, E26-R2, E26-R4) |
 | `adapters/agent/deps.py` (`AtmanDeps`, `AtmanDeps.from_config`) | — | frozen DI container wiring `SessionManager`, `IdentityService`, `ExperienceService`, `MicroReflectionService`, `StateStore`; `from_config` factory transfers validated limits from `AgentConfig` |
 | `adapters/agent/instructions.py` (`build_instructions`) | — | builds dynamic system prompt from current `Identity` + `NarrativeDocument` (truncated per `AtmanDeps.truncate_narrative_*`) |
-| `adapters/agent/tools.py` (`record_key_moment`, `log_experience`) | — | Pydantic AI tools for recording key moments / pointing log_experience at the session-end flow |
+| `adapters/agent/tools.py` (`record_key_moment` async, `log_experience`) | — | Pydantic AI tools: `record_key_moment` → `AffectDetector.submit_self_report` when `SessionManager` is configured with affect; `log_experience` redirect stub |
 
 ### 1.6. CLI / TUI / Web / Demos
 
@@ -120,6 +132,16 @@ All paths are absolute relative to the repository root.
 | `docs/demo-data/` | website data | 11 JSON files generated by `make demo-e2e-scenario`; consumed by `docs/demo.html` static timeline |
 | `docs/demo.html` | website | static E2E walkthrough page; 11-step timeline; bilingual EN/RU; loads JSON from `docs/demo-data/`; no build step, no React |
 
+### 1.7. Evaluation subsystem (`src/atman/eval/`, `eval/`, `scripts/eval/`)
+
+| Path | Category | Purpose |
+|------|----------|---------|
+| `src/atman/eval/__init__.py` | optional namespace | imports `_deps_check`; `import atman.eval` fails fast without the `eval` extra |
+| `src/atman/eval/_deps_check.py` | dependency guard | checks canary deps from `[project.optional-dependencies].eval` and returns a friendly install hint |
+| `eval/migrations/alembic.ini`, `eval/migrations/env.py` | eval storage | Alembic configuration for the isolated PostgreSQL `eval` schema |
+| `eval/migrations/versions/0010_*` ... `0040_*` | eval storage | idempotent eval schema, benchmark run tables, supporting tables, and trend materialized view |
+| `scripts/eval/partition_manager.py` | operations | creates future partitions, detaches old partitions, and reports `eval.benchmark_runs` partition status |
+
 ---
 
 ## 2. Integrations
@@ -147,7 +169,7 @@ Connections between two or more parts. These are seams that may break independen
 
 | Adapter | Implements |
 |---------|------------|
-| `InMemoryBackend`, `FileBackend` | `FactualMemory` |
+| `InMemoryBackend`, `FileBackend`, `PostgresFactualMemory` | `FactualMemory` |
 | `InMemoryExperienceStore`, `JsonlExperienceStore`, `FileStateStore` | `StateStore` |
 | `MockReflectionModel` | `ReflectionModel` |
 | `InMemoryPatternStore`, `InMemoryReflectionEventStore`, `InMemoryHealthAssessmentStore` | corresponding ports |
@@ -160,14 +182,14 @@ Connections between two or more parts. These are seams that may break independen
 | Connection | Files | Type |
 |-----------|-------|------|
 | `AtmanDeps` ↔ `SessionManager`, `IdentityService`, `ExperienceService`, `MicroReflectionService`, `StateStore` | `adapters/agent/deps.py` | DI container (frozen dataclass) |
-| `record_key_moment` / `log_experience` ↔ `SessionManager.record_key_moment` | `adapters/agent/tools.py` → `core/services/session_manager.py` | Pydantic AI tool → service call |
+| `record_key_moment` / `log_experience` ↔ `AffectDetector.submit_self_report` / `SessionManager` | `adapters/agent/tools.py` → `affect/detector.py` + `core/services/session_manager.py` | Async Pydantic AI tool → affect write gateway (requires `affect_workspace` + config on `SessionManager`) |
 | `build_instructions` ↔ `StateStore.load_identity` / `load_narrative` | `adapters/agent/instructions.py` → `core/ports/state_store.py` | dynamic system-prompt builder |
 
 ### 2.3. CLI ↔ service
 
 | CLI | Wiring | File |
 |-----|--------|------|
-| `cli.py` | `FileBackend` directly as `FactualMemory` | `cli.py:14-24` |
+| `cli.py` | `build_memory_backend()` factory (`FileBackend` by default, env-selectable `postgres|file|inmemory`) | `config.py`, `cli.py` |
 | `cli_experience.py` | `ExperienceService(JsonlExperienceStore)` | `cli_experience.py:17-29` |
 | `cli_identity.py` | `IdentityService(FileStateStore)` + `NarrativeService(FileStateStore)` | `cli_identity.py:15-29` |
 | `cli_reflection.py` | `Micro/Daily/DeepReflectionService` + fixture_loader | `cli_reflection.py:18-47` |
@@ -284,8 +306,8 @@ Files: `docs/features/identity-store/`, `src/demo_identity.py`, `cli_identity.py
 Files: `docs/features/session-manager/`, `src/demo_session_manager.py`, `tests/test_session_manager.py`.
 
 1. `SessionManager.start_session(agent_id)` → loads identity, narrative, eigenstate → `SessionContext`.
-2. During session: `record_event(...)` tracks raw events from lower agent.
-3. `record_key_moment(...)` captures significant moments with mandatory emotional coloring (valence/intensity/depth).
+2. During session: `record_event(...)` tracks raw events from lower agent and may schedule **AffectDetector** (optional).
+3. Programmatic moments: `append_key_moment_input(...)` / `append_key_moment(...)`; agent tool `record_key_moment` → `AffectDetector.submit_self_report(...)` with mandatory emotional coloring (valence/intensity/depth).
 4. If coloring incomplete → flag `incomplete_coloring=True` (honest about limitation).
 5. `finish_session(...)` → creates `SessionExperience` (`recorded_by="session_manager"`) + `Eigenstate`.
 6. Both stored via `StateStore` (experience immutable, eigenstate for next session).
@@ -317,7 +339,8 @@ Files: `docs/features/full-corpus-demo/`, `src/demo_full_corpus.py`, `e2e/full_l
 | Empty `Identity.self_description` | `min_length=1` | `core/models/identity.py:30` |
 | `CoreValue.confidence` outside 0..1 | `@field_validator` | `core/models/identity.py:52-58` |
 | `FeltSense.emotional_valence` outside -1..+1 | `@field_validator` | `core/models/experience.py:57-67` |
-| `KeyMomentInput` with zero valence/intensity without `incomplete_coloring` | `SessionManager.record_key_moment` → `ValueError` | `core/services/session_manager.py` |
+| `KeyMomentInput` with zero valence/intensity without `incomplete_coloring` | `SessionManager.append_key_moment_input` → `ValueError` | `core/services/session_manager.py` |
+| Deprecated `SessionManager.record_key_moment(...)` | `AttributeError` (message references `AffectDetector`) | `core/services/session_manager.py` |
 | `alignment_check=False` with blank `alignment_notes` | `SessionManager.finish_session` → `ValueError` | `core/services/session_manager.py` |
 | Second `finish_session` after successful completion | session removed from active map → `SessionNotFoundError` | `core/services/session_manager.py` |
 | Concurrent second `finish_session` while first is persisting | `SessionAlreadyFinishedError` | `core/services/session_manager.py` |

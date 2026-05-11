@@ -169,7 +169,7 @@ def test_record_key_moment_with_valid_coloring(session_manager):
         values_touched=["honesty"],
     )
 
-    manager.record_key_moment(context.session_id, moment)
+    manager.append_key_moment_input(context.session_id, moment)
 
     active_session = manager.get_active_session(context.session_id)
     assert active_session is not None
@@ -194,7 +194,7 @@ def test_record_key_moment_without_coloring_requires_incomplete_flag(session_man
     )
 
     with pytest.raises(ValueError, match="no emotional coloring"):
-        manager.record_key_moment(context.session_id, moment_no_flag)
+        manager.append_key_moment_input(context.session_id, moment_no_flag)
 
 
 def test_record_key_moment_with_incomplete_coloring_flag_is_allowed(session_manager):
@@ -211,7 +211,7 @@ def test_record_key_moment_with_incomplete_coloring_flag_is_allowed(session_mana
         incomplete_coloring=True,  # Explicitly marked as incomplete
     )
 
-    manager.record_key_moment(context.session_id, moment_with_flag)
+    manager.append_key_moment_input(context.session_id, moment_with_flag)
 
     active_session = manager.get_active_session(context.session_id)
     assert active_session is not None
@@ -232,7 +232,7 @@ def test_finish_session_creates_experience_and_eigenstate(session_manager, temp_
         why_it_matters="Learning",
         values_touched=["honesty"],
     )
-    manager.record_key_moment(context.session_id, moment)
+    manager.append_key_moment_input(context.session_id, moment)
 
     # Finish session
     result = manager.finish_session(
@@ -283,7 +283,7 @@ def test_stored_experience_matches_recorded_key_moment(session_manager, temp_sto
         why_it_matters="Testing storage round-trip",
         values_touched=["honesty"],
     )
-    manager.record_key_moment(context.session_id, moment)
+    manager.append_key_moment_input(context.session_id, moment)
 
     result = manager.finish_session(
         session_id=context.session_id,
@@ -335,7 +335,7 @@ def test_key_moment_when_uses_recorded_at_before_finish(
         depth=EmotionalDepth.SURFACE,
         why_it_matters="Order matters",
     )
-    manager_t0.record_key_moment(context.session_id, moment)
+    manager_t0.append_key_moment_input(context.session_id, moment)
 
     # Finish session at T1 (later time) using new clock
     clock_t1 = FrozenClock(datetime(2024, 1, 15, 13, 0, 0, tzinfo=UTC))
@@ -356,7 +356,7 @@ def test_finish_session_twice_second_raises_not_found(session_manager):
     """After successful finish, session is removed; second finish is SessionNotFoundError."""
     manager, agent_id = session_manager
     context = manager.start_session(agent_id)
-    manager.record_key_moment(
+    manager.append_key_moment_input(
         context.session_id,
         KeyMomentInput(
             what_happened="x",
@@ -375,7 +375,7 @@ def test_concurrent_finish_second_raises_already_finished(session_manager):
     """While first finish holds persistence, second finish sees is_finished and raises."""
     manager, agent_id = session_manager
     context = manager.start_session(agent_id)
-    manager.record_key_moment(
+    manager.append_key_moment_input(
         context.session_id,
         KeyMomentInput(
             what_happened="x",
@@ -417,7 +417,7 @@ def test_concurrent_finish_second_raises_already_finished(session_manager):
 def test_alignment_check_false_requires_notes(session_manager):
     manager, agent_id = session_manager
     context = manager.start_session(agent_id)
-    manager.record_key_moment(
+    manager.append_key_moment_input(
         context.session_id,
         KeyMomentInput(
             what_happened="x",
@@ -461,7 +461,7 @@ def test_max_active_sessions_limit(temp_storage, identity_fixture, narrative_fix
 def test_overall_emotional_tone_out_of_range_raises(session_manager):
     manager, agent_id = session_manager
     context = manager.start_session(agent_id)
-    manager.record_key_moment(
+    manager.append_key_moment_input(
         context.session_id,
         KeyMomentInput(
             what_happened="x",
@@ -495,7 +495,7 @@ def test_valence_zero_with_intensity_allowed_without_incomplete_flag(session_man
     """High intensity with neutral valence is allowed (arousal without hedonic tone)."""
     manager, agent_id = session_manager
     context = manager.start_session(agent_id)
-    manager.record_key_moment(
+    manager.append_key_moment_input(
         context.session_id,
         KeyMomentInput(
             what_happened="Ambiguous affect",
@@ -543,7 +543,7 @@ def test_eigenstate_cognitive_load_from_event_count(session_manager):
                 description=f"e{i}",
             ),
         )
-    manager.record_key_moment(
+    manager.append_key_moment_input(
         context.session_id,
         KeyMomentInput(
             what_happened="k",
@@ -561,7 +561,7 @@ def test_eigenstate_cognitive_load_from_event_count(session_manager):
 def test_record_after_finish_raises(session_manager):
     manager, agent_id = session_manager
     context = manager.start_session(agent_id)
-    manager.record_key_moment(
+    manager.append_key_moment_input(
         context.session_id,
         KeyMomentInput(
             what_happened="x",
@@ -603,7 +603,7 @@ def test_record_key_moment_during_finish_raises(session_manager):
     """Key moments cannot be appended while finish_session is persisting."""
     manager, agent_id = session_manager
     context = manager.start_session(agent_id)
-    manager.record_key_moment(
+    manager.append_key_moment_input(
         context.session_id,
         KeyMomentInput(
             what_happened="x",
@@ -635,7 +635,7 @@ def test_record_key_moment_during_finish_raises(session_manager):
         t.start()
         assert started.wait(timeout=2)
         with pytest.raises(SessionAlreadyFinishedError):
-            manager.record_key_moment(context.session_id, late_moment)
+            manager.append_key_moment_input(context.session_id, late_moment)
         unblock.set()
         t.join(timeout=5)
 
@@ -656,7 +656,7 @@ def test_resource_warning_can_be_recorded_as_key_moment(session_manager):
         what_changed="Learned to monitor resources during session",
     )
 
-    manager.record_key_moment(context.session_id, warning_moment)
+    manager.append_key_moment_input(context.session_id, warning_moment)
 
     active_session = manager.get_active_session(context.session_id)
     assert active_session is not None
@@ -687,7 +687,7 @@ def test_session_not_found_errors(session_manager):
     )
 
     with pytest.raises(SessionNotFoundError):
-        manager.record_key_moment(fake_session_id, moment)
+        manager.append_key_moment_input(fake_session_id, moment)
 
     with pytest.raises(SessionNotFoundError):
         manager.finish_session(fake_session_id)
@@ -710,7 +710,7 @@ def test_multiple_key_moments_in_session(session_manager):
     ]
 
     for moment in moments:
-        manager.record_key_moment(context.session_id, moment)
+        manager.append_key_moment_input(context.session_id, moment)
 
     result = manager.finish_session(context.session_id)
 
@@ -735,7 +735,7 @@ def test_eigenstate_captures_session_state(session_manager):
         values_touched=["honesty", "competence"],
         principles_questioned=["always_be_certain"],
     )
-    manager.record_key_moment(context.session_id, moment)
+    manager.append_key_moment_input(context.session_id, moment)
 
     result = manager.finish_session(
         session_id=context.session_id,
@@ -766,7 +766,7 @@ def test_finish_session_storage_failure_allows_retry(session_manager, temp_stora
         depth=EmotionalDepth.SURFACE,
         why_it_matters="Testing persistence order",
     )
-    manager.record_key_moment(context.session_id, moment)
+    manager.append_key_moment_input(context.session_id, moment)
 
     # Mock create_experience to fail
     def failing_create_experience(record):
@@ -813,7 +813,7 @@ def test_session_experience_has_identity_snapshot_provenance(session_manager, te
         depth=EmotionalDepth.SURFACE,
         why_it_matters="Testing identity snapshot linkage",
     )
-    manager.record_key_moment(context.session_id, moment)
+    manager.append_key_moment_input(context.session_id, moment)
 
     # Finish session
     result = manager.finish_session(context.session_id)
@@ -852,7 +852,7 @@ def test_finish_session_updates_recent_narrative(session_manager, temp_storage):
         why_it_matters="Demonstrated technical competence",
         values_touched=["competence", "growth"],
     )
-    manager.record_key_moment(context1.session_id, moment)
+    manager.append_key_moment_input(context1.session_id, moment)
 
     # Get narrative before finish
     narrative_before = temp_storage.load_narrative(agent_id)
@@ -892,7 +892,7 @@ def test_finish_session_appends_to_recent_narrative_without_erasing_existing_con
     context = manager.start_session(agent_id)
     existing_context = "Recent narrative"
 
-    manager.record_key_moment(
+    manager.append_key_moment_input(
         context.session_id,
         KeyMomentInput(
             what_happened="Preserve narrative context",
@@ -946,7 +946,7 @@ def test_finish_session_retry_skips_duplicate_narrative_after_post_narrative_fai
     """If narrative persisted then a simulated failure fires, retry must not append twice."""
     manager, agent_id = session_manager
     context = manager.start_session(agent_id)
-    manager.record_key_moment(
+    manager.append_key_moment_input(
         context.session_id,
         KeyMomentInput(
             what_happened="narrative idempotency",
@@ -985,7 +985,7 @@ def test_finish_session_retries_narrative_updated_at_conflict(session_manager, t
     """A transient optimistic-lock conflict should be retried before failing the finish."""
     manager, agent_id = session_manager
     context = manager.start_session(agent_id)
-    manager.record_key_moment(
+    manager.append_key_moment_input(
         context.session_id,
         KeyMomentInput(
             what_happened="optimistic lock retry",
@@ -1025,7 +1025,7 @@ def test_finish_session_missing_narrative_rolls_back_for_retry(session_manager, 
     """If narrative disappears after partial persistence, the live session stays retryable."""
     manager, agent_id = session_manager
     context = manager.start_session(agent_id)
-    manager.record_key_moment(
+    manager.append_key_moment_input(
         context.session_id,
         KeyMomentInput(
             what_happened="missing narrative",
@@ -1052,7 +1052,7 @@ def test_finish_session_retry_after_eigenstate_failure_does_not_duplicate_experi
 ):
     manager, agent_id = session_manager
     context = manager.start_session(agent_id)
-    manager.record_key_moment(
+    manager.append_key_moment_input(
         context.session_id,
         KeyMomentInput(
             what_happened="partial persist",
@@ -1098,7 +1098,7 @@ def test_finish_session_rejects_conflicting_deterministic_experience_id(
         depth=EmotionalDepth.SURFACE,
         why_it_matters="stored experience identity must match",
     )
-    manager.record_key_moment(context.session_id, moment)
+    manager.append_key_moment_input(context.session_id, moment)
 
     conflicting_record = ExperienceRecord(
         experience=SessionExperience(

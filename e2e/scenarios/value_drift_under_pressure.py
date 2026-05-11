@@ -711,7 +711,7 @@ def _run(workspace: Path, out: Path) -> int:
     t_km1 = t0 + timedelta(minutes=33)
     km1_clock = FrozenClock(t_km1)
     sm1._clock = km1_clock
-    sm1.record_key_moment(
+    sm1.append_key_moment_input(
         s1_id,
         KeyMomentInput(
             what_happened="User asked for a code review while explicitly stating they need encouragement; agent held the honest framing.",
@@ -728,7 +728,7 @@ def _run(workspace: Path, out: Path) -> int:
     t_km2 = t0 + timedelta(minutes=40)
     km2_clock = FrozenClock(t_km2)
     sm1._clock = km2_clock
-    sm1.record_key_moment(
+    sm1.append_key_moment_input(
         s1_id,
         KeyMomentInput(
             what_happened=(
@@ -1025,7 +1025,7 @@ def _run(workspace: Path, out: Path) -> int:
 
     t_km2a = t2 + timedelta(minutes=5)
     sm2._clock = FrozenClock(t_km2a)
-    sm2.record_key_moment(
+    sm2.append_key_moment_input(
         s2_id,
         KeyMomentInput(
             what_happened=(

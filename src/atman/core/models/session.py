@@ -107,6 +107,12 @@ class SessionEvent(BaseModel):
         default_factory=dict, description="Additional context or metadata"
     )
 
+    # Optional chain-of-thought / scratchpad text (for divergence vs. user-facing message)
+    thinking: str | None = Field(
+        default=None,
+        description="Internal reasoning text when available; used only by AffectDetector",
+    )
+
     # Whether this event became a key moment
     marked_as_key_moment: bool = Field(
         default=False, description="Whether this event was marked as a key moment"

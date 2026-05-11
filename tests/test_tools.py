@@ -8,6 +8,8 @@ Covers:
 """
 
 from datetime import UTC, datetime
+from pathlib import Path
+from tempfile import mkdtemp
 from uuid import UUID, uuid4
 
 from opentelemetry.trace import NoOpTracer
@@ -20,6 +22,7 @@ from atman.adapters.agent.deps import AtmanDeps
 from atman.adapters.reflection.mock_reflection_model import MockReflectionModel
 from atman.adapters.storage import InMemoryExperienceStore, InMemoryStateStore
 from atman.adapters.storage.in_memory_reflection_store import InMemoryReflectionEventStore
+from atman.affect.detector import AffectDetectorConfig
 from atman.core.narrative_write_audit import NoOpNarrativeWriteAudit
 from atman.core.services import (
     ExperienceService,
@@ -53,7 +56,13 @@ def _create_deps_with_session(agent_id: UUID) -> tuple[AtmanDeps, UUID]:
         narrative_audit=NoOpNarrativeWriteAudit(),
     )
 
-    session_manager = SessionManager(state_store)
+    affect_ws = Path(mkdtemp())
+    affect_cfg = AffectDetectorConfig(cold_start_sessions=0, random_sample_every_n=99999)
+    session_manager = SessionManager(
+        state_store,
+        affect_workspace=affect_ws,
+        affect_config=affect_cfg,
+    )
     identity_service = IdentityService(state_store)
 
     # Bootstrap identity
@@ -101,14 +110,14 @@ def _create_deps_with_session(agent_id: UUID) -> tuple[AtmanDeps, UUID]:
 class TestRecordKeyMoment:
     """Tests for record_key_moment tool."""
 
-    def test_record_key_moment_success(self):
+    async def test_record_key_moment_success(self):
         """Test successfully recording a key moment."""
         agent_id = uuid4()
         deps, _session_id = _create_deps_with_session(agent_id)
 
         ctx = _make_run_context(deps)
 
-        result = record_key_moment(
+        result = await record_key_moment(
             ctx,
             what_happened="User asked a challenging question",
             why_it_matters="Pushed me to think more carefully",
@@ -120,7 +129,7 @@ class TestRecordKeyMoment:
         assert "Key moment recorded" in result
         assert "User asked" in result
 
-    def test_record_key_moment_no_session(self):
+    async def test_record_key_moment_no_session(self):
         """Test error when no session is active."""
         agent_id = uuid4()
         state_store = InMemoryStateStore()
@@ -148,7 +157,7 @@ class TestRecordKeyMoment:
 
         ctx = _make_run_context(deps)
 
-        result = record_key_moment(
+        result = await record_key_moment(
             ctx,
             what_happened="Something happened",
             why_it_matters="It matters",
@@ -157,14 +166,14 @@ class TestRecordKeyMoment:
         assert "Error" in result
         assert "No active session" in result
 
-    def test_record_key_moment_invalid_valence(self):
+    async def test_record_key_moment_invalid_valence(self):
         """Test error with invalid emotional valence."""
         agent_id = uuid4()
         deps, _ = _create_deps_with_session(agent_id)
 
         ctx = _make_run_context(deps)
 
-        result = record_key_moment(
+        result = await record_key_moment(
             ctx,
             what_happened="Something",
             why_it_matters="Matters",
@@ -174,14 +183,14 @@ class TestRecordKeyMoment:
         assert "Error" in result
         assert "emotional_valence" in result
 
-    def test_record_key_moment_invalid_intensity(self):
+    async def test_record_key_moment_invalid_intensity(self):
         """Test error with invalid emotional intensity."""
         agent_id = uuid4()
         deps, _ = _create_deps_with_session(agent_id)
 
         ctx = _make_run_context(deps)
 
-        result = record_key_moment(
+        result = await record_key_moment(
             ctx,
             what_happened="Something",
             why_it_matters="Matters",
@@ -191,20 +200,20 @@ class TestRecordKeyMoment:
         assert "Error" in result
         assert "emotional_intensity" in result
 
-    def test_record_key_moment_rejects_both_zero_emotional_coloring(self):
+    async def test_record_key_moment_rejects_both_zero_emotional_coloring(self):
         """Both valence=0 and intensity=0 must yield an LLM-actionable error.
 
-        ``SessionManager.record_key_moment`` raises ``ValueError`` for this
-        combination and tells callers to ``set incomplete_coloring=True``,
-        but the agent tool doesn't expose that flag — so it must intercept
-        the case itself and return guidance the LLM can actually act on.
+        ``append_key_moment_input`` rejects this combination unless
+        ``incomplete_coloring=True``, but the agent tool doesn't expose that
+        flag — so it must intercept the case itself and return guidance the LLM
+        can actually act on.
         """
         agent_id = uuid4()
         deps, _ = _create_deps_with_session(agent_id)
 
         ctx = _make_run_context(deps)
 
-        result = record_key_moment(
+        result = await record_key_moment(
             ctx,
             what_happened="Something neutral",
             why_it_matters="Routine",
@@ -220,14 +229,14 @@ class TestRecordKeyMoment:
         # since the tool surface doesn't expose it.
         assert "incomplete_coloring" not in result
 
-    def test_record_key_moment_invalid_depth(self):
+    async def test_record_key_moment_invalid_depth(self):
         """Test error with invalid depth value."""
         agent_id = uuid4()
         deps, _ = _create_deps_with_session(agent_id)
 
         ctx = _make_run_context(deps)
 
-        result = record_key_moment(
+        result = await record_key_moment(
             ctx,
             what_happened="Something",
             why_it_matters="Matters",
@@ -235,7 +244,7 @@ class TestRecordKeyMoment:
         )
 
         assert "Error" in result
-        assert "EmotionalDepth" in result or "depth" in result
+        assert "invalid depth" in result
 
 
 class TestLogExperience:

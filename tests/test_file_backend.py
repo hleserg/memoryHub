@@ -2,8 +2,10 @@
 Unit-тесты для FileBackend.
 """
 
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from tempfile import NamedTemporaryFile
+from uuid import uuid4
 
 import pytest
 
@@ -400,3 +402,20 @@ def test_invalidate_lifecycle(backend):
     assert len(backend.search(query="lifecycle")) == 0
     assert len(backend.search(query="lifecycle", include_invalidated=True)) == 1
     assert len(backend.list_invalidated()) == 1
+
+
+def test_confirm_fact_unknown_or_non_active_returns_false(backend: FileBackend) -> None:
+    assert backend.confirm_fact(uuid4()) is False
+    fact = backend.add_fact(FactRecord(content="x", source="t"))
+    backend.invalidate_fact(fact.id, status=FactStatus.INVALIDATED, note="n")
+    assert backend.confirm_fact(fact.id) is False
+
+
+def test_decay_stale_facts_persists_to_disk(backend: FileBackend) -> None:
+    fact = backend.add_fact(FactRecord(content="stale", source="t", salience=0.8))
+    cutoff = datetime.now(UTC) + timedelta(seconds=1)
+    count = backend.decay_stale_facts(before=cutoff, decay_factor=0.5)
+    assert count >= 1
+    after = backend.get_fact(fact.id)
+    assert after is not None
+    assert after.salience < 0.8

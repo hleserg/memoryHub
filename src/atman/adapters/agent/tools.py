@@ -16,7 +16,7 @@ from typing import Literal
 from pydantic_ai import RunContext
 
 from atman.adapters.agent.deps import AtmanDeps
-from atman.core.models import KeyMomentInput
+from atman.affect.models import AgentMemoryReport
 from atman.core.models.experience import EmotionalDepth
 
 
@@ -45,7 +45,7 @@ from atman.core.models.experience import EmotionalDepth
 # Also requires explicit input validation up-front, since you can't rely
 # on Pydantic's "raise on invalid" behavior.
 # PLAYBOOK-END
-def record_key_moment(
+async def record_key_moment(
     ctx: RunContext[AtmanDeps],
     what_happened: str,
     why_it_matters: str,
@@ -74,6 +74,11 @@ def record_key_moment(
     if not ctx.deps.session_id:
         return "Error: No active session. Cannot record key moment outside of a session."
 
+    try:
+        EmotionalDepth(depth)
+    except ValueError:
+        return f"Error: invalid depth {depth!r}"
+
     # Validate emotional values
     if not -1.0 <= emotional_valence <= 1.0:
         return f"Error: emotional_valence must be between -1.0 and 1.0, got {emotional_valence}"
@@ -93,17 +98,25 @@ def record_key_moment(
             "to record a key moment."
         )
 
+    det = ctx.deps.session_manager.affect_detector
+    if det is None:
+        return (
+            "Error: AffectDetector is not configured on SessionManager "
+            "(requires affect_workspace + affect_config). Cannot record key moment."
+        )
+
     try:
-        key_moment = KeyMomentInput(
-            what_happened=what_happened,
-            why_it_matters=why_it_matters,
+        report = AgentMemoryReport(
+            content=what_happened,
             emotional_valence=emotional_valence,
             emotional_intensity=emotional_intensity,
-            depth=EmotionalDepth(depth),
+            emotional_depth=EmotionalDepth(depth),
+            why_it_matters=why_it_matters,
+            tags=[f"depth:{depth}"],
         )
-        ctx.deps.session_manager.record_key_moment(ctx.deps.session_id, key_moment)
+        await det.submit_self_report(report, session_id=ctx.deps.session_id)
         summary = what_happened if len(what_happened) <= 50 else f"{what_happened[:50]}..."
-        return f"Key moment recorded: {summary}"
+        return f"Key moment recorded via AffectDetector: {summary}"
     except Exception as e:
         return f"Error recording key moment: {e!s}"
 
@@ -133,5 +146,5 @@ def log_experience(
     summary = description if len(description) <= 30 else f"{description[:30]}..."
     return (
         "Experience logging is handled automatically at session end. "
-        f"Use record_key_moment to capture significant moments: {summary}"
+        f"Use record_key_moment (AffectDetector-backed) to capture significant moments: {summary}"
     )

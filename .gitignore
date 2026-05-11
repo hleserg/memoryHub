@@ -65,6 +65,10 @@ htmlcov/
 
 # Atman
 .atman/
+.affect_demo_workspace/
+tests/affect/_demo_ws/
+tests/affect/_demo_ws_tags/
+
 # Eval subsystem — local-only artifacts
 eval/data/
 eval/external/

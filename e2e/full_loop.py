@@ -462,7 +462,7 @@ def run_session_from_fixture(
 
     # Record key moments
     for moment in moments:
-        session_manager.record_key_moment(session_id, moment)
+        session_manager.append_key_moment_input(session_id, moment)
 
     # Finish session
     session_result = session_manager.finish_session(

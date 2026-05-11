@@ -21,9 +21,17 @@ _MIGRATION_PATH = (
     / "eval"
     / "migrations"
     / "versions"
-    / "0011_create_benchmark_runs.py"
+    / "0020_create_benchmark_runs.py"
 )
 _SQL_MIRROR_PATH = _MIGRATION_PATH.with_suffix(".sql")
+
+
+class _MockConnection:
+    def execute(self, statement: str) -> _MockConnection:
+        return self
+
+    def fetchone(self) -> tuple[int]:
+        return (1,)
 
 
 class _RecordingOp:
@@ -32,6 +40,9 @@ class _RecordingOp:
 
     def execute(self, statement: str) -> None:
         self.statements.append(statement)
+
+    def get_bind(self) -> _MockConnection:
+        return _MockConnection()
 
 
 class _FakeAlembicModule(types.ModuleType):
@@ -53,7 +64,7 @@ def _load_benchmark_runs_migration(recording_op: _RecordingOp) -> _BenchmarkRuns
     sys.modules["alembic"] = fake_alembic
     try:
         spec = importlib.util.spec_from_file_location(
-            "atman_eval_migration_0011_create_benchmark_runs",
+            "atman_eval_migration_0020_create_benchmark_runs",
             _MIGRATION_PATH,
         )
         assert spec is not None
