@@ -341,6 +341,7 @@ PrincipleRevisionAdvisor — пересмотр принципов
 | Конкурентные записи нарратива | оптимистическая блокировка по `updated_at` | `core/ports/reflection.py:133-147` |
 | Конфликт записи | `NarrativePersistenceConflictError` | `core/exceptions.py:8-14` |
 | Падение аудита нарратива | вложенный try/except — нарратив пишется, аудит логируется warning | `core/services/narrative_revision.py:73-88` |
+| PostgreSQL tenant isolation для фактов/рефлексий | RLS принудительно применяется к owner-role подключениям; связи фактов защищены RLS с проверкой обоих endpoint | `migrations/versions/0001_create_reflections_table.sql`, `migrations/versions/0002_create_facts_table.sql`; покрыто `tests/test_postgres_migration_security.py` |
 
 ### 4.5. Что нужно проверить (gaps)
 
@@ -370,6 +371,8 @@ PrincipleRevisionAdvisor — пересмотр принципов
 | `6a9f28f` | `SessionManager.finish_session` заменял recent narrative вместо добавления summary, теряя контекст | покрыто (`tests/test_session_manager.py::test_finish_session_appends_to_recent_narrative_without_erasing_existing_context`) |
 | `0ef0587` | `setup-openwebui.sh` по умолчанию открывал регистрацию первого admin в LAN | покрыто (`tests/test_deployment_scripts.py`) |
 | `b47abcb` | `eval.benchmark_runs` создавал только partition текущего месяца, поэтому вставки с `started_at=NOW()` падали после границы месяца | покрыто (`tests/test_eval_migrations.py::test_benchmark_runs_migration_creates_default_partition_safety_net`) |
+| текущий PR | PostgreSQL RLS допускал owner-role bypass для `reflections` и открывал `fact_relations` без RLS | покрыто (`tests/test_postgres_migration_security.py`) |
+| текущий PR | CLI факт-памяти по умолчанию выбирал PostgreSQL и падал без локальной БД, нарушая локальный путь без внешних сервисов | покрыто (`tests/test_cli_factual_memory.py`) |
 
 ### 5.2. Из инспекции кода
 
@@ -396,6 +399,8 @@ PrincipleRevisionAdvisor — пересмотр принципов
 | Demo entrypoints (smoke) | ✅ закрыто | `tests/test_demo_smoke.py`, `tests/test_demo_full_corpus.py` |
 | **Интеграция полного жизненного цикла (E2E-02)** | ✅ закрыто | `tests/integration/test_full_lifecycle.py` — проверяет (1) неизменяемость опыта после завершения сессии, (2) появление reframing notes от рефлексии в опытах, (3) обновление narrative.recent_layer после micro reflection, (4) propagation identity_snapshot_id session → experience → reflection |
 | Open WebUI LAN exposure default | ✅ закрыто | `tests/test_deployment_scripts.py` |
+| PostgreSQL RLS owner bypass / незащищённые relation edges | ✅ закрыто | `tests/test_postgres_migration_security.py` |
+| Локальный default CLI факт-памяти | ✅ закрыто | `tests/test_cli_factual_memory.py` |
 
 ### 5.4. TODO / FIXME
 

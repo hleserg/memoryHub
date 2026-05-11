@@ -353,6 +353,7 @@ Files: `docs/features/full-corpus-demo/`, `src/demo_full_corpus.py`, `e2e/full_l
 | Concurrent narrative writes | optimistic locking on `updated_at` | `core/ports/reflection.py:133-147` |
 | Write conflict | `NarrativePersistenceConflictError` | `core/exceptions.py:8-14` |
 | Narrative audit failure | nested try/except — narrative committed, audit logged as warning | `core/services/narrative_revision.py:73-88` |
+| PostgreSQL tenant isolation for facts/reflections | RLS is forced for owner-role connections; fact relation edges have endpoint-checked RLS | `migrations/versions/0001_create_reflections_table.sql`, `migrations/versions/0002_create_facts_table.sql`; covered by `tests/test_postgres_migration_security.py` |
 
 ### 4.5. What still needs covering (gaps)
 
@@ -382,6 +383,8 @@ Files: `docs/features/full-corpus-demo/`, `src/demo_full_corpus.py`, `e2e/full_l
 | `6a9f28f` | Session Manager recent narrative update replaced the whole recent layer instead of appending; regression test added | covered (`tests/test_session_manager.py::test_finish_session_appends_to_recent_narrative_without_erasing_existing_context`) |
 | `0ef0587` | Open WebUI setup exposed first-admin registration to LAN by default | covered (`tests/test_deployment_scripts.py`) |
 | `b47abcb` | `eval.benchmark_runs` only created a current-month partition, so inserts with `started_at=NOW()` would fail after the month boundary | covered (`tests/test_eval_migrations.py::test_benchmark_runs_migration_creates_default_partition_safety_net`) |
+| current PR | PostgreSQL RLS allowed owner-role bypass for `reflections` and exposed `fact_relations` without RLS | covered (`tests/test_postgres_migration_security.py`) |
+| current PR | Factual memory CLI defaulted to PostgreSQL and crashed without a local database, violating the no-external-service local path | covered (`tests/test_cli_factual_memory.py`) |
 
 ### 5.2. From code inspection
 
@@ -408,6 +411,8 @@ Files: `docs/features/full-corpus-demo/`, `src/demo_full_corpus.py`, `e2e/full_l
 | Demo entrypoints (smoke) | ✅ closed | `tests/test_demo_smoke.py`, `tests/test_demo_full_corpus.py` |
 | **Full lifecycle integration (E2E-02)** | ✅ closed | `tests/integration/test_full_lifecycle.py` — verifies (1) experience immutability after session finish, (2) reframing notes from reflection appear on experiences, (3) narrative.recent_layer updates after micro reflection, (4) identity_snapshot_id propagates session → experience → reflection |
 | Open WebUI LAN exposure default | ✅ closed | `tests/test_deployment_scripts.py` |
+| PostgreSQL RLS owner bypass / unprotected relation edges | ✅ closed | `tests/test_postgres_migration_security.py` |
+| Factual memory CLI local default | ✅ closed | `tests/test_cli_factual_memory.py` |
 
 ### 5.4. TODO / FIXME
 

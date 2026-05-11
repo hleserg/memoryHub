@@ -11,18 +11,21 @@ import json
 import os
 import warnings
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 from uuid import UUID
 
 if TYPE_CHECKING:
     import psycopg
+    from psycopg.rows import dict_row
     from psycopg.types.json import Jsonb
 else:
     try:
         import psycopg
+        from psycopg.rows import dict_row
         from psycopg.types.json import Jsonb
     except ImportError:
         psycopg = None
+        dict_row = None
         Jsonb = None
         warnings.warn(
             "psycopg not installed. PostgresFactualMemory requires PostgreSQL support. "
@@ -155,7 +158,7 @@ class PostgresFactualMemory(FactualMemory):
             or "postgresql://atman@localhost:5432/atman"
         )
         self._embedding = embedding
-        self._conn: "psycopg.Connection[Any] | None" = None
+        self._conn: psycopg.Connection[Any] | None = None
         self._closed = False
 
     # ── Connection management ─────────────────────────────────────────────────
@@ -163,7 +166,7 @@ class PostgresFactualMemory(FactualMemory):
     def connect(self) -> None:
         """Open a database connection."""
         if self._conn is None or self._conn.closed:
-            self._conn = psycopg.connect(self.db_url, row_factory=psycopg.rows.dict_row)
+            self._conn = psycopg.connect(self.db_url, row_factory=cast(Any, dict_row))
 
     def close(self) -> None:
         """Close the database connection."""
@@ -215,8 +218,7 @@ class PostgresFactualMemory(FactualMemory):
             return self._embedding.embed(text)
         except Exception as exc:
             warnings.warn(
-                f"Embedding failed ({type(exc).__name__}: {exc}); "
-                "falling back to text search.",
+                f"Embedding failed ({type(exc).__name__}: {exc}); falling back to text search.",
                 RuntimeWarning,
                 stacklevel=3,
             )
@@ -234,7 +236,7 @@ class PostgresFactualMemory(FactualMemory):
         query = _FACT_SELECT + f" WHERE {where_sql} GROUP BY f.id ORDER BY {order_sql}"
         if limit is not None:
             query += " LIMIT %s"
-            params = list(params) + [limit]
+            params = [*list(params), limit]
         cur.execute(query, params)
         return [_parse_fact(row) for row in cur.fetchall()]
 
@@ -302,7 +304,9 @@ class PostgresFactualMemory(FactualMemory):
                 ],
             )
             for rel in record.relations:
-                self._insert_relation(cur, record.id, rel.target_id, rel.relation_type, rel.metadata)
+                self._insert_relation(
+                    cur, record.id, rel.target_id, rel.relation_type, rel.metadata
+                )
 
         conn.commit()
         stored = record.model_copy(deep=True)
