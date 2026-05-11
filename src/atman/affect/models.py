@@ -17,6 +17,7 @@ class TriggerReason(StrEnum):
     RANDOM_SAMPLE = "random_sample"
     SELF_REPORT = "self_report"
     DIVERGENCE = "divergence"
+    EMPHASIS = "emphasis"
 
 
 class AffectMetrics(BaseModel):

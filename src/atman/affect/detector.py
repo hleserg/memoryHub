@@ -21,6 +21,7 @@ from atman.affect.emolex.emolex import emotion_score, tokenize
 from atman.affect.metrics import (
     disclaimer_density,
     emotion_lexical_energy,
+    emphasis_signal,
     hedge_density,
     length_anomaly_z,
     min_length_gate,
@@ -30,6 +31,7 @@ from atman.affect.metrics import (
     question_tail,
     self_reference_density,
     sincerity_score,
+    strip_markdown,
 )
 from atman.affect.models import AffectMetrics, AffectRecord, AgentMemoryReport, TriggerReason
 from atman.core.models.experience import ContextHalo, EmotionalDepth, FeltSense, KeyMoment
@@ -142,18 +144,31 @@ class AffectDetector:
     ) -> AffectRecord | None:
         """Analyse agent message text and optionally thinking; may append a key moment."""
         self._random_counter += 1
-        if not min_length_gate(text, self.config.min_text_length):
+
+        # Strip markdown and extract emphasized words
+        clean_text, emphasized = strip_markdown(text)
+
+        if not min_length_gate(clean_text, self.config.min_text_length):
             return None
 
-        lang = _detect_lang(text, self.config.default_lang)
-        raw_score = emotion_score(text, lang=lang)
+        lang = _detect_lang(clean_text, self.config.default_lang)
+        raw_score = emotion_score(clean_text, lang=lang)
         coverage = float(raw_score.get("_meta", {}).get("coverage", 0.0))
-        metrics = self._compute_metrics(text, lang)
+        metrics = self._compute_metrics(clean_text, lang)
         vec = self._metrics_vector(metrics)
         z = self._baseline.z_scores(vec)
 
-        char_count = len(text.strip())
+        char_count = len(clean_text.strip())
         self._baseline.update(vec, char_count=char_count, extra={"phase": "process"})
+
+        # Handle emphasis trigger unconditionally if emphasized words present
+        if emphasized:
+            await self._handle_emphasis(
+                emphasized=emphasized,
+                clean_text=clean_text,
+                lang=lang,
+                session_id=session_id,
+            )
 
         tags: list[str] = []
         reasons: list[TriggerReason] = []
@@ -188,7 +203,7 @@ class AffectDetector:
             primary = TriggerReason.ANOMALY
         else:
             primary = TriggerReason.RANDOM_SAMPLE
-        excerpt = text.strip()[:500]
+        excerpt = clean_text.strip()[:500]
         says_writes = {"text_excerpt": excerpt, "lang": lang}
         demonstrates = metrics.model_dump()
         felt = _valence_to_felt(metrics.nrc_valence, coverage)
@@ -202,6 +217,44 @@ class AffectDetector:
         if session_id is not None:
             self._append_key_moment(session_id, excerpt, felt, record)
         return record
+
+    async def _handle_emphasis(
+        self,
+        *,
+        emphasized: list[str],
+        clean_text: str,
+        lang: str,
+        session_id: UUID | None,
+    ) -> None:
+        """Handle emphasis detection: write key_moment and optionally trigger LLM analysis."""
+        signal = emphasis_signal(emphasized)
+        excerpt = clean_text.strip()[:500]
+        says_writes = {
+            "text_excerpt": excerpt,
+            "lang": lang,
+            "emphasized_words": emphasized,
+        }
+
+        # Neutral felt sense for emphasis trigger
+        felt = FeltSense(
+            emotional_valence=0.0,
+            emotional_intensity=0.5,
+            depth=EmotionalDepth.SURFACE,
+        )
+
+        record = AffectRecord(
+            trigger_reason=TriggerReason.EMPHASIS,
+            tags=["affect:emphasis"],
+            says_writes=says_writes,
+            demonstrates_thinks=signal,
+        )
+
+        if session_id is not None:
+            self._append_key_moment(session_id, excerpt, felt, record)
+
+        # LLM emotion classification (stub)
+        if self.config.use_llm_analysis:
+            raise NotImplementedError("LLM emotion classification for emphasis not yet implemented")
 
     def _append_key_moment(
         self,

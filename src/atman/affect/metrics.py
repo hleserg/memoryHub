@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import math
+import re
 from collections.abc import Sequence
+from typing import Any
 
 from atman.affect.emolex.emolex import EMOTION_KEYS, emotion_score, tokenize
 
@@ -134,6 +136,48 @@ EN_POSITIVE_SINCERITY_MARKERS = frozenset(
 
 RU_EXPANSION_AFTER = frozenset({"потому", "так", "как", "поскольку", "из-за", "это", "значит"})
 EN_EXPANSION_AFTER = frozenset({"because", "since", "therefore", "thus", "specifically", "namely"})
+
+
+def strip_markdown(text: str) -> tuple[str, list[str]]:
+    """
+    Remove bold markdown markers (**text** or __text__) and return clean text + emphasized words.
+
+    Returns:
+        Tuple of (clean_text, list_of_emphasized_words)
+
+    Examples:
+        >>> strip_markdown("**мой** блог")
+        ("мой блог", ["мой"])
+        >>> strip_markdown("no bold")
+        ("no bold", [])
+    """
+    emphasized: list[str] = []
+    # Match **text** or __text__ (non-greedy, no nested markers)
+    pattern = r"\*\*(.+?)\*\*|__(.+?)__"
+    for match in re.finditer(pattern, text):
+        word = match.group(1) or match.group(2)
+        if word:
+            emphasized.append(word)
+    # Remove all markdown bold markers
+    clean = re.sub(pattern, r"\1\2", text)
+    return clean, emphasized
+
+
+def emphasis_signal(emphasized: list[str]) -> dict[str, Any]:
+    """
+    Generate signal dictionary from emphasized words.
+
+    Args:
+        emphasized: List of words that were marked with bold in markdown
+
+    Returns:
+        Dictionary with emphasis metadata
+    """
+    return {
+        "emphasized_count": len(emphasized),
+        "emphasized_words": emphasized,
+        "total_chars": sum(len(w) for w in emphasized),
+    }
 
 
 def nrc_emotion_vector(text: str, lang: str) -> dict[str, float]:
