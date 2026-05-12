@@ -7,10 +7,10 @@ All experiences are immutable after recording - only reframing notes can be adde
 
 from datetime import UTC, datetime
 from enum import StrEnum
-from typing import Any
+from typing import Any, Literal
 from uuid import UUID, uuid4
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, ValidationInfo, field_validator
 
 
 class ReframingNoteAppendResult(StrEnum):
@@ -56,7 +56,7 @@ class FeltSense(BaseModel):
 
     @field_validator("emotional_valence", "emotional_intensity")
     @classmethod
-    def validate_float_range(cls, v: float, info) -> float:
+    def validate_float_range(cls, v: float, info: ValidationInfo) -> float:
         """Ensure float values are in valid range."""
         field_name = info.field_name
         if field_name == "emotional_valence":
@@ -238,8 +238,29 @@ class SessionExperience(BaseModel):
     )
 
     # IMMUTABLE ORIGINAL EXPERIENCE
-    key_moments: list[KeyMoment] = Field(
-        min_length=1, description="The moments that made up this experience - IMMUTABLE"
+    key_moment_ids: list[UUID] = Field(
+        default_factory=list,
+        description="IDs of key moments that made up this experience - IMMUTABLE references",
+    )
+
+    # UNEXAMINED FACTS
+    unexamined_fact_refs: list[UUID] = Field(
+        default_factory=list,
+        description="IDs of facts that were present but not examined during this session",
+    )
+
+    # SESSION CLOSE METADATA
+    close_reason: Literal["timeout_sleep", "restart", "forced", "interrupted"] | None = Field(
+        default=None,
+        description="Reason why the session ended",
+    )
+    agent_recap: str | None = Field(
+        default=None,
+        description="Agent's own summary of the session upon close",
+    )
+    restart_reason: str = Field(
+        default="",
+        description="Reason for session restart if close_reason is 'restart'",
     )
 
     # METADATA
@@ -347,21 +368,7 @@ class SessionExperience(BaseModel):
 
         days_since_access = (current_time - self.last_accessed_at).total_seconds() / 86400
 
-        # Adjust decay rate based on emotional intensity and depth
-        if self.key_moments:
-            avg_intensity = sum(m.how_i_felt.emotional_intensity for m in self.key_moments) / len(
-                self.key_moments
-            )
-            has_profound = any(
-                m.how_i_felt.depth == EmotionalDepth.PROFOUND for m in self.key_moments
-            )
-
-            # Profound or intense experiences decay more slowly
-            if has_profound:
-                decay_lambda *= 0.5
-            elif avg_intensity > 0.7:
-                decay_lambda *= 0.7
-
+        # Base decay without key moment details (since we only store IDs now)
         effective_salience = self.salience * math.exp(-decay_lambda * days_since_access)
         return max(0.0, min(1.0, effective_salience))
 
@@ -371,18 +378,14 @@ class SessionExperience(BaseModel):
             "example": {
                 "session_id": "123e4567-e89b-12d3-a456-426614174000",
                 "timestamp": "2026-04-30T10:00:00Z",
-                "key_moments": [
-                    {
-                        "what_happened": "User presented a complex problem",
-                        "how_i_felt": {
-                            "emotional_valence": 0.2,
-                            "emotional_intensity": 0.6,
-                            "depth": "meaningful",
-                        },
-                        "why_it_matters": "Tests my ability to handle complexity",
-                        "values_touched": ["competence", "service"],
-                    }
+                "key_moment_ids": [
+                    "223e4567-e89b-12d3-a456-426614174001",
+                    "323e4567-e89b-12d3-a456-426614174002",
                 ],
+                "unexamined_fact_refs": ["423e4567-e89b-12d3-a456-426614174003"],
+                "close_reason": "timeout_sleep",
+                "agent_recap": "Complex problem-solving session with breakthrough insights",
+                "restart_reason": "",
                 "importance": 0.7,
                 "salience": 0.7,
                 "incomplete_coloring": False,
