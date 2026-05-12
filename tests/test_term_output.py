@@ -128,6 +128,15 @@ def test_print_salience_table(term_console: io.StringIO) -> None:
     assert "0.5000" in term_console.getvalue()
 
 
+def test_print_plain_brackets_not_markup(term_console: io.StringIO) -> None:
+    from atman.term import print_plain
+
+    print_plain("list[int] and arr[0] are visible")
+    out = term_console.getvalue()
+    assert "list[int]" in out
+    assert "arr[0]" in out
+
+
 def test_demo_pace_respects_env(monkeypatch: pytest.MonkeyPatch) -> None:
     import atman.term as term_mod
 

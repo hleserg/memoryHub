@@ -11,6 +11,7 @@ import time
 
 from rich import box
 from rich.console import Console, Group
+from rich.markup import escape
 from rich.padding import Padding
 from rich.panel import Panel
 from rich.rule import Rule
@@ -62,19 +63,19 @@ def demo_pace() -> None:
 
 
 def print_ok(message: str) -> None:
-    console.print(f"[term.ok]✓[/term.ok] {message}")
+    console.print(f"[term.ok]✓[/term.ok] {escape(message)}")
 
 
 def print_err(message: str) -> None:
-    console_err.print(f"[term.err]✗[/term.err] {message}")
+    console_err.print(f"[term.err]✗[/term.err] {escape(message)}")
 
 
 def print_warn(message: str) -> None:
-    console_err.print(f"[term.warn]![/term.warn] {message}")
+    console_err.print(f"[term.warn]![/term.warn] {escape(message)}")
 
 
 def print_info(message: str) -> None:
-    console.print(message)
+    console.print(message, markup=False, highlight=False)
 
 
 def print_banner(title: str, subtitle: str | None = None) -> None:
@@ -94,6 +95,16 @@ def print_section(title: str) -> None:
 
 def print_help_text(text: str) -> None:
     console.print(text, markup=False, highlight=False)
+
+
+def print_plain(message: str, *, end: str = "\n") -> None:
+    """
+    Print user- or LLM-provided text without interpreting Rich markup.
+
+    Use for arbitrary reply bodies so ``[...]`` in model output is not treated as tags.
+    """
+
+    console.print(message, markup=False, highlight=False, end=end)
 
 
 def _indent_width(prefix: str) -> int:

@@ -9,10 +9,11 @@ dependencies = [
     "pymorphy3>=2.0.2,<3",
     "pydantic>=2.0.0",
     "pydantic-settings>=2.0.0",
-    "pydantic-ai-slim>=1.88.0,<2.0",
+    "pydantic-ai-slim[openai,anthropic,google,groq]>=1.88.0,<2.0",
     "rich>=13.7.0",
     "textual>=0.86.0",
     "httpx>=0.28.0",
+    "psycopg[binary]>=3.2",
 ]
 
 [project.optional-dependencies]
@@ -31,7 +32,6 @@ dev = [
     "mypy>=1.8.0",
     "import-linter>=2.0.0",
     "streamlit>=1.30.0",
-    "psycopg[binary]>=3.1",
 ]
 eval = [
     # Evaluation subsystem dependencies (benchmarks, judges, dashboards)
@@ -44,7 +44,6 @@ eval = [
     "scikit-learn>=1.3.0",
     "alembic>=1.13.0",
     "sqlalchemy[postgresql]>=2.0.0",
-    "psycopg[binary]>=3.2",
     "click>=8.1",
     "python-dateutil>=2.8.0",
 ]

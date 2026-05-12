@@ -100,3 +100,12 @@ class AgentConfig(BaseModel):
     )
 
     model: ModelConfig = Field(default_factory=ModelConfig)
+
+    thinking: bool = Field(
+        default=False,
+        description=(
+            "Enable thinking/reasoning mode for the LLM. "
+            "Disabled by default: qwen3 with thinking=True and tool calling "
+            "produces broken tool args and returns tool results as JSON text."
+        ),
+    )
