@@ -105,10 +105,8 @@ class InMemoryExperienceStore(StateStore):
             return exp.session_id == query.session_id
 
         elif isinstance(query, ValuesTouchedQuery):
-            query_values_lower = [v.lower() for v in query.values]
             for moment in exp.key_moments:
-                moment_values_lower = [v.lower() for v in moment.values_touched]
-                if any(qv in moment_values_lower for qv in query_values_lower):
+                if any(qv in moment.values_touched for qv in query.values):
                     return True
             return False
 
