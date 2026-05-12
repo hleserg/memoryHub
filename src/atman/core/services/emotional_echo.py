@@ -97,7 +97,11 @@ class EmotionalEcho:
             recency_score = 2 ** (-hours_ago / self.recency_halflife)
 
             # Process each key moment
-            for moment in exp.key_moments:
+            for moment_id in exp.key_moment_ids:
+                moment = self.state_store.get_key_moment(moment_id)
+                if not moment:
+                    continue
+                
                 felt = moment.how_i_felt
 
                 # Intensity weighting (profound > meaningful > surface)

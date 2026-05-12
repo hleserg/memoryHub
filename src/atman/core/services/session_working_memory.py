@@ -80,8 +80,8 @@ class SessionWorkingMemory:
 
         self._evict_if_needed()
 
-        # Summarize key moments
-        summary = " | ".join(km.what_happened[:100] for km in experience.key_moments[:2])
+        # Summarize using metadata (key moments now stored separately)
+        summary = f"{len(experience.key_moment_ids)} key moments (avg_intensity={experience.avg_emotional_intensity:.2f})"
 
         cached = CachedItem(
             item_id=experience.id,
