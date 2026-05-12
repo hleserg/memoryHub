@@ -201,14 +201,16 @@ class SessionManager:
     # status: draft
     # since: 2026-05-12
     #
-    # Pattern: when journaling in-flight state for crash recovery, include enough
-    # payload to reconstruct the referenced records, not just their IDs. Recovery
-    # must refuse to delete the journal if it cannot rebuild every referenced row.
+    # Pattern: when journaling in-flight state for crash recovery, keep an
+    # advisory lock while the owner is live and include enough payload to
+    # reconstruct the referenced records, not just their IDs. Recovery must
+    # refuse to delete the journal if it cannot rebuild every referenced row.
     #
     # Why generalizable: any write-behind or finish-time persistence flow can crash
     # between "record exists in memory" and "record exists in durable storage".
-    # ID-only journals create dangling references; self-contained journal entries
-    # preserve the last recovery source.
+    # ID-only journals create dangling references; lock-free recovery can steal
+    # live sessions from another process. Self-contained, locked journal entries
+    # preserve the last recovery source and distinguish crashed from active work.
     #
     # Trade-offs: journal entries are larger and may duplicate data already stored
     # on the happy path, but the duplication is bounded and only used for recovery.
