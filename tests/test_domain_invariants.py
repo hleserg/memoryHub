@@ -21,6 +21,13 @@ Invariants covered:
 11. (E24) FactRecord.invalidate() zeroes salience for terminal states.
 12. (E24) confirm_fact() at the backend port is a no-op for non-ACTIVE facts.
 13. (E24) decay_stale_facts() only decays ACTIVE facts; non-ACTIVE are skipped.
+14. (E21.5) unexamined_fact_refs: facts in _facts_read but NOT in any key moment
+    fact_refs appear in SessionExperience.unexamined_fact_refs.
+15. (E21.5) unexamined_fact_refs: facts in both _facts_read AND key moment fact_refs
+    do NOT appear in unexamined_fact_refs (they are "colored").
+16. (E21.5) unexamined_fact_refs: empty _facts_read produces empty unexamined list.
+17. (E21.5) unexamined_fact_refs: facts only in key moment fact_refs (not in
+    _facts_read) do not appear in unexamined_fact_refs.
 
 SYSTEM_MAP §2.1 / §3 B–E / §4.2 / §5.3 regression freeze.
 """
@@ -32,18 +39,29 @@ from pathlib import Path
 from uuid import uuid4
 
 from atman.adapters.memory import InMemoryBackend
-from atman.adapters.storage import FileStateStore
+from atman.adapters.storage import FileStateStore, InMemoryStateStore
+from atman.core.clock_impl import FrozenClock
 from atman.core.models import (
+    CoreValue,
     EmotionalDepth,
     ExperienceRecord,
     FactRecord,
     FeltSense,
+    Goal,
+    GoalHorizon,
+    Identity,
     KeyMoment,
+    KeyMomentInput,
+    LayerType,
+    NarrativeDocument,
+    NarrativeLayer,
     ReframingNote,
     SessionExperience,
 )
 from atman.core.models.fact import FactStatus
 from atman.core.ports.state_store import DateRangeQuery
+from atman.core.services import SessionManager
+from atman.core.services.session_manager import deterministic_session_experience_id
 
 
 def _record(
@@ -361,3 +379,198 @@ def test_invariant_decay_stale_facts_only_decays_active() -> None:
     assert disputed_after is not None
     # Non-ACTIVE facts are untouched: salience preserved exactly.
     assert disputed_after.salience == disputed_before.salience
+
+
+# ---------------------------------------------------------------------------
+# Invariants 14-17 (E21.5): unexamined_fact_refs computation
+# ---------------------------------------------------------------------------
+
+
+def test_invariant_unexamined_fact_refs_only_facts_read_but_not_colored() -> None:
+    """Facts in _facts_read but NOT in any key moment fact_refs → unexamined_fact_refs."""
+    store = InMemoryStateStore()
+    agent_id = uuid4()
+    identity = Identity(
+        id=agent_id,
+        self_description="test",
+        core_values=[CoreValue(name="test", description="test", confidence=0.5)],
+        goals=[Goal(content="test", horizon=GoalHorizon.SHORT)],
+        emotional_baseline=0.0,
+    )
+    narrative = NarrativeDocument(
+        identity_id=agent_id,
+        core_layer=NarrativeLayer(layer_type=LayerType.CORE, content="core"),
+        recent_layer=NarrativeLayer(layer_type=LayerType.RECENT, content="recent"),
+    )
+    store.save_identity(identity)
+    store.save_narrative(narrative)
+
+    manager = SessionManager(store, clock=FrozenClock(datetime(2025, 6, 1, tzinfo=UTC)))
+    ctx = manager.start_session(agent_id)
+
+    # Note 3 facts read, but only reference 1 in a key moment
+    fact1, fact2, fact3 = uuid4(), uuid4(), uuid4()
+    manager._note_facts_read(ctx.session_id, [fact1, fact2, fact3])
+
+    # Key moment only references fact1
+    moment = KeyMomentInput(
+        what_happened="event",
+        emotional_valence=0.2,
+        emotional_intensity=0.5,
+        depth=EmotionalDepth.SURFACE,
+        why_it_matters="reason",
+    )
+    manager.append_key_moment_input(ctx.session_id, moment)
+    # Manually inject fact_refs into the stored key moment
+    session_result = manager._active_sessions[ctx.session_id]
+    session_result.key_moments[0].fact_refs.append(fact1)
+
+    manager.finish_session(ctx.session_id)
+
+    # fact2 and fact3 should be unexamined (read but not colored)
+    experience_id = deterministic_session_experience_id(ctx.session_id)
+    experience_record = store.get_experience(experience_id)
+    assert experience_record is not None
+    unexamined = set(experience_record.experience.unexamined_fact_refs)
+    assert fact2 in unexamined
+    assert fact3 in unexamined
+    assert fact1 not in unexamined  # colored in key moment
+
+
+def test_invariant_unexamined_fact_refs_colored_facts_excluded() -> None:
+    """Facts in both _facts_read AND key moment fact_refs do NOT appear in unexamined."""
+    store = InMemoryStateStore()
+    agent_id = uuid4()
+    identity = Identity(
+        id=agent_id,
+        self_description="test",
+        core_values=[CoreValue(name="test", description="test", confidence=0.5)],
+        goals=[Goal(content="test", horizon=GoalHorizon.SHORT)],
+        emotional_baseline=0.0,
+    )
+    narrative = NarrativeDocument(
+        identity_id=agent_id,
+        core_layer=NarrativeLayer(layer_type=LayerType.CORE, content="core"),
+        recent_layer=NarrativeLayer(layer_type=LayerType.RECENT, content="recent"),
+    )
+    store.save_identity(identity)
+    store.save_narrative(narrative)
+
+    manager = SessionManager(store, clock=FrozenClock(datetime(2025, 6, 1, tzinfo=UTC)))
+    ctx = manager.start_session(agent_id)
+
+    # Note fact_id as read
+    fact_id = uuid4()
+    manager._note_facts_read(ctx.session_id, [fact_id])
+
+    # Also reference it in a key moment
+    moment = KeyMomentInput(
+        what_happened="event",
+        emotional_valence=0.2,
+        emotional_intensity=0.5,
+        depth=EmotionalDepth.SURFACE,
+        why_it_matters="reason",
+    )
+    manager.append_key_moment_input(ctx.session_id, moment)
+    session_result = manager._active_sessions[ctx.session_id]
+    session_result.key_moments[0].fact_refs.append(fact_id)
+
+    manager.finish_session(ctx.session_id)
+
+    # fact_id is colored (in key moment), so NOT in unexamined
+    experience_id = deterministic_session_experience_id(ctx.session_id)
+    experience_record = store.get_experience(experience_id)
+    assert experience_record is not None
+    assert fact_id not in experience_record.experience.unexamined_fact_refs
+
+
+def test_invariant_unexamined_fact_refs_empty_when_no_facts_read() -> None:
+    """Empty _facts_read → empty unexamined_fact_refs."""
+    store = InMemoryStateStore()
+    agent_id = uuid4()
+    identity = Identity(
+        id=agent_id,
+        self_description="test",
+        core_values=[CoreValue(name="test", description="test", confidence=0.5)],
+        goals=[Goal(content="test", horizon=GoalHorizon.SHORT)],
+        emotional_baseline=0.0,
+    )
+    narrative = NarrativeDocument(
+        identity_id=agent_id,
+        core_layer=NarrativeLayer(layer_type=LayerType.CORE, content="core"),
+        recent_layer=NarrativeLayer(layer_type=LayerType.RECENT, content="recent"),
+    )
+    store.save_identity(identity)
+    store.save_narrative(narrative)
+
+    manager = SessionManager(store, clock=FrozenClock(datetime(2025, 6, 1, tzinfo=UTC)))
+    ctx = manager.start_session(agent_id)
+
+    # No facts read; one key moment
+    moment = KeyMomentInput(
+        what_happened="event",
+        emotional_valence=0.2,
+        emotional_intensity=0.5,
+        depth=EmotionalDepth.SURFACE,
+        why_it_matters="reason",
+    )
+    manager.append_key_moment_input(ctx.session_id, moment)
+
+    manager.finish_session(ctx.session_id)
+
+    experience_id = deterministic_session_experience_id(ctx.session_id)
+    experience_record = store.get_experience(experience_id)
+    assert experience_record is not None
+    assert experience_record.experience.unexamined_fact_refs == []
+
+
+def test_invariant_unexamined_fact_refs_only_in_key_moment_not_unexamined() -> None:
+    """Facts only in key moment fact_refs (not in _facts_read) do NOT appear in unexamined."""
+    store = InMemoryStateStore()
+    agent_id = uuid4()
+    identity = Identity(
+        id=agent_id,
+        self_description="test",
+        core_values=[CoreValue(name="test", description="test", confidence=0.5)],
+        goals=[Goal(content="test", horizon=GoalHorizon.SHORT)],
+        emotional_baseline=0.0,
+    )
+    narrative = NarrativeDocument(
+        identity_id=agent_id,
+        core_layer=NarrativeLayer(layer_type=LayerType.CORE, content="core"),
+        recent_layer=NarrativeLayer(layer_type=LayerType.RECENT, content="recent"),
+    )
+    store.save_identity(identity)
+    store.save_narrative(narrative)
+
+    manager = SessionManager(store, clock=FrozenClock(datetime(2025, 6, 1, tzinfo=UTC)))
+    ctx = manager.start_session(agent_id)
+
+    # Note one fact as read
+    read_fact = uuid4()
+    manager._note_facts_read(ctx.session_id, [read_fact])
+
+    # Key moment references a DIFFERENT fact (not in _facts_read)
+    moment_fact = uuid4()
+    moment = KeyMomentInput(
+        what_happened="event",
+        emotional_valence=0.2,
+        emotional_intensity=0.5,
+        depth=EmotionalDepth.SURFACE,
+        why_it_matters="reason",
+    )
+    manager.append_key_moment_input(ctx.session_id, moment)
+    session_result = manager._active_sessions[ctx.session_id]
+    session_result.key_moments[0].fact_refs.append(moment_fact)
+
+    manager.finish_session(ctx.session_id)
+
+    experience_id = deterministic_session_experience_id(ctx.session_id)
+    experience_record = store.get_experience(experience_id)
+    assert experience_record is not None
+    unexamined = experience_record.experience.unexamined_fact_refs
+
+    # read_fact is unexamined (read but not colored)
+    assert read_fact in unexamined
+    # moment_fact is NOT unexamined (not in _facts_read at all)
+    assert moment_fact not in unexamined

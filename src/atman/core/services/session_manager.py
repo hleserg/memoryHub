@@ -408,18 +408,29 @@ class SessionManager:
         try:
             existing_record = self._state_store.get_experience(experience_id)
             if existing_record is None:
-                # Store key moments separately first
-                self._state_store.store_key_moments(session_id, session_result.key_moments)
-
-                # Aggregate fact_refs from all key moments and _note_facts_read
-                fact_refs_set: set[UUID] = set()
+                # Compute colored_fact_ids (facts referenced in key moments)
+                colored_fact_ids: set[UUID] = set()
                 for moment in session_result.key_moments:
-                    fact_refs_set.update(moment.fact_refs)
-                # Also include any facts noted via _note_facts_read
+                    colored_fact_ids.update(moment.fact_refs)
+
+                # Compute unexamined facts (read but not colored)
+                unexamined_fact_refs = list(session_result._facts_read - colored_fact_ids)
+
+                # Aggregate all fact_refs (union of colored and unexamined)
+                fact_refs_set: set[UUID] = set()
+                fact_refs_set.update(colored_fact_ids)
                 fact_refs_set.update(session_result._facts_read)
 
-                # Extract key moment IDs and compute salience metadata
-                key_moment_ids = [moment.id for moment in session_result.key_moments]
+                # Save each KeyMoment via create_key_moment and collect IDs
+                # Idempotent: skip if moment already exists (for retry scenarios)
+                key_moment_ids: list[UUID] = []
+                for moment in session_result.key_moments:
+                    if self._state_store.get_key_moment(moment.id) is None:
+                        self._state_store.create_key_moment(moment)
+                    key_moment_ids.append(moment.id)
+
+                # Also store session association for backward compatibility
+                self._state_store.store_key_moments(session_id, session_result.key_moments)
 
                 # Compute avg_emotional_intensity and has_profound_moment
                 avg_emotional_intensity = 0.5  # default
@@ -465,6 +476,7 @@ class SessionManager:
                     session_id=session_id,
                     timestamp=session_result.finished_at,
                     key_moment_ids=key_moment_ids,
+                    unexamined_fact_refs=unexamined_fact_refs,
                     recorded_by="session_manager",
                     identity_snapshot_id=session_result.identity_snapshot_id,
                     importance=0.5,
