@@ -614,7 +614,11 @@ def test_list_key_moments_with_session_id_raises_not_implemented(store: StateSto
         pytest.skip("Store doesn't support KeyMoment operations")
 
     # PostgresStateStore actually supports session_id filtering
-    if POSTGRES_AVAILABLE and PostgresStateStore is not None and isinstance(store, PostgresStateStore):
+    if (
+        POSTGRES_AVAILABLE
+        and PostgresStateStore is not None
+        and isinstance(store, PostgresStateStore)
+    ):
         pytest.skip("PostgresStateStore supports session_id filtering")
 
     with pytest.raises(NotImplementedError, match="session_id"):
