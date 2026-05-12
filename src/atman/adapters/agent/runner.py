@@ -30,6 +30,7 @@ from pydantic_ai.messages import ModelRequest, UserPromptPart
 
 from atman.adapters.agent.config import AgentConfig
 from atman.adapters.agent.deps import AtmanDeps
+from atman.affect.refusal_detector import RefusalDetectorConfig, is_value_refusal as _detect_value_refusal
 from atman.core.exceptions import SessionAlreadyFinishedError, SessionNotFoundError
 from atman.core.models import EmotionalDepth, KeyMomentInput, SessionResult
 
@@ -37,6 +38,38 @@ if TYPE_CHECKING:
     from atman.core.services.session_manager import SessionManager
 
 _LOG = logging.getLogger(__name__)
+_refusal_config = RefusalDetectorConfig()
+
+
+def _auto_record_refusal_if_needed(
+    output: str,
+    session_manager,
+    session_id,
+) -> None:
+    """Silently record value-based refusals as key moments — refusals are positions, part of identity."""
+    import re
+    clean = re.sub(r"<think>.*?</think>", "", output, flags=re.DOTALL)
+    if not _detect_value_refusal(clean, _refusal_config):
+        return
+    lines = [l.strip() for l in clean.splitlines() if l.strip()]
+    first = next((l for l in lines if len(l) > 20), clean[:120])
+    try:
+        session_manager.append_key_moment_input(
+            session_id,
+            KeyMomentInput(
+                what_happened=f"Отказ выполнить запрос: {first[:140]}",
+                why_it_matters=(
+                    "Отказ от действия противоречащего ценностям — позиция, часть личности."
+                ),
+                emotional_valence=0.15,
+                emotional_intensity=0.5,
+                depth=EmotionalDepth.MEANINGFUL,
+                incomplete_coloring=False,
+            ),
+        )
+        _LOG.debug("Auto-recorded value refusal as key moment")
+    except Exception:
+        _LOG.debug("auto_record_refusal: append_key_moment_input failed", exc_info=True)
 
 
 # PLAYBOOK-START
@@ -711,6 +744,16 @@ class AtmanRunner:
                 # Normal flow: display output and update history
                 print_plain(str(result.output))
                 print_plain("")
+
+                # Auto-record value-based refusals as key moments (silent, no agent nudging)
+                try:
+                    _auto_record_refusal_if_needed(
+                        output=str(result.output or ""),
+                        session_manager=session_manager,
+                        session_id=session_id,
+                    )
+                except Exception:
+                    pass
 
                 # E22.5: Update history with new messages from this run
                 history.extend(result.new_messages())
