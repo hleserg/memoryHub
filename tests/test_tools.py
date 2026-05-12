@@ -271,7 +271,7 @@ class TestRestartSession:
     """Tests for restart_session tool."""
 
     def test_restart_session_returns_sentinel(self):
-        """Test that restart_session returns correct sentinel string."""
+        """Test that restart_session returns correct sentinel string with newline delimiter."""
         agent_id = uuid4()
         deps, _ = _create_deps_with_session(agent_id)
 
@@ -279,8 +279,12 @@ class TestRestartSession:
 
         result = restart_session(ctx, reason="test reason")
 
-        assert result.startswith("__ATMAN_RESTART_REQUESTED__")
+        assert result.startswith("__ATMAN_RESTART_REQUESTED__\n")
         assert "test reason" in result
+        # Verify format: sentinel + newline + reason
+        lines = result.split("\n", 1)
+        assert lines[0] == "__ATMAN_RESTART_REQUESTED__"
+        assert lines[1] == "test reason"
 
     def test_restart_session_empty_reason(self):
         """Test restart_session with empty reason."""
@@ -323,7 +327,7 @@ class TestRestartSession:
 
         result = restart_session(ctx, reason="emergency")
 
-        assert result == "__ATMAN_RESTART_REQUESTED__emergency"
+        assert result == "__ATMAN_RESTART_REQUESTED__\nemergency"
 
 
 class TestWaitSession:
@@ -341,16 +345,35 @@ class TestWaitSession:
         assert result == "__ATMAN_WAIT_REQUESTED__5"
 
     def test_wait_session_various_durations(self):
-        """Test wait_session with different minute values."""
+        """Test wait_session with different positive minute values."""
         agent_id = uuid4()
         deps, _ = _create_deps_with_session(agent_id)
 
         ctx = _make_run_context(deps)
 
-        # Test different values
+        # Test different positive values
         assert wait_session(ctx, minutes=1) == "__ATMAN_WAIT_REQUESTED__1"
         assert wait_session(ctx, minutes=60) == "__ATMAN_WAIT_REQUESTED__60"
-        assert wait_session(ctx, minutes=0) == "__ATMAN_WAIT_REQUESTED__0"
+        assert wait_session(ctx, minutes=120) == "__ATMAN_WAIT_REQUESTED__120"
+
+    def test_wait_session_invalid_minutes(self):
+        """Test wait_session rejects non-positive minutes."""
+        agent_id = uuid4()
+        deps, _ = _create_deps_with_session(agent_id)
+
+        ctx = _make_run_context(deps)
+
+        # Test zero
+        result_zero = wait_session(ctx, minutes=0)
+        assert result_zero.startswith("Error:")
+        assert "positive" in result_zero
+        assert "0" in result_zero
+
+        # Test negative
+        result_negative = wait_session(ctx, minutes=-5)
+        assert result_negative.startswith("Error:")
+        assert "positive" in result_negative
+        assert "-5" in result_negative
 
     def test_wait_session_no_session(self):
         """Test wait_session works even without active session."""
