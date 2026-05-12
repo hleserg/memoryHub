@@ -22,12 +22,15 @@ from atman.adapters.storage.file_state_store import FileStateStore
 from atman.core.exceptions import SessionNotFoundError
 from atman.core.models import (
     EmotionalDepth,
+    FeltSense,
     Identity,
+    KeyMoment,
     KeyMomentInput,
     LayerType,
     NarrativeDocument,
     NarrativeLayer,
     SessionEvent,
+    SessionResult,
 )
 from atman.core.services.session_manager import SessionManager
 
@@ -382,6 +385,217 @@ def test_force_finish_incomplete_coloring_flag(
     # Session should be finished (no longer active)
     session_result_after = session_manager.get_active_session(ctx.session_id)
     assert session_result_after is None
+
+
+def test_check_restart_requested_with_sentinel() -> None:
+    """Test that _check_restart_requested detects restart sentinel."""
+    from atman.adapters.agent.runner import _check_restart_requested
+
+    # Mock message with restart sentinel (no reason)
+    class MockPart:
+        def __init__(self) -> None:
+            self.content = "__ATMAN_RESTART_REQUESTED__"
+
+    class MockMessage:
+        def __init__(self) -> None:
+            self.parts = [MockPart()]
+
+    messages = [MockMessage()]
+    restart_requested, reason = _check_restart_requested(messages)
+    assert restart_requested is True
+    assert reason == ""
+
+
+def test_check_restart_requested_with_reason() -> None:
+    """Test that _check_restart_requested extracts restart reason."""
+    from atman.adapters.agent.runner import _check_restart_requested
+
+    # Mock message with restart sentinel and reason
+    class MockPart:
+        def __init__(self) -> None:
+            self.content = "__ATMAN_RESTART_REQUESTED__\nContext window filling up"
+
+    class MockMessage:
+        def __init__(self) -> None:
+            self.parts = [MockPart()]
+
+    messages = [MockMessage()]
+    restart_requested, reason = _check_restart_requested(messages)
+    assert restart_requested is True
+    assert reason == "Context window filling up"
+
+
+def test_check_restart_requested_no_sentinel() -> None:
+    """Test that _check_restart_requested returns False when no sentinel."""
+    from atman.adapters.agent.runner import _check_restart_requested
+
+    # Mock message without restart sentinel
+    class MockPart:
+        def __init__(self) -> None:
+            self.content = "Normal agent response"
+
+    class MockMessage:
+        def __init__(self) -> None:
+            self.parts = [MockPart()]
+
+    messages = [MockMessage()]
+    restart_requested, reason = _check_restart_requested(messages)
+    assert restart_requested is False
+    assert reason == ""
+
+
+def test_check_restart_requested_with_tool_name() -> None:
+    """Test that _check_restart_requested detects restart via tool_name."""
+    from atman.adapters.agent.runner import _check_restart_requested
+
+    # Mock message with tool_name
+    class MockPart:
+        def __init__(self) -> None:
+            self.tool_name = "restart_session"
+
+    class MockMessage:
+        def __init__(self) -> None:
+            self.parts = [MockPart()]
+
+    messages = [MockMessage()]
+    restart_requested, reason = _check_restart_requested(messages)
+    assert restart_requested is True
+    assert reason == ""
+
+
+def test_check_restart_requested_prioritizes_content_sentinel() -> None:
+    """Test that content sentinel is checked before tool_name to capture reason."""
+    from atman.adapters.agent.runner import _check_restart_requested
+
+    # Mock messages with both tool_name and content (realistic Pydantic-AI scenario)
+    # First part: ToolCallPart with tool_name
+    class MockToolCallPart:
+        def __init__(self) -> None:
+            self.tool_name = "restart_session"
+
+    # Second part: ToolReturnPart with both tool_name and sentinel content
+    class MockToolReturnPart:
+        def __init__(self) -> None:
+            self.tool_name = "restart_session"
+            self.content = "__ATMAN_RESTART_REQUESTED__\nContext window full"
+
+    class MockMessage:
+        def __init__(self) -> None:
+            self.parts = [MockToolCallPart(), MockToolReturnPart()]
+
+    messages = [MockMessage()]
+    restart_requested, reason = _check_restart_requested(messages)
+    assert restart_requested is True
+    assert reason == "Context window full", "Reason should be extracted from content sentinel"
+
+
+def test_check_wait_requested_with_sentinel() -> None:
+    """Test that _check_wait_requested detects wait sentinel."""
+    from atman.adapters.agent.runner import _check_wait_requested
+
+    # Mock message with wait sentinel
+    class MockPart:
+        def __init__(self) -> None:
+            self.content = "__ATMAN_WAIT_REQUESTED__10"
+
+    class MockMessage:
+        def __init__(self) -> None:
+            self.parts = [MockPart()]
+
+    messages = [MockMessage()]
+    wait_requested, minutes = _check_wait_requested(messages)
+    assert wait_requested is True
+    assert minutes == 10
+
+
+def test_check_wait_requested_no_sentinel() -> None:
+    """Test that _check_wait_requested returns False when no sentinel."""
+    from atman.adapters.agent.runner import _check_wait_requested
+
+    # Mock message without wait sentinel
+    class MockPart:
+        def __init__(self) -> None:
+            self.content = "Normal agent response"
+
+    class MockMessage:
+        def __init__(self) -> None:
+            self.parts = [MockPart()]
+
+    messages = [MockMessage()]
+    wait_requested, minutes = _check_wait_requested(messages)
+    assert wait_requested is False
+    assert minutes == 0
+
+
+def test_check_wait_requested_with_tool_name() -> None:
+    """Test that _check_wait_requested detects wait via tool_name (no minutes)."""
+    from atman.adapters.agent.runner import _check_wait_requested
+
+    # Mock message with tool_name
+    class MockPart:
+        def __init__(self) -> None:
+            self.tool_name = "wait_session"
+
+    class MockMessage:
+        def __init__(self) -> None:
+            self.parts = [MockPart()]
+
+    messages = [MockMessage()]
+    wait_requested, minutes = _check_wait_requested(messages)
+    assert wait_requested is True
+    assert minutes == 0  # Can't extract minutes from tool_name alone
+
+
+def test_check_wait_requested_malformed_sentinel() -> None:
+    """Test that _check_wait_requested handles malformed sentinel gracefully."""
+    from atman.adapters.agent.runner import _check_wait_requested
+
+    # Mock message with malformed sentinel (non-integer minutes)
+    class MockPart:
+        def __init__(self) -> None:
+            self.content = "__ATMAN_WAIT_REQUESTED__abc"
+
+    class MockMessage:
+        def __init__(self) -> None:
+            self.parts = [MockPart()]
+
+    messages = [MockMessage()]
+    wait_requested, minutes = _check_wait_requested(messages)
+    assert wait_requested is True
+    assert minutes == 0  # Returns 0 for malformed
+
+
+def test_build_restart_package() -> None:
+    """Test that _build_restart_package creates valid package."""
+    from atman.adapters.agent.runner import _build_restart_package
+
+    # Create mock session result
+    ctx = SessionResult(
+        session_id=uuid4(),
+        started_at=datetime.now(UTC),
+        events=[],
+        key_moments=[
+            KeyMoment(
+                what_happened="User asked a question",
+                how_i_felt=FeltSense(
+                    emotional_valence=0.3,
+                    emotional_intensity=0.5,
+                    depth=EmotionalDepth.MEANINGFUL,
+                ),
+                why_it_matters="Engaging conversation",
+            ),
+        ],
+        identity_snapshot_id=uuid4(),
+        identity_id=uuid4(),
+    )
+
+    package = _build_restart_package(ctx, "Context filling up", [])
+
+    assert "Context filling up" in package
+    assert "Key moments from previous session:" in package
+    assert "User asked a question" in package
+    assert "depth: meaningful" in package
+    assert "--- Conversation tail ---" in package
 
 
 def test_force_finish_with_timeout_sleep_reason(
@@ -741,3 +955,106 @@ def test_force_finish_none_close_reason_for_normal_completion(
     experiences = session_manager._state_store.list_recent_experiences(limit=1)
     assert len(experiences) == 1
     assert experiences[0].experience.close_reason is None
+
+
+def test_check_restart_requested_uses_new_messages_only() -> None:
+    """Test that restart detection doesn't trigger on old sentinels in history."""
+    from atman.adapters.agent.runner import _check_restart_requested
+
+    # Simulate messages: old sentinel from previous restart should be ignored
+    class MockOldPart:
+        def __init__(self) -> None:
+            self.content = "__ATMAN_RESTART_REQUESTED__\nOld restart reason"
+
+    class MockNewPart:
+        def __init__(self) -> None:
+            self.content = "Normal response without sentinel"
+
+    class MockOldMessage:
+        def __init__(self) -> None:
+            self.parts = [MockOldPart()]
+
+    class MockNewMessage:
+        def __init__(self) -> None:
+            self.parts = [MockNewPart()]
+
+    # Only new messages should be checked (not including old history)
+    new_messages_only = [MockNewMessage()]
+    restart_requested, reason = _check_restart_requested(new_messages_only)
+    assert restart_requested is False, "Should not detect restart from old sentinel in history"
+    assert reason == ""
+
+
+def test_force_finish_with_menu_timeout(
+    session_manager: SessionManager,
+    identity_with_narrative: Identity,
+) -> None:
+    """Test that menu_timeout is a valid close_reason and is persisted."""
+    ctx = session_manager.start_session(identity_with_narrative.id)
+
+    # Add a key moment
+    moment = KeyMomentInput(
+        what_happened="Menu timeout",
+        emotional_valence=0.0,
+        emotional_intensity=0.2,
+        depth=EmotionalDepth.SURFACE,
+        why_it_matters="Menu max retries reached",
+    )
+    session_manager.append_key_moment_input(ctx.session_id, moment)
+
+    # Force finish with menu_timeout reason
+    _force_finish(session_manager, ctx.session_id, close_reason="menu_timeout")
+
+    # Verify SessionExperience has close_reason="menu_timeout"
+    experiences = session_manager._state_store.list_recent_experiences(limit=1)
+    assert len(experiences) == 1
+    assert experiences[0].experience.close_reason == "menu_timeout"
+
+
+def test_do_restart_persists_restart_reason(
+    session_manager: SessionManager,
+    identity_with_narrative: Identity,
+    tmp_path: Path,
+) -> None:
+    """Test that _do_restart persists restart_reason to SessionExperience."""
+    from dataclasses import replace
+
+    from atman.adapters.agent.config import AgentConfig
+    from atman.adapters.agent.factory import build_deps
+    from atman.adapters.agent.runner import AtmanRunner
+
+    # Create runner and build deps
+    config = AgentConfig()
+    runner = AtmanRunner(tmp_path, identity_with_narrative.id, config)
+    deps, sm, _store = build_deps(tmp_path, identity_with_narrative.id, config)
+
+    # Start session
+    ctx = sm.start_session(identity_with_narrative.id)
+
+    # Add a key moment so session can be finished
+    moment = KeyMomentInput(
+        what_happened="Context window approaching limit",
+        emotional_valence=0.0,
+        emotional_intensity=0.4,
+        depth=EmotionalDepth.SURFACE,
+        why_it_matters="Need to restart",
+    )
+    sm.append_key_moment_input(ctx.session_id, moment)
+
+    # Update deps with session_id
+    deps = replace(deps, session_id=ctx.session_id)
+    history = []
+
+    # Execute restart with specific reason
+    restart_reason = "Context window 95% full"
+    _new_session_id, _new_deps = runner._do_restart(
+        sm, ctx.session_id, deps, history, restart_reason
+    )
+
+    # Verify restart_reason is persisted in SessionExperience
+    experiences = sm._state_store.list_recent_experiences(limit=1)
+    assert len(experiences) == 1
+    assert experiences[0].experience.close_reason == "restart"
+    assert experiences[0].experience.restart_reason == restart_reason, (
+        "restart_reason should be persisted to SessionExperience"
+    )

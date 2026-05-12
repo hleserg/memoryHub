@@ -105,6 +105,7 @@ class KeyMoment(BaseModel):
     Immutable after creation - no methods to modify.
     """
 
+    # IDENTITY
     id: UUID = Field(default_factory=uuid4, description="Unique identifier for this key moment")
 
     # WHAT HAPPENED
