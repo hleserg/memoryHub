@@ -121,6 +121,49 @@ async def record_key_moment(
         return f"Error recording key moment: {e!s}"
 
 
+def restart_session(
+    ctx: RunContext[AtmanDeps],
+    reason: str = "",
+) -> str:
+    """
+    Finish the current session and immediately start a new one with memory context.
+
+    Use this when the context window is filling up and you need to continue the conversation.
+    The runner detects this return value and performs the restart automatically.
+
+    Args:
+        ctx: Run context with AtmanDeps
+        reason: Why you are restarting, in your own words. You will read this at wake-up.
+
+    Returns:
+        Restart signal string (processed by runner)
+    """
+    _ = ctx
+    return f"__ATMAN_RESTART_REQUESTED__{reason}"
+
+
+def wait_session(
+    ctx: RunContext[AtmanDeps],
+    minutes: int = 5,
+) -> str:
+    """
+    Postpone the nearest timeout by N minutes.
+
+    Use this if you want more time in silence before deciding what to do.
+
+    Args:
+        ctx: Run context with AtmanDeps
+        minutes: How many minutes to extend the timeout (1-60)
+
+    Returns:
+        Wait signal string (processed by runner)
+    """
+    _ = ctx
+    if not 1 <= minutes <= 60:
+        return "Error: minutes must be between 1 and 60"
+    return f"__ATMAN_WAIT_REQUESTED__{minutes}"
+
+
 def log_experience(
     ctx: RunContext[AtmanDeps],
     description: str,

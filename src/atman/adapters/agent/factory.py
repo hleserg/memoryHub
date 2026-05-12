@@ -157,7 +157,7 @@ def build_deps(
             "affect_workspace": workspace,
             "affect_config": _AffectDetectorConfig(),
         }
-    session_manager = SessionManager(state_store, **affect_kwargs)
+    session_manager = SessionManager(state_store, **affect_kwargs, workspace=workspace)
 
     narrative_revision = NarrativeRevisionService(
         narrative_repo=_NarrativeAdapter(state_store),

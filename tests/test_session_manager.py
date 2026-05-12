@@ -1175,3 +1175,141 @@ def test_start_session_ignores_eigenstate_from_different_identity(tmp_path):
     mgr = SessionManager(store)
     ctx = mgr.start_session(id_b)
     assert ctx.last_eigenstate is None
+
+
+# ---------------------------------------------------------------------------
+# unexamined_fact_refs tests
+# ---------------------------------------------------------------------------
+
+def _make_manager_with_agent(tmp_path):
+    from atman.adapters.storage.file_state_store import FileStateStore
+    from atman.core.models import (
+        CoreValue, Goal, GoalHorizon, Identity, NarrativeDocument,
+        NarrativeLayer, LayerType,
+    )
+    store = FileStateStore(workspace=tmp_path)
+    agent_id = uuid4()
+    identity = Identity(
+        id=agent_id,
+        self_description="Test",
+        core_values=[CoreValue(name="v", description="d", confidence=0.5)],
+        goals=[Goal(content="g", horizon=GoalHorizon.SHORT)],
+        emotional_baseline=0.0,
+    )
+    narrative = NarrativeDocument(
+        identity_id=agent_id,
+        core_layer=NarrativeLayer(layer_type=LayerType.CORE, content="c"),
+        recent_layer=NarrativeLayer(layer_type=LayerType.RECENT, content="r"),
+    )
+    store.save_identity(identity)
+    store.save_narrative(narrative)
+    mgr = SessionManager(store)
+    return mgr, agent_id, store
+
+
+def _minimal_km(what="happened"):
+    from atman.core.models import KeyMomentInput, EmotionalDepth
+    return KeyMomentInput(
+        what_happened=what,
+        why_it_matters="matters",
+        emotional_valence=0.1,
+        emotional_intensity=0.3,
+        depth=EmotionalDepth.SURFACE,
+        incomplete_coloring=False,
+    )
+
+
+def test_unexamined_fact_refs_populated(tmp_path):
+    """Facts noted via _note_facts_read without key_moment → unexamined_fact_refs."""
+    mgr, agent_id, store = _make_manager_with_agent(tmp_path)
+    ctx = mgr.start_session(agent_id)
+    sid = ctx.session_id
+
+    fact_id = uuid4()
+    mgr._note_facts_read(sid, [fact_id])
+    mgr.append_key_moment_input(sid, _minimal_km())
+
+    result = mgr.finish_session(sid, overall_emotional_tone=0.0)
+    exp_id = deterministic_session_experience_id(sid)
+    rec = store.get_experience(exp_id)
+
+    assert rec is not None
+    assert fact_id in rec.experience.unexamined_fact_refs
+
+
+def test_no_unexamined_for_colored_facts(tmp_path):
+    """Fact referenced in key_moment.fact_refs is NOT in unexamined_fact_refs."""
+    from atman.core.models import KeyMoment, FeltSense, EmotionalDepth
+
+    mgr, agent_id, store = _make_manager_with_agent(tmp_path)
+    ctx = mgr.start_session(agent_id)
+    sid = ctx.session_id
+
+    fact_id = uuid4()
+    mgr._note_facts_read(sid, [fact_id])
+
+    # Append a fully-materialised KeyMoment that references the fact
+    km = KeyMoment(
+        what_happened="referenced the fact",
+        why_it_matters="colored",
+        how_i_felt=FeltSense(
+            emotional_valence=0.2,
+            emotional_intensity=0.4,
+            depth=EmotionalDepth.SURFACE,
+        ),
+        fact_refs=[fact_id],
+    )
+    mgr.append_key_moment(sid, km)
+
+    result = mgr.finish_session(sid, overall_emotional_tone=0.0)
+    exp_id = deterministic_session_experience_id(sid)
+    rec = store.get_experience(exp_id)
+
+    assert rec is not None
+    assert fact_id not in rec.experience.unexamined_fact_refs
+
+
+def test_unexamined_empty_when_no_facts_read(tmp_path):
+    """No facts noted → unexamined_fact_refs is empty."""
+    mgr, agent_id, store = _make_manager_with_agent(tmp_path)
+    ctx = mgr.start_session(agent_id)
+    sid = ctx.session_id
+
+    mgr.append_key_moment_input(sid, _minimal_km())
+    mgr.finish_session(sid, overall_emotional_tone=0.0)
+
+    exp_id = deterministic_session_experience_id(sid)
+    rec = store.get_experience(exp_id)
+    assert rec is not None
+    assert rec.experience.unexamined_fact_refs == []
+
+
+def test_unexamined_independent_of_incomplete_coloring(tmp_path):
+    """unexamined_fact_refs and incomplete_coloring are independent signals."""
+    mgr, agent_id, store = _make_manager_with_agent(tmp_path)
+    ctx = mgr.start_session(agent_id)
+    sid = ctx.session_id
+
+    uncolored_fact = uuid4()
+    mgr._note_facts_read(sid, [uncolored_fact])
+
+    # Key moment with incomplete_coloring=True (honest fallback) — different concept
+    from atman.core.models import KeyMomentInput, EmotionalDepth
+    km_incomplete = KeyMomentInput(
+        what_happened="blurry moment",
+        why_it_matters="not sure",
+        emotional_valence=0.0,
+        emotional_intensity=0.1,
+        depth=EmotionalDepth.SURFACE,
+        incomplete_coloring=True,
+    )
+    mgr.append_key_moment_input(sid, km_incomplete)
+    mgr.finish_session(sid, overall_emotional_tone=0.0)
+
+    exp_id = deterministic_session_experience_id(sid)
+    rec = store.get_experience(exp_id)
+    assert rec is not None
+    # incomplete_coloring is True (honest fallback on key_moment level)
+    assert rec.experience.incomplete_coloring is True
+    # unexamined_fact_refs are ALSO present — independent
+    assert uncolored_fact in rec.experience.unexamined_fact_refs

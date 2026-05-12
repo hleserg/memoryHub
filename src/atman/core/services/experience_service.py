@@ -228,3 +228,23 @@ class ExperienceService:
             list[ExperienceRecord]: Recent experiences, newest first
         """
         return self.store.list_recent_experiences(limit=limit)
+
+    def list_by_fact(self, fact_id: UUID, limit: int = 1) -> list[ExperienceRecord]:
+        """
+        Return experiences where fact_id appears in fact_refs, newest first.
+
+        Used for building restart packages: shows agent the last session where
+        an unexamined fact was accessed.
+
+        Args:
+            fact_id: UUID of the fact to search for
+            limit: Maximum number of results
+
+        Returns:
+            list[ExperienceRecord]: Matching experiences, newest first
+        """
+        all_recent = self.store.list_recent_experiences(limit=1000)
+        matching = [
+            r for r in all_recent if fact_id in r.experience.fact_refs
+        ]
+        return matching[:limit]

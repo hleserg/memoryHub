@@ -7,7 +7,7 @@ All experiences are immutable after recording - only reframing notes can be adde
 
 from datetime import UTC, datetime
 from enum import StrEnum
-from typing import Any
+from typing import Any, Literal
 from uuid import UUID, uuid4
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
@@ -285,6 +285,31 @@ class SessionExperience(BaseModel):
     fact_refs: list[UUID] = Field(
         default_factory=list,
         description="IDs of all facts accessed during this session (deduplicated)",
+    )
+
+    # UNEXAMINED PERCEPTION — facts that passed through perception but received no
+    # conscious emotional coloring. Queue for future micro-reflection.
+    unexamined_fact_refs: list[UUID] = Field(
+        default_factory=list,
+        description=(
+            "IDs of facts that passed through perception during this session "
+            "but received no conscious emotional coloring. "
+            "Queue for future micro-reflection."
+        ),
+    )
+
+    # SESSION CLOSE CONTEXT
+    close_reason: Literal["timeout_sleep", "restart", "forced", "interrupted"] | None = Field(
+        default=None,
+        description="Why this session was closed",
+    )
+    agent_recap: str | None = Field(
+        default=None,
+        description="Optional subjective recap written by the agent before sleep",
+    )
+    restart_reason: str = Field(
+        default="",
+        description="Agent-authored reason for restart_session call",
     )
 
     @field_validator("importance", "salience")
