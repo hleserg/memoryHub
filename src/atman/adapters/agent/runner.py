@@ -25,6 +25,7 @@ from typing import TYPE_CHECKING
 from uuid import UUID
 
 from pydantic_ai import Agent
+from pydantic_ai.messages import ModelRequest, UserPromptPart
 
 from atman.adapters.agent.config import AgentConfig
 from atman.adapters.agent.deps import AtmanDeps
@@ -190,13 +191,9 @@ def _check_restart_requested(messages: list) -> tuple[bool, str]:
             - restart_requested: True if restart was requested
             - reason: Optional reason string provided to restart_session tool
     """
+    # First pass: look for sentinel content with reason
     for msg in messages:
         for part in getattr(msg, "parts", []):
-            # Check for tool call with tool_name == "restart_session"
-            if hasattr(part, "tool_name") and part.tool_name == "restart_session":
-                return True, ""
-
-            # Check for sentinel string in content
             if hasattr(part, "content") and isinstance(part.content, str):
                 content = part.content
                 if content.startswith("__ATMAN_RESTART_REQUESTED__"):
@@ -205,6 +202,12 @@ def _check_restart_requested(messages: list) -> tuple[bool, str]:
                         reason = content.split("\n", 1)[1].strip()
                         return True, reason
                     return True, ""
+
+    # Second pass: fallback to tool_name detection (no reason available)
+    for msg in messages:
+        for part in getattr(msg, "parts", []):
+            if hasattr(part, "tool_name") and part.tool_name == "restart_session":
+                return True, ""
 
     return False, ""
 
@@ -424,12 +427,18 @@ class AtmanRunner:
             tail_messages,
         )
 
-        # 4. Replace history
+        # 4. Replace history with restart package + tail
         history.clear()
-        # Add restart package as system message
-        # Note: In real implementation, we'd construct proper ModelRequest/SystemPromptPart
-        # For now, we'll add it as a marker that the agent will see
-        # TODO: Use proper Pydantic-AI message types when available
+
+        # Add restart package as user message (system context for new session)
+        restart_package_msg = ModelRequest(
+            parts=[UserPromptPart(content=package_text, part_kind="user-prompt")]
+        )
+        history.append(restart_package_msg)
+
+        # Append tail messages (conversation context)
+        history.extend(tail_messages)
+
         _LOG.info(
             "Restart package prepared (%d chars), tail preserved (%d messages)",
             len(package_text),
@@ -507,6 +516,10 @@ class AtmanRunner:
                     )
 
                     try:
+                        # Update history with current run's messages before restart
+                        # so tail_messages includes the exchange that triggered restart
+                        history.extend(result.new_messages())
+
                         # Execute restart workflow
                         new_session_id, new_deps = self._do_restart(
                             session_manager,

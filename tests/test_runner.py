@@ -458,6 +458,32 @@ def test_check_restart_requested_with_tool_name() -> None:
     assert reason == ""
 
 
+def test_check_restart_requested_prioritizes_content_sentinel() -> None:
+    """Test that content sentinel is checked before tool_name to capture reason."""
+    from atman.adapters.agent.runner import _check_restart_requested
+
+    # Mock messages with both tool_name and content (realistic Pydantic-AI scenario)
+    # First part: ToolCallPart with tool_name
+    class MockToolCallPart:
+        def __init__(self) -> None:
+            self.tool_name = "restart_session"
+
+    # Second part: ToolReturnPart with both tool_name and sentinel content
+    class MockToolReturnPart:
+        def __init__(self) -> None:
+            self.tool_name = "restart_session"
+            self.content = "__ATMAN_RESTART_REQUESTED__\nContext window full"
+
+    class MockMessage:
+        def __init__(self) -> None:
+            self.parts = [MockToolCallPart(), MockToolReturnPart()]
+
+    messages = [MockMessage()]
+    restart_requested, reason = _check_restart_requested(messages)
+    assert restart_requested is True
+    assert reason == "Context window full", "Reason should be extracted from content sentinel"
+
+
 def test_build_restart_package() -> None:
     """Test that _build_restart_package creates valid package."""
     from atman.adapters.agent.runner import _build_restart_package
