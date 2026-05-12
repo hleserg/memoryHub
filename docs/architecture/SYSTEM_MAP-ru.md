@@ -24,7 +24,7 @@
 | Файл | Назначение | Публичные классы |
 |------|------------|------------------|
 | `core/models/fact.py` | Верифицируемые факты и связи между ними | `FactRecord`, `Relation` |
-| `core/models/experience.py` | Прожитый опыт, ключевые моменты, переосмысление | `SessionExperience`, `KeyMoment`, `FeltSense`, `ContextHalo`, `ReframingNote`, `EmotionalDepth`, `ReframingNoteAppendResult` |
+| `core/models/experience.py` | Прожитый опыт, ключевые моменты, переосмысление, метаданные завершения сессии (E22.7: `close_reason`, `restart_reason`, `agent_recap`) | `SessionExperience`, `KeyMoment`, `FeltSense`, `ContextHalo`, `ReframingNote`, `EmotionalDepth`, `ReframingNoteAppendResult` |
 | `core/models/identity.py` | Самопредставление агента (ценности, привычки, принципы, цели, открытые вопросы) | `Identity`, `CoreValue`, `Habit`, `Principle`, `Goal`, `OpenQuestion`, `IdentitySnapshot`, `HelpfulnessLevel` |
 | `core/models/narrative.py` | Документ самонарратива (CORE/RECENT/THREADS) и собственное состояние | `NarrativeDocument`, `NarrativeLayer`, `NarrativeThread`, `Eigenstate` (`schema_version`, опциональный `identity_id`), `LayerType` |
 | `core/models/session.py` | Модели сессионного runtime: контекст, события, входящий key moment, результат, сводка активных | `SessionContext`, `SessionEvent`, `KeyMomentInput`, `SessionResult`, `ActiveSessionSummary` |
@@ -102,12 +102,11 @@
 | `adapters/reflection/mock_reflection_model.py` (`MockReflectionModel`) | `ReflectionModel` | детерминированный мок |
 | `adapters/reflection/fixture_loader.py` | — | загрузка фикстур для демо |
 | `adapters/agent/config.py` (`ModelConfig`, `AgentConfig`) | — | конфигурация Pydantic AI модели + среды выполнения агента: лимиты контекстного окна, таймаут сессии, переключатель свободного времени, видимость монолога (E22.1, E26-R1, E26-R2, E26-R4) |
-| `adapters/agent/deps.py` (`AtmanDeps`, `AtmanDeps.from_config`) | — | замороженный DI-контейнер, связывающий `SessionManager`, `IdentityService`, `ExperienceService`, `MicroReflectionService`, `StateStore`; включает `model_config: ModelConfig \| None` для лимитов контекста; фабрика `from_config` переносит валидированные лимиты из `AgentConfig` (E22.3) |
+| `adapters/agent/deps.py` (`AtmanDeps`, `AtmanDeps.from_config`) | — | замороженный DI-контейнер, связывающий `SessionManager`, `IdentityService`, `ExperienceService`, `MicroReflectionService`, `StateStore`; фабрика `from_config` переносит валидированные лимиты из `AgentConfig` |
 | `adapters/agent/instructions.py` (`build_instructions`) | — | строит динамический system prompt из текущих `Identity` + `NarrativeDocument` (с усечением по `AtmanDeps.truncate_narrative_*`) |
 | `adapters/agent/tools.py` (`record_key_moment` async, `log_experience`, `restart_session`, `wait_session`) | — | инструменты Pydantic AI: `record_key_moment` → `AffectDetector.submit_self_report` когда `SessionManager` настроен на аффект; `log_experience` — redirect-заглушка; `restart_session` / `wait_session` возвращают sentinel-строки для управления сессией (E22.4) |
 | `adapters/agent/factory.py` (`build_deps`) | — | сборка `AtmanDeps`, `SessionManager`, `FileStateStore`, сервисов, опционально `AffectDetector` из workspace и `AgentConfig` |
 | `adapters/agent/runner.py` (`chat`, `_force_finish`) | — | обёртка жизненного цикла сессии с обработкой сигналов; SIGTERM/KeyboardInterrupt/EOFError/SystemExit → graceful `_force_finish()`; создаёт минимальный `KeyMoment` если пусто; сохраняет exit-коды (E22.2) |
-| `adapters/agent/token_monitor.py` (`TokenMonitor`, `ContextLimitExceeded`) | — | монитор использования токенов с прогрессивными предупреждениями на 70/80/90/95%; отслеживает `input_tokens` vs `context_limit` после каждого `agent.run()`, выбрасывает `ContextLimitExceeded` на пороге 95% (E22.3) |
 | `agents_registry.py` (`AgentsRegistry`) | — | реестр экземпляров агентов в PostgreSQL (app/admin URL); используется `src/run_agent.py` |
 
 ### 1.6. CLI / TUI / Web / Демо
@@ -193,8 +192,7 @@
 | `AtmanDeps` ↔ `SessionManager`, `IdentityService`, `ExperienceService`, `MicroReflectionService`, `StateStore` | `adapters/agent/deps.py` | DI-контейнер (frozen dataclass) |
 | `record_key_moment` / `log_experience` / `restart_session` / `wait_session` ↔ `AffectDetector.submit_self_report` / `SessionManager` | `adapters/agent/tools.py` → `affect/detector.py` + `core/services/session_manager.py` | Async Pydantic AI инструменты → affect write gateway (`record_key_moment` требует `affect_workspace` + config для `SessionManager`; `restart_session` / `wait_session` возвращают sentinel-строки для детекции в E22.5 runner) |
 | `build_instructions` ↔ `StateStore.load_identity` / `load_narrative` | `adapters/agent/instructions.py` → `core/ports/state_store.py` | динамический билдер system-prompt |
-| `chat` / `_force_finish` ↔ `SessionManager` | `adapters/agent/runner.py` → `core/services/session_manager.py` | регистрация signal handler + exception boundary; вызывает `append_key_moment_input()`, `get_active_session()`, `finish_session()` при прерывании (E22.2) |
-| `TokenMonitor` ↔ `Agent` (Pydantic AI) + `AtmanDeps.model_config` | `adapters/agent/token_monitor.py` → `pydantic_ai.run.AgentRunResult` | отслеживание использования токенов; вычисляет `input_tokens / context_limit` после каждого запуска; прогрессивные предупреждения через логирование (E22.3) |
+| `chat` / `_force_finish` ↔ `SessionManager` | `adapters/agent/runner.py` → `core/services/session_manager.py` | регистрация signal handler + exception boundary; вызывает `append_key_moment_input()`, `get_active_session()`, `finish_session(..., close_reason=...)` при прерывании (E22.2); инжекция wake-up сообщения из `close_reason` последней сессии (E22.7) |
 
 ### 2.3. CLI ↔ сервис
 
@@ -320,7 +318,7 @@ PrincipleRevisionAdvisor — пересмотр принципов
 2. Во время сессии: `record_event(...)` отслеживает сырые события от нижнего агента и при наличии конфигурации планирует **AffectDetector**.
 3. Программные моменты: `append_key_moment_input` / `append_key_moment`; инструмент агента `record_key_moment` → `AffectDetector.submit_self_report(...)` с обязательной эмоциональной окраской (valence/intensity/depth).
 4. Если окраска неполная → флаг `incomplete_coloring=True` (честность об ограничении).
-5. `finish_session(...)` → создаёт `SessionExperience` (`recorded_by="session_manager"`) + `Eigenstate`.
+5. `finish_session(...)` → создаёт `SessionExperience` (`recorded_by="session_manager"`) + `Eigenstate`; принимает опциональные `close_reason`, `restart_reason`, `agent_recap` (E22.7) для wake-up контекста при старте следующей сессии.
 6. Оба сохраняются через `StateStore` (опыт immutable, eigenstate для следующей сессии).
 7. Ключевой инвариант: эмоциональная окраска ОБЯЗАНА быть (от реального переживания) или явно помечена неполной.
 8. `KeyMomentInput.recorded_at` копируется в `KeyMoment.when` для согласованной временной шкалы относительно валидации и `finish`.

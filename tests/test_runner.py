@@ -93,13 +93,18 @@ def test_force_finish_creates_minimal_key_moment(
     assert session_result is not None
     assert len(session_result.key_moments) == 0
 
-    # Force finish
-    _force_finish(session_manager, ctx.session_id, close_reason="test_interrupted")
+    # Force finish with invalid close_reason should not persist it
+    _force_finish(session_manager, ctx.session_id, close_reason="test_invalid")
 
     # Verify session was finished and has exactly one minimal key moment
     # Session should no longer be active
     session_result_after = session_manager.get_active_session(ctx.session_id)
     assert session_result_after is None
+
+    # Verify close_reason was NOT persisted (invalid value)
+    experiences = session_manager._state_store.list_recent_experiences(limit=1)
+    assert len(experiences) == 1
+    assert experiences[0].experience.close_reason is None
 
 
 def test_force_finish_with_existing_key_moments(
@@ -120,8 +125,8 @@ def test_force_finish_with_existing_key_moments(
     )
     session_manager.append_key_moment_input(ctx.session_id, moment)
 
-    # Force finish
-    _force_finish(session_manager, ctx.session_id, close_reason="test_interrupted")
+    # Force finish with valid close_reason
+    _force_finish(session_manager, ctx.session_id, close_reason="interrupted")
 
     # Session should no longer be active (finished)
     session_result = session_manager.get_active_session(ctx.session_id)
@@ -372,8 +377,229 @@ def test_force_finish_incomplete_coloring_flag(
     assert len(session_result.key_moments) == 0
 
     # Force finish should create minimal moment with incomplete_coloring=True
-    _force_finish(session_manager, ctx.session_id, close_reason="test")
+    _force_finish(session_manager, ctx.session_id, close_reason=None)
 
     # Session should be finished (no longer active)
     session_result_after = session_manager.get_active_session(ctx.session_id)
     assert session_result_after is None
+
+
+def test_build_wake_up_message_timeout_sleep(
+    session_manager: SessionManager,
+    identity_with_narrative: Identity,
+) -> None:
+    """Test wake-up message for timeout_sleep close_reason."""
+    from atman.adapters.agent.config import AgentConfig, ModelConfig
+    from atman.adapters.agent.runner import AtmanRunner
+
+    ctx = session_manager.start_session(identity_with_narrative.id)
+    moment = KeyMomentInput(
+        what_happened="User went away",
+        emotional_valence=0.0,
+        emotional_intensity=0.3,
+        depth=EmotionalDepth.SURFACE,
+        why_it_matters="Timeout",
+    )
+    session_manager.append_key_moment_input(ctx.session_id, moment)
+    session_manager.finish_session(
+        ctx.session_id,
+        close_reason="timeout_sleep",
+        agent_recap="Пользователь обсуждал проект X",
+    )
+
+    # Get last experience and build wake-up message
+    experiences = session_manager._state_store.list_recent_experiences(limit=1)
+    assert len(experiences) == 1
+    last_exp = experiences[0].experience
+
+    runner = AtmanRunner(
+        workspace=Path("/tmp"),
+        agent_id=identity_with_narrative.id,
+        config=AgentConfig(model=ModelConfig(model="test")),
+    )
+    msg = runner._build_wake_up_message(last_exp)
+    assert msg is not None
+    assert "задремал" in msg
+    assert "Пользователь обсуждал проект X" in msg
+
+
+def test_build_wake_up_message_restart(
+    session_manager: SessionManager,
+    identity_with_narrative: Identity,
+) -> None:
+    """Test wake-up message for restart close_reason."""
+    from atman.adapters.agent.config import AgentConfig, ModelConfig
+    from atman.adapters.agent.runner import AtmanRunner
+
+    ctx = session_manager.start_session(identity_with_narrative.id)
+    moment = KeyMomentInput(
+        what_happened="Agent initiated restart",
+        emotional_valence=0.0,
+        emotional_intensity=0.4,
+        depth=EmotionalDepth.SURFACE,
+        why_it_matters="Restart needed",
+    )
+    session_manager.append_key_moment_input(ctx.session_id, moment)
+    session_manager.finish_session(
+        ctx.session_id,
+        close_reason="restart",
+        restart_reason="Контекст заполнен, продолжу с чистой историей",
+    )
+
+    experiences = session_manager._state_store.list_recent_experiences(limit=1)
+    last_exp = experiences[0].experience
+
+    runner = AtmanRunner(
+        workspace=Path("/tmp"),
+        agent_id=identity_with_narrative.id,
+        config=AgentConfig(model=ModelConfig(model="test")),
+    )
+    msg = runner._build_wake_up_message(last_exp)
+    assert msg is not None
+    assert "перезапуск" in msg
+    assert "Контекст заполнен, продолжу с чистой историей" in msg
+
+
+def test_build_wake_up_message_forced(
+    session_manager: SessionManager,
+    identity_with_narrative: Identity,
+) -> None:
+    """Test wake-up message for forced close_reason."""
+    from atman.adapters.agent.config import AgentConfig, ModelConfig
+    from atman.adapters.agent.runner import AtmanRunner
+
+    ctx = session_manager.start_session(identity_with_narrative.id)
+    moment = KeyMomentInput(
+        what_happened="Context overflow",
+        emotional_valence=0.0,
+        emotional_intensity=0.5,
+        depth=EmotionalDepth.SURFACE,
+        why_it_matters="Forced closure",
+    )
+    session_manager.append_key_moment_input(ctx.session_id, moment)
+    session_manager.finish_session(ctx.session_id, close_reason="forced")
+
+    experiences = session_manager._state_store.list_recent_experiences(limit=1)
+    last_exp = experiences[0].experience
+
+    runner = AtmanRunner(
+        workspace=Path("/tmp"),
+        agent_id=identity_with_narrative.id,
+        config=AgentConfig(model=ModelConfig(model="test")),
+    )
+    msg = runner._build_wake_up_message(last_exp)
+    assert msg is not None
+    assert "переполнился" in msg
+    assert "осознанно" in msg
+
+
+def test_build_wake_up_message_interrupted(
+    session_manager: SessionManager,
+    identity_with_narrative: Identity,
+) -> None:
+    """Test wake-up message for interrupted close_reason."""
+    from atman.adapters.agent.config import AgentConfig, ModelConfig
+    from atman.adapters.agent.runner import AtmanRunner
+
+    ctx = session_manager.start_session(identity_with_narrative.id)
+    moment = KeyMomentInput(
+        what_happened="Signal received",
+        emotional_valence=0.0,
+        emotional_intensity=0.4,
+        depth=EmotionalDepth.SURFACE,
+        why_it_matters="Interrupted",
+    )
+    session_manager.append_key_moment_input(ctx.session_id, moment)
+    session_manager.finish_session(ctx.session_id, close_reason="interrupted")
+
+    experiences = session_manager._state_store.list_recent_experiences(limit=1)
+    last_exp = experiences[0].experience
+
+    runner = AtmanRunner(
+        workspace=Path("/tmp"),
+        agent_id=identity_with_narrative.id,
+        config=AgentConfig(model=ModelConfig(model="test")),
+    )
+    msg = runner._build_wake_up_message(last_exp)
+    assert msg is not None
+    assert "прервана" in msg
+    assert "внешним сигналом" in msg
+
+
+def test_build_wake_up_message_no_close_reason(
+    session_manager: SessionManager,
+    identity_with_narrative: Identity,
+) -> None:
+    """Test that no wake-up message is generated when close_reason is None."""
+    from atman.adapters.agent.config import AgentConfig, ModelConfig
+    from atman.adapters.agent.runner import AtmanRunner
+
+    ctx = session_manager.start_session(identity_with_narrative.id)
+    moment = KeyMomentInput(
+        what_happened="Normal completion",
+        emotional_valence=0.0,
+        emotional_intensity=0.3,
+        depth=EmotionalDepth.SURFACE,
+        why_it_matters="Session done",
+    )
+    session_manager.append_key_moment_input(ctx.session_id, moment)
+    session_manager.finish_session(ctx.session_id)
+
+    experiences = session_manager._state_store.list_recent_experiences(limit=1)
+    last_exp = experiences[0].experience
+
+    runner = AtmanRunner(
+        workspace=Path("/tmp"),
+        agent_id=identity_with_narrative.id,
+        config=AgentConfig(model=ModelConfig(model="test")),
+    )
+    msg = runner._build_wake_up_message(last_exp)
+    assert msg is None
+
+
+def test_force_finish_persists_close_reason(
+    session_manager: SessionManager,
+    identity_with_narrative: Identity,
+) -> None:
+    """Test that _force_finish persists close_reason to SessionExperience for valid values."""
+    ctx = session_manager.start_session(identity_with_narrative.id)
+    moment = KeyMomentInput(
+        what_happened="Some work",
+        emotional_valence=0.0,
+        emotional_intensity=0.4,
+        depth=EmotionalDepth.SURFACE,
+        why_it_matters="Task in progress",
+    )
+    session_manager.append_key_moment_input(ctx.session_id, moment)
+
+    # Force finish with specific close_reason
+    _force_finish(session_manager, ctx.session_id, close_reason="interrupted")
+
+    # Verify SessionExperience has the close_reason
+    experiences = session_manager._state_store.list_recent_experiences(limit=1)
+    assert len(experiences) == 1
+    assert experiences[0].experience.close_reason == "interrupted"
+
+
+def test_force_finish_none_close_reason_for_normal_completion(
+    session_manager: SessionManager,
+    identity_with_narrative: Identity,
+) -> None:
+    """Test that _force_finish with None close_reason doesn't persist close_reason field."""
+    ctx = session_manager.start_session(identity_with_narrative.id)
+    moment = KeyMomentInput(
+        what_happened="Normal work",
+        emotional_valence=0.0,
+        emotional_intensity=0.3,
+        depth=EmotionalDepth.SURFACE,
+        why_it_matters="Regular session",
+    )
+    session_manager.append_key_moment_input(ctx.session_id, moment)
+
+    # Force finish with None (normal completion, no interruption)
+    _force_finish(session_manager, ctx.session_id, close_reason=None)
+
+    # Verify SessionExperience has close_reason=None
+    experiences = session_manager._state_store.list_recent_experiences(limit=1)
+    assert len(experiences) == 1
+    assert experiences[0].experience.close_reason is None

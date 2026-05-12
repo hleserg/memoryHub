@@ -181,7 +181,7 @@ def chat(
 def _force_finish(
     session_manager: SessionManager,
     session_id: UUID,
-    close_reason: str,
+    close_reason: str | None,
 ) -> None:
     """
     Force-finish a session with minimum viable state.
@@ -194,7 +194,7 @@ def _force_finish(
     Args:
         session_manager: Session manager instance
         session_id: UUID of the session to finish
-        close_reason: Reason for forced finish (e.g. "interrupted")
+        close_reason: Reason for forced finish (e.g. "interrupted"), or None for normal completion
 
     Raises:
         SessionNotFoundError: If session is not active
@@ -215,14 +215,21 @@ def _force_finish(
             session_id,
         )
 
-        # Create minimal key moment for interrupted session
+        # Create minimal key moment - text depends on whether this was an interruption
+        if close_reason and close_reason != "completed":
+            what_happened = f"Session interrupted ({close_reason})"
+            why_it_matters = "Session was interrupted before completion"
+        else:
+            what_happened = "Session completed without recorded key moments"
+            why_it_matters = "Session ended normally but no moments were captured"
+
         minimal_moment = KeyMomentInput(
-            what_happened=f"Session interrupted ({close_reason})",
+            what_happened=what_happened,
             recorded_at=datetime.now(UTC),
             emotional_valence=0.0,
-            emotional_intensity=0.3,  # Slight arousal from interruption
+            emotional_intensity=0.3 if close_reason else 0.1,
             depth=EmotionalDepth.SURFACE,
-            why_it_matters="Session was interrupted before completion",
+            why_it_matters=why_it_matters,
             incomplete_coloring=True,  # Honest: this is synthetic
         )
 
@@ -233,15 +240,20 @@ def _force_finish(
             _LOG.warning("Session %s was finished during force-finish", session_id)
             return
 
-    # Finish session with interrupted status
+    # Finish session - only pass close_reason if it's a documented value
+    valid_close_reasons = {"timeout_sleep", "restart", "forced", "interrupted"}
+    finish_kwargs = {
+        "session_id": session_id,
+        "overall_emotional_tone": 0.0,
+        "key_insight": f"Session {close_reason or 'completed'}",
+        "alignment_check": True,
+        "alignment_notes": "",
+    }
+    if close_reason and close_reason in valid_close_reasons:
+        finish_kwargs["close_reason"] = close_reason
+
     try:
-        session_manager.finish_session(
-            session_id,
-            overall_emotional_tone=0.0,
-            key_insight=f"Session {close_reason}",
-            alignment_check=True,
-            alignment_notes="",
-        )
+        session_manager.finish_session(**finish_kwargs)
         _LOG.info("Session %s force-finished successfully", session_id)
 
     except SessionAlreadyFinishedError:
@@ -263,6 +275,8 @@ class AtmanRunner:
 
     async def chat(self) -> None:
         """Run a simple stdin/stdout chat loop until EOF, empty input, or Ctrl-C."""
+        from pydantic_ai.messages import ModelRequest, UserPromptPart
+
         from atman.adapters.agent.factory import build_deps
         from atman.adapters.agent.instructions import build_instructions
         from atman.adapters.agent.tools import log_experience, record_key_moment
@@ -270,6 +284,7 @@ class AtmanRunner:
 
         deps, session_manager, _store = build_deps(self._workspace, self._agent_id, self._config)
         session_id: UUID | None = None
+        interrupted = False  # Track if session was interrupted
         try:
             session_ctx = session_manager.start_session(self._agent_id)
             session_id = session_ctx.session_id
@@ -287,6 +302,22 @@ class AtmanRunner:
                 tools=tool_funcs,
             )
 
+            # E22.7: Inject wake-up message if previous session had close_reason
+            message_history: list[ModelRequest] = []
+            recent_experiences = session_manager._state_store.list_recent_experiences(limit=1)
+            if recent_experiences:
+                last_experience = recent_experiences[0].experience
+                wake_up_msg = self._build_wake_up_message(last_experience)
+                if wake_up_msg:
+                    _LOG.info("Injecting wake-up message for session %s", session_id)
+                    message_history.append(
+                        ModelRequest(
+                            parts=[
+                                UserPromptPart(content=f"[SYSTEM] {wake_up_msg}"),
+                            ],
+                        )
+                    )
+
             print_info("Session started. Empty line or Ctrl-D to exit.\n")
             while True:
                 try:
@@ -296,28 +327,68 @@ class AtmanRunner:
                 if not user_text.strip():
                     break
                 try:
-                    result = await agent.run(user_text, deps=deps)
+                    result = await agent.run(
+                        user_text,
+                        deps=deps,
+                        message_history=message_history if message_history else None,
+                    )
                 except Exception as exc:
                     print_err(f"Run failed: {exc!s}")
                     continue
+                finally:
+                    # Clear wake-up message after first run attempt (success or failure)
+                    if message_history:
+                        message_history = []
                 print_plain(str(result.output))
                 print_plain("")
         except KeyboardInterrupt:
             print_warn("\nInterrupted.")
+            # Track interruption for close_reason
+            interrupted = True
         finally:
             if session_id is not None:
                 try:
-                    session_manager.finish_session(
-                        session_id,
-                        overall_emotional_tone=0.0,
-                        key_insight="",
-                        alignment_check=True,
-                        alignment_notes="",
-                    )
+                    # Pass close_reason if session was interrupted
+                    finish_kwargs = {
+                        "session_id": session_id,
+                        "overall_emotional_tone": 0.0,
+                        "key_insight": "",
+                        "alignment_check": True,
+                        "alignment_notes": "",
+                    }
+                    if interrupted:
+                        finish_kwargs["close_reason"] = "interrupted"
+
+                    session_manager.finish_session(**finish_kwargs)
                 except ValueError as exc:
                     if "Cannot finish session without key moments" in str(exc):
-                        _force_finish(session_manager, session_id, "completed")
+                        # Pass None for normal completion without key moments
+                        _force_finish(session_manager, session_id, None)
                     else:
                         raise
                 except (SessionAlreadyFinishedError, SessionNotFoundError):
                     pass
+
+    def _build_wake_up_message(self, experience: object) -> str | None:
+        """Build wake-up message based on close_reason from last SessionExperience."""
+        from atman.core.models import SessionExperience
+
+        if not isinstance(experience, SessionExperience):
+            return None
+
+        close_reason = experience.close_reason
+        if not close_reason:
+            return None
+
+        if close_reason == "timeout_sleep":
+            recap = experience.agent_recap or "нет recap"
+            return f"Ты задремал — пользователь отошёл, ты решил поспать. {recap}"
+        elif close_reason == "restart":
+            reason = experience.restart_reason or "не указана"
+            return f"Ты сам инициировал перезапуск. Причина: {reason}"
+        elif close_reason == "forced":
+            return "Контекст переполнился принудительно — ты не успел завершить сессию осознанно."
+        elif close_reason == "interrupted":
+            return "Сессия была прервана внешним сигналом — ты не участвовал в закрытии."
+
+        return None

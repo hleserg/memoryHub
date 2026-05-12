@@ -338,6 +338,9 @@ class SessionManager:
         key_insight: str = "",
         alignment_check: bool = True,
         alignment_notes: str = "",
+        close_reason: str | None = None,
+        restart_reason: str | None = None,
+        agent_recap: str | None = None,
     ) -> SessionResult:
         """
         Finish session and create SessionExperience + Eigenstate + update Narrative.
@@ -361,6 +364,9 @@ class SessionManager:
             key_insight: Main insight from session
             alignment_check: Did experience match identity?
             alignment_notes: Notes about alignment or drift
+            close_reason: Reason for session closure (timeout_sleep | restart | forced | interrupted)
+            restart_reason: Human-readable reason when close_reason=restart
+            agent_recap: Agent's recap before timeout_sleep
 
         Returns:
             SessionResult: Complete session result with experience and eigenstate
@@ -420,6 +426,9 @@ class SessionManager:
                     salience=0.5,
                     incomplete_coloring=session_result.incomplete_coloring,
                     fact_refs=list(fact_refs_set),
+                    close_reason=close_reason,
+                    restart_reason=restart_reason,
+                    agent_recap=agent_recap,
                 )
                 experience_record = ExperienceRecord(experience=experience)
                 self._state_store.create_experience(experience_record)
