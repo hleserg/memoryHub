@@ -971,7 +971,7 @@ def test_do_restart_persists_restart_reason(
 
     # Execute restart with specific reason
     restart_reason = "Context window 95% full"
-    new_session_id, new_deps = runner._do_restart(
+    _new_session_id, _new_deps = runner._do_restart(
         sm, ctx.session_id, deps, history, restart_reason
     )
 
