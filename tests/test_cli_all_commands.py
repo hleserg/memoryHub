@@ -81,23 +81,15 @@ def exp_home(tmp_path: Path) -> tuple[Path, Path, str]:
     home.mkdir()
 
     fixture = tmp_path / "exp.json"
+    moment_id = str(uuid4())
     fixture.write_text(
         json.dumps(
             {
                 "session_id": str(uuid4()),
                 "timestamp": "2025-06-01T10:00:00+00:00",
-                "key_moments": [
-                    {
-                        "what_happened": "CLI all commands test",
-                        "how_i_felt": {
-                            "emotional_valence": 0.5,
-                            "emotional_intensity": 0.6,
-                            "depth": "meaningful",
-                        },
-                        "why_it_matters": "coverage",
-                        "values_touched": ["honesty"],
-                    }
-                ],
+                "key_moment_ids": [moment_id],
+                "avg_emotional_intensity": 0.6,
+                "has_profound_moment": False,
             }
         ),
         encoding="utf-8",
