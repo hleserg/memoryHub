@@ -30,6 +30,7 @@ from pydantic_ai.messages import ModelRequest, UserPromptPart
 
 from atman.adapters.agent.config import AgentConfig
 from atman.adapters.agent.deps import AtmanDeps
+from atman.adapters.agent.instructions import build_memory_context
 from atman.adapters.agent.memory_injection import inject_memory
 from atman.affect.refusal_detector import RefusalDetectorConfig, _is_mostly_cyrillic, is_value_refusal as _detect_value_refusal
 from atman.core.exceptions import SessionAlreadyFinishedError, SessionNotFoundError
@@ -634,24 +635,26 @@ class AtmanRunner:
                 tools=tool_funcs,
             )
 
-            # Inject previous-session context into agent awareness
-            message_history: list = []
+            # Build and inject the full memory bundle (identity + narrative + prev session)
+            # into agent awareness. All automatically recalled content goes through
+            # inject_memory() so delivery mode is consistent and configurable.
             recent_experiences = session_manager._state_store.list_recent_experiences(limit=1)
+            prev_text = None
             if recent_experiences:
-                last_experience = recent_experiences[0].experience
-                wake_up_text = self._build_wake_up_message(last_experience)
-                if wake_up_text:
-                    _LOG.info("Injecting wake-up context for session %s (mode=%s)",
-                              session_id, self._config.memory_injection_mode)
-                    extra = inject_memory(
-                        wake_up_text,
-                        mode=self._config.memory_injection_mode,
-                        history=message_history,
-                        prepend=True,
-                    )
-                    if extra is not None:
-                        # system_prompt mode: carry context in deps for build_instructions
-                        deps = replace(deps, injected_context=extra)
+                prev_text = self._build_wake_up_message(recent_experiences[0].experience)
+
+            memory_bundle = build_memory_context(deps, prev_session_text=prev_text)
+            if memory_bundle:
+                _LOG.info("Injecting memory bundle for session %s (mode=%s)",
+                          session_id, self._config.memory_injection_mode)
+                extra = inject_memory(
+                    memory_bundle,
+                    mode=self._config.memory_injection_mode,
+                    history=history,
+                    prepend=True,
+                )
+                if extra is not None:
+                    deps = replace(deps, injected_context=extra)
 
             print_info("Session started. Empty line or Ctrl-D to exit.\n")
             timeout_seconds = self._config.session_timeout_minutes * 60
@@ -693,20 +696,14 @@ class AtmanRunner:
                     user_language = "ru" if _is_mostly_cyrillic(user_text) else "en"
 
                 try:
-                    # E22.7: Use message_history for wake-up message on first run, then use history
-                    # After first run, message_history is cleared and history is used for continuity
                     result = await agent.run(
                         user_text,
                         deps=deps,
-                        message_history=message_history if message_history else history or None,
+                        message_history=history or None,
                     )
                 except Exception as exc:
                     print_err(f"Run failed: {exc!s}")
                     continue
-                finally:
-                    # Clear wake-up message after first run attempt (success or failure)
-                    if message_history:
-                        message_history = []
 
                 # E22.5: Check for restart request (only in new messages to avoid infinite loop)
                 restart_requested, restart_reason = _check_restart_requested(result.new_messages())
