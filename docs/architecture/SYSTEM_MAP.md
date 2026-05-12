@@ -102,7 +102,7 @@ All paths are absolute relative to the repository root.
 | `adapters/agent/instructions.py` (`build_instructions`) | — | builds dynamic system prompt from current `Identity` + `NarrativeDocument` (truncated per `AtmanDeps.truncate_narrative_*`) |
 | `adapters/agent/tools.py` (`record_key_moment` async, `log_experience`, `restart_session`, `wait_session`) | — | Pydantic AI tools: `record_key_moment` → `AffectDetector.submit_self_report` when `SessionManager` is configured with affect; `log_experience` redirect stub; `restart_session` / `wait_session` return sentinel strings for session control (E22.4) |
 | `adapters/agent/factory.py` (`build_deps`) | — | Assembles `AtmanDeps`, `SessionManager`, `FileStateStore`, services, optional `AffectDetector` from workspace + `AgentConfig` |
-| `adapters/agent/runner.py` (`chat`, `_force_finish`) | — | Signal-aware session lifecycle wrapper; SIGTERM/KeyboardInterrupt/EOFError/SystemExit → graceful `_force_finish()`; creates minimal `KeyMoment` if empty; preserves exit codes (E22.2) |
+| `adapters/agent/runner.py` (`AtmanRunner.chat`, `_force_finish`, `_handle_menu_mode`, `_handle_free_time_mode`) | — | Signal-aware session lifecycle wrapper; queue-based stdin reader (no race on timeout); session timeout → menu mode (reflect/wait/sleep/save_to_memory/free_time); SIGTERM/KeyboardInterrupt/EOFError/SystemExit → graceful `_force_finish()`; creates minimal `KeyMoment` if empty; preserves exit codes (E22.2, E22.6) |
 | `agents_registry.py` (`AgentsRegistry`) | — | PostgreSQL-backed registry of agent instances (app/admin DB URLs); used by `src/run_agent.py` |
 
 ### 1.6. CLI / TUI / Web / Demos

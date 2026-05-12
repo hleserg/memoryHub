@@ -18,6 +18,7 @@ import asyncio
 import logging
 import signal
 import sys
+import threading
 from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
@@ -260,6 +261,47 @@ class AtmanRunner:
         self._workspace = workspace
         self._agent_id = agent_id
         self._config = config
+        self._input_queue: asyncio.Queue[str | None] = asyncio.Queue()
+        self._stop_reader = threading.Event()
+        self._reader_thread: threading.Thread | None = None
+
+    def _start_stdin_reader(self, loop: asyncio.AbstractEventLoop) -> None:
+        """Start dedicated stdin reader thread that feeds lines into queue.
+
+        Args:
+            loop: Event loop to use for asyncio.run_coroutine_threadsafe
+        """
+        if self._reader_thread is not None and self._reader_thread.is_alive():
+            return
+
+        def _read_loop() -> None:
+            """Read stdin in dedicated thread and put lines into queue."""
+            while not self._stop_reader.is_set():
+                try:
+                    line = input()
+                    # Put line into queue (thread-safe, blocks if full)
+                    asyncio.run_coroutine_threadsafe(self._input_queue.put(line), loop)
+                except EOFError:
+                    # Signal EOF to coroutine
+                    asyncio.run_coroutine_threadsafe(self._input_queue.put(None), loop)
+                    break
+                except (OSError, RuntimeError):
+                    # stdin not available (pytest) or other runtime error
+                    asyncio.run_coroutine_threadsafe(self._input_queue.put(None), loop)
+                    break
+                except Exception:
+                    # Unexpected error, signal EOF
+                    asyncio.run_coroutine_threadsafe(self._input_queue.put(None), loop)
+                    break
+
+        self._reader_thread = threading.Thread(target=_read_loop, daemon=True)
+        self._reader_thread.start()
+
+    def _stop_stdin_reader(self) -> None:
+        """Stop stdin reader thread."""
+        self._stop_reader.set()
+        if self._reader_thread is not None:
+            self._reader_thread.join(timeout=1.0)
 
     async def chat(self) -> None:
         """Run a simple stdin/stdout chat loop until EOF, empty input, or Ctrl-C."""
@@ -271,6 +313,10 @@ class AtmanRunner:
         deps, session_manager, _store = build_deps(self._workspace, self._agent_id, self._config)
         session_id: UUID | None = None
         reflected_this_session = False
+
+        # Start dedicated stdin reader thread with current event loop
+        loop = asyncio.get_event_loop()
+        self._start_stdin_reader(loop)
 
         try:
             session_ctx = session_manager.start_session(self._agent_id)
@@ -293,14 +339,15 @@ class AtmanRunner:
             timeout_seconds = self._config.session_timeout_minutes * 60
 
             while True:
+                print("You: ", end="", flush=True)
                 try:
-                    # Wait for input with timeout
+                    # Wait for input from queue with timeout
                     user_text = await asyncio.wait_for(
-                        asyncio.to_thread(input, "You: "), timeout=timeout_seconds
+                        self._input_queue.get(), timeout=timeout_seconds
                     )
                 except TimeoutError:
                     print_warn(
-                        f"\n⏱️  Session timeout after {self._config.session_timeout_minutes} minutes. Entering menu mode..."
+                        f"\n⏱️  Session timeout after {timeout_seconds / 60:.0f} minutes. Entering menu mode..."
                     )
                     # Enter menu mode
                     menu_result = await self._handle_menu_mode(
@@ -310,9 +357,14 @@ class AtmanRunner:
                         break
                     elif menu_result == "reflected":
                         reflected_this_session = True
+                    elif isinstance(menu_result, tuple) and menu_result[0] == "wait":
+                        # Update timeout with new value from wait command
+                        timeout_seconds = menu_result[1]
                     # Continue main loop after menu
                     continue
-                except EOFError:
+
+                # Check for EOF
+                if user_text is None:
                     break
 
                 if not user_text.strip():
@@ -330,6 +382,7 @@ class AtmanRunner:
         except KeyboardInterrupt:
             print_warn("\nInterrupted.")
         finally:
+            self._stop_stdin_reader()
             if session_id is not None:
                 try:
                     session_manager.finish_session(
@@ -353,12 +406,15 @@ class AtmanRunner:
         session_manager: SessionManager,
         session_id: UUID,
         reflected_this_session: bool,
-    ) -> str:
+    ) -> str | tuple[str, int]:
         """
         Handle menu mode after timeout.
 
         Returns:
-            "exit" to break main loop, "reflected" if reflection was performed, "continue" otherwise
+            "exit" to break main loop,
+            "reflected" if reflection was performed,
+            "continue" to resume with same timeout,
+            ("wait", new_timeout_seconds) to resume with new timeout
         """
         from atman.term import print_info, print_plain, print_warn
 
@@ -376,9 +432,15 @@ class AtmanRunner:
         retry_count = 0
 
         while retry_count < max_retries:
+            print("Menu> ", end="", flush=True)
             try:
-                cmd_input = await asyncio.to_thread(input, "Menu> ")
-            except EOFError:
+                # Get input from queue (no timeout in menu mode)
+                cmd_input = await self._input_queue.get()
+            except Exception:
+                return "exit"
+
+            # Check for EOF
+            if cmd_input is None:
                 return "exit"
 
             cmd_parts = cmd_input.strip().split(maxsplit=1)
@@ -400,6 +462,10 @@ class AtmanRunner:
                 try:
                     event = deps.micro_reflection.reflect(session_id)
                     print_info(f"✓ Reflection completed: {event.key_insight}")
+                    print_warn(
+                        "Note: Reflection during active session may have limited data. "
+                        "Full reflection occurs after session completion."
+                    )
                     return "reflected"
                 except Exception as exc:
                     print_warn(f"Reflection failed: {exc!s}")
@@ -418,7 +484,7 @@ class AtmanRunner:
                         retry_count += 1
                         continue
                     print_info(f"Timer reset for {minutes} minutes")
-                    return "continue"
+                    return ("wait", minutes * 60)
                 except ValueError:
                     print_warn("Invalid minutes value")
                     retry_count += 1
@@ -490,9 +556,15 @@ class AtmanRunner:
         print_info("Free time mode active. Agent can explore freely.")
 
         while True:
+            print("Free> ", end="", flush=True)
             try:
-                user_input = await asyncio.to_thread(input, "Free> ")
-            except EOFError:
+                # Get input from queue (no timeout in free time mode)
+                user_input = await self._input_queue.get()
+            except Exception:
+                return "exit"
+
+            # Check for EOF
+            if user_input is None:
                 return "exit"
 
             if not user_input.strip():

@@ -106,7 +106,7 @@
 | `adapters/agent/instructions.py` (`build_instructions`) | — | строит динамический system prompt из текущих `Identity` + `NarrativeDocument` (с усечением по `AtmanDeps.truncate_narrative_*`) |
 | `adapters/agent/tools.py` (`record_key_moment` async, `log_experience`, `restart_session`, `wait_session`) | — | инструменты Pydantic AI: `record_key_moment` → `AffectDetector.submit_self_report` когда `SessionManager` настроен на аффект; `log_experience` — redirect-заглушка; `restart_session` / `wait_session` возвращают sentinel-строки для управления сессией (E22.4) |
 | `adapters/agent/factory.py` (`build_deps`) | — | сборка `AtmanDeps`, `SessionManager`, `FileStateStore`, сервисов, опционально `AffectDetector` из workspace и `AgentConfig` |
-| `adapters/agent/runner.py` (`chat`, `_force_finish`) | — | обёртка жизненного цикла сессии с обработкой сигналов; SIGTERM/KeyboardInterrupt/EOFError/SystemExit → graceful `_force_finish()`; создаёт минимальный `KeyMoment` если пусто; сохраняет exit-коды (E22.2) |
+| `adapters/agent/runner.py` (`AtmanRunner.chat`, `_force_finish`, `_handle_menu_mode`, `_handle_free_time_mode`) | — | обёртка жизненного цикла сессии с обработкой сигналов; очередь-based stdin reader (без race condition при таймауте); таймаут сессии → menu mode (reflect/wait/sleep/save_to_memory/free_time); SIGTERM/KeyboardInterrupt/EOFError/SystemExit → graceful `_force_finish()`; создаёт минимальный `KeyMoment` если пусто; сохраняет exit-коды (E22.2, E22.6) |
 | `agents_registry.py` (`AgentsRegistry`) | — | реестр экземпляров агентов в PostgreSQL (app/admin URL); используется `src/run_agent.py` |
 
 ### 1.6. CLI / TUI / Web / Демо
