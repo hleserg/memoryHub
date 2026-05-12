@@ -168,6 +168,7 @@ class KeyMoment(BaseModel):
         validate_assignment=True,
         json_schema_extra={
             "example": {
+                "id": "123e4567-e89b-12d3-a456-426614174000",
                 "what_happened": "User asked me to implement a complex feature I had never done before",
                 "when": "2026-04-30T10:30:00Z",
                 "how_i_felt": {
