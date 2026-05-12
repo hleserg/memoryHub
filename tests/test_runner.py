@@ -681,6 +681,35 @@ def test_build_deps_bootstraps_state_and_enables_session_journal(tmp_path: Path)
     assert journal_path.exists()
 
 
+def test_atman_runner_sigterm_empty_session_persists_interrupted(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """SIGTERM before the first key moment should not look like normal completion."""
+    import asyncio
+
+    from atman.adapters.agent.config import AgentConfig
+    from atman.adapters.agent.runner import AtmanRunner
+
+    agent_id = uuid4()
+    runner = AtmanRunner(workspace=tmp_path, agent_id=agent_id, config=AgentConfig())
+
+    def raise_sigterm_after_handler(loop: asyncio.AbstractEventLoop) -> None:
+        loop.call_soon(signal.raise_signal, signal.SIGTERM)
+
+    monkeypatch.setattr(runner, "_start_stdin_reader", raise_sigterm_after_handler)
+
+    asyncio.run(runner.chat())
+
+    store = FileStateStore(workspace=tmp_path)
+    experiences = store.list_recent_experiences(limit=1)
+    assert len(experiences) == 1
+    assert experiences[0].experience.close_reason == "interrupted"
+    assert experiences[0].experience.incomplete_coloring is True
+    stored_moment = store.get_key_moment(experiences[0].experience.key_moment_ids[0])
+    assert stored_moment is not None
+    assert stored_moment.what_happened == "Session interrupted (interrupted)"
+
+
 async def test_stdin_reader_thread_lifecycle(tmp_path: Path) -> None:
     """Test that stdin reader thread lifecycle is managed correctly.
 

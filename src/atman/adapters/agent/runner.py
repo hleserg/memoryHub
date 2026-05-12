@@ -749,8 +749,8 @@ class AtmanRunner:
                     session_manager.finish_session(**finish_kwargs)
                 except ValueError as exc:
                     if "Cannot finish session without key moments" in str(exc):
-                        # Pass None for normal completion without key moments
-                        _force_finish(session_manager, session_id, None)
+                        close_reason = "interrupted" if interrupted else None
+                        _force_finish(session_manager, session_id, close_reason)
                     else:
                         raise
                 except (SessionAlreadyFinishedError, SessionNotFoundError):

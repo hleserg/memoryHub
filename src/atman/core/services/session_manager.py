@@ -22,7 +22,7 @@ import json
 import logging
 import threading
 from pathlib import Path
-from typing import TYPE_CHECKING, Literal, cast
+from typing import TYPE_CHECKING, IO, Literal, cast
 from uuid import UUID, uuid5
 
 from atman.core.clock_impl import SystemClock
@@ -104,6 +104,7 @@ class SessionManager:
         self._max_active_sessions = max_active_sessions
         self._clock = clock or SystemClock()
         self._active_sessions: dict[UUID, SessionResult] = {}
+        self._journal_locks: dict[UUID, IO[str]] = {}
         self._lock = threading.Lock()
         self._workspace = workspace
         self._affect_detector: AffectDetector | None = None
@@ -128,6 +129,54 @@ class SessionManager:
         sessions_dir = self._workspace / str(agent_id) / "sessions"
         sessions_dir.mkdir(parents=True, exist_ok=True)
         return sessions_dir / f"active_{session_id}.jsonl"
+
+    def _journal_lock_path(self, agent_id: UUID, session_id: UUID) -> Path | None:
+        """Return lock path for an active session journal."""
+        journal_path = self._journal_path(agent_id, session_id)
+        if journal_path is None:
+            return None
+        return journal_path.with_suffix(f"{journal_path.suffix}.lock")
+
+    def _try_lock_journal(self, agent_id: UUID, session_id: UUID) -> IO[str] | None:
+        """Try to take the inter-process lock for a session journal."""
+        lock_path = self._journal_lock_path(agent_id, session_id)
+        if lock_path is None:
+            return None
+
+        try:
+            import fcntl
+
+            lock_file = lock_path.open("a+", encoding="utf-8")
+            fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+            return lock_file
+        except BlockingIOError:
+            lock_file.close()
+            return None
+        except (ImportError, OSError) as exc:
+            _LOG.warning("Failed to lock journal for session %s: %s", session_id, exc)
+            return None
+
+    def _release_journal_file(self, lock_file: IO[str], *, unlink: bool) -> None:
+        """Release a journal lock file."""
+        lock_path = Path(lock_file.name)
+        try:
+            import fcntl
+
+            fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
+        except (ImportError, OSError) as exc:
+            _LOG.warning("Failed to unlock journal %s: %s", lock_path, exc)
+        finally:
+            lock_file.close()
+            if unlink:
+                lock_path.unlink(missing_ok=True)
+
+    def _journal_locked_elsewhere(self, agent_id: UUID, session_id: UUID) -> bool:
+        """Return True when another live process owns this session journal."""
+        lock_file = self._try_lock_journal(agent_id, session_id)
+        if lock_file is None:
+            return self._workspace is not None
+        self._release_journal_file(lock_file, unlink=False)
+        return False
 
     def _write_journal_entry(
         self, agent_id: UUID, session_id: UUID, entry: dict[str, object]
@@ -185,6 +234,9 @@ class SessionManager:
                 with self._lock:
                     if session_id in self._active_sessions:
                         continue
+                if self._journal_locked_elsewhere(agent_id, session_id):
+                    _LOG.debug("Skipping live journal locked by another process: %s", session_id)
+                    continue
 
                 # Compute deterministic experience_id
                 experience_id = deterministic_session_experience_id(session_id)
@@ -378,6 +430,11 @@ class SessionManager:
                 identity_snapshot_id=stored_snapshot.id,
                 identity_id=identity.id,
             )
+
+        journal_lock = self._try_lock_journal(identity.id, context.session_id)
+        if journal_lock is not None:
+            with self._lock:
+                self._journal_locks[context.session_id] = journal_lock
 
         return context
 
@@ -754,6 +811,7 @@ class SessionManager:
         # Remove from active sessions only after successful persistence
         with self._lock:
             self._active_sessions.pop(session_id, None)
+            journal_lock = self._journal_locks.pop(session_id, None)
 
         # Delete journal after successful persistence
         if session_result.identity_id is not None:
@@ -764,6 +822,9 @@ class SessionManager:
                     _LOG.debug("Deleted journal for completed session %s", session_id)
                 except OSError as exc:
                     _LOG.warning("Failed to delete journal for session %s: %s", session_id, exc)
+
+        if journal_lock is not None:
+            self._release_journal_file(journal_lock, unlink=True)
 
         return session_result.model_copy(deep=True)
 

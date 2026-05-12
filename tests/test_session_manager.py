@@ -1774,6 +1774,48 @@ def test_orphan_recovery_skips_currently_active_sessions(
     assert final_exp.experience.recorded_by == "session_manager"  # Not "session_manager_recovery"
 
 
+def test_orphan_recovery_skips_journals_locked_by_another_manager(
+    tmp_path, identity_fixture, narrative_fixture, frozen_clock
+):
+    """A second process must not recover a session that is still live elsewhere."""
+    store = FileStateStore(workspace=tmp_path / "cross_manager_store")
+    store.save_identity(identity_fixture)
+    store.save_narrative(narrative_fixture)
+
+    workspace = tmp_path / "cross_manager_workspace"
+    manager_a = SessionManager(store, clock=frozen_clock, workspace=workspace)
+    context_a = manager_a.start_session(identity_fixture.id)
+
+    manager_a.append_key_moment_input(
+        context_a.session_id,
+        KeyMomentInput(
+            what_happened="Still active in manager A",
+            emotional_valence=0.3,
+            emotional_intensity=0.7,
+            depth=EmotionalDepth.MEANINGFUL,
+            why_it_matters="Cross-process recovery must not steal live sessions",
+        ),
+    )
+
+    journal_path = (
+        workspace / str(identity_fixture.id) / "sessions" / f"active_{context_a.session_id}.jsonl"
+    )
+    assert journal_path.exists()
+
+    manager_b = SessionManager(store, clock=frozen_clock, workspace=workspace)
+    manager_b.start_session(identity_fixture.id)
+
+    experience_id_a = deterministic_session_experience_id(context_a.session_id)
+    assert store.get_experience(experience_id_a) is None
+    assert journal_path.exists()
+
+    manager_a.finish_session(context_a.session_id, close_reason="timeout_sleep")
+    final_exp = store.get_experience(experience_id_a)
+    assert final_exp is not None
+    assert final_exp.experience.close_reason == "timeout_sleep"
+    assert final_exp.experience.recorded_by == "session_manager"
+
+
 def test_append_key_moment_writes_journal_for_affect_detector(
     tmp_path, identity_fixture, narrative_fixture, frozen_clock
 ):
