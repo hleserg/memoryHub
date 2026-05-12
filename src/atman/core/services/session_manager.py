@@ -214,7 +214,9 @@ class SessionManager:
                                 key_moment_ids.append(moment_id)
                                 moment_data = entry.get("moment")
                                 if isinstance(moment_data, dict):
-                                    journaled_moments[moment_id] = KeyMoment.model_validate(moment_data)
+                                    journaled_moments[moment_id] = KeyMoment.model_validate(
+                                        moment_data
+                                    )
                                 # Extract fact_refs if present
                                 for fact_id_str in entry.get("fact_refs", []):
                                     fact_refs_set.add(UUID(fact_id_str))

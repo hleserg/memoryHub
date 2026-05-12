@@ -147,9 +147,7 @@ class PostgresStateStore(StateStore):
                     },
                 )
                 if cur.rowcount == 0:
-                    raise ValueError(
-                        f"KeyMoment {moment.id} already belongs to another session"
-                    )
+                    raise ValueError(f"KeyMoment {moment.id} already belongs to another session")
 
     def get_key_moment(self, moment_id: UUID) -> KeyMoment | None:
         """

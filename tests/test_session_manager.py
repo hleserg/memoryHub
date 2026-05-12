@@ -1441,6 +1441,7 @@ def test_orphan_recovery_deterministic_id_prevents_cross_session_pollution(
     assert exp1_records[0].experience.session_id == context1.session_id
     assert exp2_records[0].experience.session_id == context2.session_id
 
+
 def test_journal_created_on_key_moment(tmp_path, identity_fixture, narrative_fixture, frozen_clock):
     """Test that journal is created when key moment is appended."""
     store = InMemoryStateStore()
