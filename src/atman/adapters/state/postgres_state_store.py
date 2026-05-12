@@ -122,17 +122,17 @@ class PostgresStateStore(StateStore):
             return
 
         conn = self._get_conn()
-        with conn.cursor() as cur:
+        with conn.transaction(), conn.cursor() as cur:
             for moment in moments:
                 # Serialize the KeyMoment to JSON
                 data = json.dumps(moment.model_dump(mode="json"))
 
                 cur.execute(
                     """
-                    INSERT INTO public.key_moments (id, session_id, data, created_at)
-                    VALUES (%(id)s, %(session_id)s, %(data)s, %(created_at)s)
-                    ON CONFLICT (id) DO NOTHING
-                    """,
+                        INSERT INTO public.key_moments (id, session_id, data, created_at)
+                        VALUES (%(id)s, %(session_id)s, %(data)s, %(created_at)s)
+                        ON CONFLICT (id) DO NOTHING
+                        """,
                     {
                         "id": moment.id,
                         "session_id": session_id,
@@ -140,7 +140,6 @@ class PostgresStateStore(StateStore):
                         "created_at": moment.when,
                     },
                 )
-            conn.commit()
 
     def get_key_moment(self, moment_id: UUID) -> KeyMoment | None:
         """
@@ -294,24 +293,17 @@ class PostgresStateStore(StateStore):
             ValueError: If the key moment already exists
         """
         conn = self._get_conn()
-        with conn.cursor() as cur:
-            # Check if moment already exists
-            cur.execute(
-                "SELECT id FROM public.key_moments WHERE id = %(id)s",
-                {"id": key_moment.id},
-            )
-            if cur.fetchone() is not None:
-                raise ValueError(f"KeyMoment {key_moment.id} already exists")
-
+        with conn.transaction(), conn.cursor() as cur:
             # Note: We don't have session_id in KeyMoment model, so we use a placeholder
             # This method may need review when session_id is added to KeyMoment
             data = json.dumps(key_moment.model_dump(mode="json"))
 
             cur.execute(
                 """
-                INSERT INTO public.key_moments (id, session_id, data, created_at)
-                VALUES (%(id)s, %(session_id)s, %(data)s, %(created_at)s)
-                """,
+                    INSERT INTO public.key_moments (id, session_id, data, created_at)
+                    VALUES (%(id)s, %(session_id)s, %(data)s, %(created_at)s)
+                    ON CONFLICT (id) DO NOTHING
+                    """,
                 {
                     "id": key_moment.id,
                     "session_id": "00000000-0000-0000-0000-000000000000",  # Placeholder
@@ -319,7 +311,10 @@ class PostgresStateStore(StateStore):
                     "created_at": key_moment.when,
                 },
             )
-            conn.commit()
+
+            # Check if the insert was successful (rowcount == 0 means duplicate)
+            if cur.rowcount == 0:
+                raise ValueError(f"KeyMoment {key_moment.id} already exists")
 
         return key_moment
 

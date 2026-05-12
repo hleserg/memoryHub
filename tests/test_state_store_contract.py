@@ -10,6 +10,7 @@ SYSTEM_MAP §2.1 / §5.3 regression freeze.
 
 from __future__ import annotations
 
+import os
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -46,17 +47,34 @@ from atman.core.ports.state_store import (
     ValuesTouchedQuery,
 )
 
+try:
+    import psycopg  # noqa: F401
+
+    from atman.adapters.state import PostgresStateStore
+
+    POSTGRES_AVAILABLE = True
+except ImportError:
+    POSTGRES_AVAILABLE = False
+    PostgresStateStore = None  # type: ignore
+
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
 
 
-@pytest.fixture(params=["file", "in_memory"])
+@pytest.fixture(params=["file", "in_memory", "postgres"])
 def store(request, tmp_path: Path) -> StateStore:
     if request.param == "file":
         return FileStateStore(tmp_path)
     if request.param == "in_memory":
         return InMemoryStateStore()
+    if request.param == "postgres":
+        if not POSTGRES_AVAILABLE or PostgresStateStore is None:
+            pytest.skip("psycopg not installed")
+        db_url = os.environ.get("TEST_DB_URL")
+        if not db_url:
+            pytest.skip("TEST_DB_URL not set")
+        return PostgresStateStore(db_url=db_url)
     raise NotImplementedError(request.param)
 
 
@@ -586,10 +604,18 @@ def test_list_key_moments_returns_all(store: StateStore) -> None:
 
 
 def test_list_key_moments_with_session_id_raises_not_implemented(store: StateStore) -> None:
-    """Test that filtering by session_id raises NotImplementedError."""
+    """Test that filtering by session_id raises NotImplementedError.
+
+    Note: PostgresStateStore actually implements this feature, so it's
+    excluded from this test.
+    """
     # Skip for stores that don't support KeyMoment operations
     if isinstance(store, InMemoryExperienceStore | JsonlExperienceStore):
         pytest.skip("Store doesn't support KeyMoment operations")
+
+    # PostgresStateStore actually supports session_id filtering
+    if POSTGRES_AVAILABLE and PostgresStateStore is not None and isinstance(store, PostgresStateStore):
+        pytest.skip("PostgresStateStore supports session_id filtering")
 
     with pytest.raises(NotImplementedError, match="session_id"):
         store.list_key_moments(session_id=uuid4())
