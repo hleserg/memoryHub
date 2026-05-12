@@ -176,6 +176,17 @@
 | `MockReflectionModel` | `ReflectionModel` |
 | `InMemoryPatternStore`, `InMemoryReflectionEventStore`, `InMemoryHealthAssessmentStore` | соответствующие порты |
 | **`InMemoryReflectionStore`** | **`ReflectionStore`** (E27) |
+| `MockEmbeddingAdapter`, `BM25EmbeddingAdapter`, `OllamaEmbeddingAdapter` | `EmbeddingPort` |
+| `InMemoryUsageLog` | `MemoryUsageLog` |
+
+### 2.2a. Agent adapter ↔ сервисы
+
+| Связка | Файлы | Тип |
+|--------|-------|-----|
+| `AtmanDeps` ↔ `SessionManager`, `IdentityService`, `ExperienceService`, `MicroReflectionService`, `StateStore` | `adapters/agent/deps.py` | DI-контейнер (frozen dataclass) |
+| `record_key_moment` / `log_experience` ↔ `AffectDetector.submit_self_report` / `SessionManager` | `adapters/agent/tools.py` → `affect/detector.py` + `core/services/session_manager.py` | Async Pydantic AI инструмент → affect write gateway (требует `affect_workspace` + config для `SessionManager`) |
+| `build_instructions` ↔ `StateStore.load_identity` / `load_narrative` | `adapters/agent/instructions.py` → `core/ports/state_store.py` | динамический билдер system-prompt |
+| `chat` / `_force_finish` ↔ `SessionManager` | `adapters/agent/runner.py` → `core/services/session_manager.py` | регистрация signal handler + exception boundary; вызывает `append_key_moment_input()`, `get_active_session()`, `finish_session()` при прерывании (E22.2) |
 
 ### 2.3. CLI ↔ сервис
 
