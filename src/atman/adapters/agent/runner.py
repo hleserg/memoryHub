@@ -719,6 +719,9 @@ class AtmanRunner:
                             input_tokens,
                             context_limit,
                         )
+                        # Display agent's response before force-close warning
+                        print_plain(str(result.output))
+                        print_plain("")
                         print_warn(
                             f"\n⚠️  Context 95% full ({input_tokens}/{context_limit} tokens). "
                             "Forcing session close.\n"
