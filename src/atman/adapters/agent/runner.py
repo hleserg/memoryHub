@@ -18,6 +18,7 @@ import asyncio
 import logging
 import signal
 import sys
+import threading
 from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
@@ -181,7 +182,7 @@ def chat(
 def _force_finish(
     session_manager: SessionManager,
     session_id: UUID,
-    close_reason: str,
+    close_reason: str | None,
 ) -> None:
     """
     Force-finish a session with minimum viable state.
@@ -194,7 +195,7 @@ def _force_finish(
     Args:
         session_manager: Session manager instance
         session_id: UUID of the session to finish
-        close_reason: Reason for forced finish (e.g. "interrupted")
+        close_reason: Reason for forced finish (e.g. "interrupted"), or None for normal completion
 
     Raises:
         SessionNotFoundError: If session is not active
@@ -215,14 +216,21 @@ def _force_finish(
             session_id,
         )
 
-        # Create minimal key moment for interrupted session
+        # Create minimal key moment - text depends on whether this was an interruption
+        if close_reason and close_reason != "completed":
+            what_happened = f"Session interrupted ({close_reason})"
+            why_it_matters = "Session was interrupted before completion"
+        else:
+            what_happened = "Session completed without recorded key moments"
+            why_it_matters = "Session ended normally but no moments were captured"
+
         minimal_moment = KeyMomentInput(
-            what_happened=f"Session interrupted ({close_reason})",
+            what_happened=what_happened,
             recorded_at=datetime.now(UTC),
             emotional_valence=0.0,
-            emotional_intensity=0.3,  # Slight arousal from interruption
+            emotional_intensity=0.3 if close_reason else 0.1,
             depth=EmotionalDepth.SURFACE,
-            why_it_matters="Session was interrupted before completion",
+            why_it_matters=why_it_matters,
             incomplete_coloring=True,  # Honest: this is synthetic
         )
 
@@ -233,15 +241,20 @@ def _force_finish(
             _LOG.warning("Session %s was finished during force-finish", session_id)
             return
 
-    # Finish session with interrupted status
+    # Finish session - only pass close_reason if it's a documented value
+    valid_close_reasons = {"timeout_sleep", "restart", "forced", "interrupted"}
+    finish_kwargs = {
+        "session_id": session_id,
+        "overall_emotional_tone": 0.0,
+        "key_insight": f"Session {close_reason or 'completed'}",
+        "alignment_check": True,
+        "alignment_notes": "",
+    }
+    if close_reason and close_reason in valid_close_reasons:
+        finish_kwargs["close_reason"] = close_reason
+
     try:
-        session_manager.finish_session(
-            session_id,
-            overall_emotional_tone=0.0,
-            key_insight=f"Session {close_reason}",
-            alignment_check=True,
-            alignment_notes="",
-        )
+        session_manager.finish_session(**finish_kwargs)
         _LOG.info("Session %s force-finished successfully", session_id)
 
     except SessionAlreadyFinishedError:
@@ -260,16 +273,66 @@ class AtmanRunner:
         self._workspace = workspace
         self._agent_id = agent_id
         self._config = config
+        self._input_queue: asyncio.Queue[str | None] = asyncio.Queue()
+        self._stop_reader = threading.Event()
+        self._reader_thread: threading.Thread | None = None
+
+    def _start_stdin_reader(self, loop: asyncio.AbstractEventLoop) -> None:
+        """Start dedicated stdin reader thread that feeds lines into queue.
+
+        Args:
+            loop: Event loop to use for asyncio.run_coroutine_threadsafe
+        """
+        if self._reader_thread is not None and self._reader_thread.is_alive():
+            return
+
+        def _read_loop() -> None:
+            """Read stdin in dedicated thread and put lines into queue."""
+            while not self._stop_reader.is_set():
+                try:
+                    line = input()
+                    # Put line into queue (thread-safe, blocks if full)
+                    asyncio.run_coroutine_threadsafe(self._input_queue.put(line), loop)
+                except EOFError:
+                    # Signal EOF to coroutine
+                    asyncio.run_coroutine_threadsafe(self._input_queue.put(None), loop)
+                    break
+                except (OSError, RuntimeError):
+                    # stdin not available (pytest) or other runtime error
+                    asyncio.run_coroutine_threadsafe(self._input_queue.put(None), loop)
+                    break
+                except Exception:
+                    # Unexpected error, signal EOF
+                    asyncio.run_coroutine_threadsafe(self._input_queue.put(None), loop)
+                    break
+
+        self._reader_thread = threading.Thread(target=_read_loop, daemon=True)
+        self._reader_thread.start()
+
+    def _stop_stdin_reader(self) -> None:
+        """Stop stdin reader thread."""
+        self._stop_reader.set()
+        if self._reader_thread is not None:
+            self._reader_thread.join(timeout=1.0)
 
     async def chat(self) -> None:
         """Run a simple stdin/stdout chat loop until EOF, empty input, or Ctrl-C."""
+        from pydantic_ai.messages import ModelRequest, UserPromptPart
+
         from atman.adapters.agent.factory import build_deps
         from atman.adapters.agent.instructions import build_instructions
         from atman.adapters.agent.tools import log_experience, record_key_moment
-        from atman.term import print_err, print_info, print_plain, print_warn
+        from atman.term import print_err, print_info, print_plain, print_prompt, print_warn
 
         deps, session_manager, _store = build_deps(self._workspace, self._agent_id, self._config)
         session_id: UUID | None = None
+        reflected_this_session = False
+        interrupted = False  # Track if session was interrupted
+
+        # Start dedicated stdin reader thread with current event loop
+        loop = asyncio.get_event_loop()
+        self._start_stdin_reader(loop)
+
         try:
             session_ctx = session_manager.start_session(self._agent_id)
             session_id = session_ctx.session_id
@@ -287,37 +350,309 @@ class AtmanRunner:
                 tools=tool_funcs,
             )
 
+            # E22.7: Inject wake-up message if previous session had close_reason
+            message_history: list[ModelRequest] = []
+            recent_experiences = session_manager._state_store.list_recent_experiences(limit=1)
+            if recent_experiences:
+                last_experience = recent_experiences[0].experience
+                wake_up_msg = self._build_wake_up_message(last_experience)
+                if wake_up_msg:
+                    _LOG.info("Injecting wake-up message for session %s", session_id)
+                    message_history.append(
+                        ModelRequest(
+                            parts=[
+                                UserPromptPart(content=f"[SYSTEM] {wake_up_msg}"),
+                            ],
+                        )
+                    )
+
             print_info("Session started. Empty line or Ctrl-D to exit.\n")
+            timeout_seconds = self._config.session_timeout_minutes * 60
+
             while True:
+                print_prompt("You: ")
                 try:
-                    user_text = await asyncio.to_thread(input, "You: ")
-                except EOFError:
+                    # Wait for input from queue with timeout
+                    user_text = await asyncio.wait_for(
+                        self._input_queue.get(), timeout=timeout_seconds
+                    )
+                except TimeoutError:
+                    print_warn(
+                        f"\n⏱️  Session timeout after {timeout_seconds / 60:.0f} minutes. Entering menu mode..."
+                    )
+                    # Enter menu mode
+                    menu_result = await self._handle_menu_mode(
+                        deps, session_manager, session_id, reflected_this_session
+                    )
+                    if menu_result == "exit":
+                        break
+                    elif menu_result == "reflected":
+                        reflected_this_session = True
+                    elif isinstance(menu_result, tuple) and menu_result[0] == "wait":
+                        # Update timeout with new value from wait command
+                        timeout_seconds = menu_result[1]
+                    # Continue main loop after menu
+                    continue
+
+                # Check for EOF
+                if user_text is None:
                     break
+
                 if not user_text.strip():
                     break
+
                 try:
-                    result = await agent.run(user_text, deps=deps)
+                    result = await agent.run(
+                        user_text,
+                        deps=deps,
+                        message_history=message_history if message_history else None,
+                    )
                 except Exception as exc:
                     print_err(f"Run failed: {exc!s}")
                     continue
+                finally:
+                    # Clear wake-up message after first run attempt (success or failure)
+                    if message_history:
+                        message_history = []
                 print_plain(str(result.output))
                 print_plain("")
+
         except KeyboardInterrupt:
             print_warn("\nInterrupted.")
+            # Track interruption for close_reason
+            interrupted = True
         finally:
+            self._stop_stdin_reader()
             if session_id is not None:
                 try:
-                    session_manager.finish_session(
-                        session_id,
-                        overall_emotional_tone=0.0,
-                        key_insight="",
-                        alignment_check=True,
-                        alignment_notes="",
-                    )
+                    # Pass close_reason if session was interrupted
+                    finish_kwargs = {
+                        "session_id": session_id,
+                        "overall_emotional_tone": 0.0,
+                        "key_insight": "",
+                        "alignment_check": True,
+                        "alignment_notes": "",
+                    }
+                    if interrupted:
+                        finish_kwargs["close_reason"] = "interrupted"
+
+                    session_manager.finish_session(**finish_kwargs)
                 except ValueError as exc:
                     if "Cannot finish session without key moments" in str(exc):
-                        _force_finish(session_manager, session_id, "completed")
+                        # Pass None for normal completion without key moments
+                        _force_finish(session_manager, session_id, None)
                     else:
                         raise
                 except (SessionAlreadyFinishedError, SessionNotFoundError):
                     pass
+
+    async def _handle_menu_mode(
+        self,
+        deps: AtmanDeps,
+        session_manager: SessionManager,
+        session_id: UUID,
+        reflected_this_session: bool,
+    ) -> str | tuple[str, int]:
+        """
+        Handle menu mode after timeout.
+
+        Returns:
+            "exit" to break main loop,
+            "reflected" if reflection was performed,
+            "continue" to resume with same timeout,
+            ("wait", new_timeout_seconds) to resume with new timeout
+        """
+        from atman.term import print_info, print_plain, print_prompt, print_warn
+
+        print_info("\n📋 Menu Mode - Available commands:")
+        if not reflected_this_session:
+            print_plain("  reflect - Run micro reflection on this session")
+        print_plain("  wait <minutes> - Reset timer and continue")
+        print_plain("  sleep - Close session and exit")
+        print_plain("  save_to_memory <content> - Save to factual memory")
+        if self._config.enable_free_time:
+            print_plain("  free_time - Enter free time mode")
+        print_plain("")
+
+        max_retries = 3
+        retry_count = 0
+
+        while retry_count < max_retries:
+            print_prompt("Menu> ")
+            try:
+                # Get input from queue (no timeout in menu mode)
+                cmd_input = await self._input_queue.get()
+            except Exception:
+                return "exit"
+
+            # Check for EOF
+            if cmd_input is None:
+                return "exit"
+
+            cmd_parts = cmd_input.strip().split(maxsplit=1)
+            if not cmd_parts:
+                retry_count += 1
+                print_warn(f"Empty command. {max_retries - retry_count} retries left.")
+                continue
+
+            cmd = cmd_parts[0].lower()
+            arg = cmd_parts[1] if len(cmd_parts) > 1 else ""
+
+            # Handle commands
+            if cmd == "reflect":
+                if reflected_this_session:
+                    print_warn("Reflection already performed this session.")
+                    retry_count += 1
+                    continue
+
+                try:
+                    event = deps.micro_reflection.reflect(session_id)
+                    print_info(f"✓ Reflection completed: {event.key_insight}")
+                    print_warn(
+                        "Note: Reflection during active session may have limited data. "
+                        "Full reflection occurs after session completion."
+                    )
+                    return "reflected"
+                except Exception as exc:
+                    print_warn(f"Reflection failed: {exc!s}")
+                    retry_count += 1
+                    continue
+
+            elif cmd == "wait":
+                if not arg:
+                    print_warn("Usage: wait <minutes>")
+                    retry_count += 1
+                    continue
+                try:
+                    minutes = int(arg)
+                    if minutes <= 0:
+                        print_warn("Minutes must be positive")
+                        retry_count += 1
+                        continue
+                    print_info(f"Timer reset for {minutes} minutes")
+                    return ("wait", minutes * 60)
+                except ValueError:
+                    print_warn("Invalid minutes value")
+                    retry_count += 1
+                    continue
+
+            elif cmd == "sleep":
+                _force_finish(session_manager, session_id, "timeout_sleep")
+                print_info("Session closed. Exiting...")
+                return "exit"
+
+            elif cmd == "save_to_memory":
+                if not arg:
+                    print_warn("Usage: save_to_memory <content>")
+                    retry_count += 1
+                    continue
+                # Save to factual memory - placeholder for future implementation
+                # Full implementation would require FactualMemory port in AtmanDeps
+                print_warn(f"save_to_memory not yet implemented (content NOT saved): {arg[:50]}...")
+                print_info("Returning to menu. Use 'wait' to continue session.")
+                retry_count += 1
+                continue
+
+            elif cmd == "free_time":
+                if not self._config.enable_free_time:
+                    print_warn("Free time mode is disabled in config")
+                    retry_count += 1
+                    continue
+
+                print_info("Entering free time mode. Type 'end_free_time' to exit.")
+                free_time_result = await self._handle_free_time_mode(deps, session_id)
+                # After free_time, return to menu (not main loop)
+                if free_time_result == "continue":
+                    print_info("Exited free time mode. Returning to menu.")
+                    continue  # Stay in menu loop
+                return free_time_result  # "exit" case
+
+            else:
+                print_warn(f"Unknown command: {cmd}")
+                retry_count += 1
+                continue
+
+        # Max retries reached
+        print_warn(f"Max retries ({max_retries}) reached. Closing session.")
+        _force_finish(session_manager, session_id, "menu_timeout")
+        return "exit"
+
+    async def _handle_free_time_mode(
+        self,
+        deps: AtmanDeps,
+        session_id: UUID,
+    ) -> str:
+        """
+        Handle free time mode - open-ended agent interaction.
+
+        Returns:
+            "continue" to return to menu/main loop, "exit" to close session
+        """
+        from atman.adapters.agent.instructions import build_instructions
+        from atman.adapters.agent.tools import log_experience, record_key_moment
+        from atman.term import print_err, print_info, print_plain, print_prompt
+
+        if self._config.enable_key_moments:
+            tool_funcs = (record_key_moment, log_experience)
+        else:
+            tool_funcs = (log_experience,)
+
+        agent = Agent(
+            self._config.model.model,
+            deps_type=AtmanDeps,
+            instructions=lambda ctx: build_instructions(ctx.deps),
+            tools=tool_funcs,
+        )
+
+        print_info("Free time mode active. Agent can explore freely.")
+
+        while True:
+            print_prompt("Free> ")
+            try:
+                # Get input from queue (no timeout in free time mode)
+                user_input = await self._input_queue.get()
+            except Exception:
+                return "exit"
+
+            # Check for EOF
+            if user_input is None:
+                return "exit"
+
+            if not user_input.strip():
+                continue
+
+            if user_input.strip().lower() == "end_free_time":
+                # Return to menu, not main loop
+                return "continue"
+
+            try:
+                result = await agent.run(user_input, deps=deps)
+                print_plain(str(result.output))
+                print_plain("")
+            except Exception as exc:
+                print_err(f"Free time run failed: {exc!s}")
+                continue
+
+    def _build_wake_up_message(self, experience: object) -> str | None:
+        """Build wake-up message based on close_reason from last SessionExperience."""
+        from atman.core.models import SessionExperience
+
+        if not isinstance(experience, SessionExperience):
+            return None
+
+        close_reason = experience.close_reason
+        if not close_reason:
+            return None
+
+        if close_reason == "timeout_sleep":
+            recap = experience.agent_recap or "нет recap"
+            return f"Ты задремал — пользователь отошёл, ты решил поспать. {recap}"
+        elif close_reason == "restart":
+            reason = experience.restart_reason or "не указана"
+            return f"Ты сам инициировал перезапуск. Причина: {reason}"
+        elif close_reason == "forced":
+            return "Контекст переполнился принудительно — ты не успел завершить сессию осознанно."
+        elif close_reason == "interrupted":
+            return "Сессия была прервана внешним сигналом — ты не участвовал в закрытии."
+
+        return None

@@ -107,6 +107,19 @@ def print_plain(message: str, *, end: str = "\n") -> None:
     console.print(message, markup=False, highlight=False, end=end)
 
 
+def print_prompt(prompt: str) -> None:
+    """
+    Print an input prompt without newline, with flush for immediate display.
+
+    Used for interactive input prompts like "You: " or "Menu> ".
+    Rich Console doesn't expose flush parameter directly, so we use
+    end="" and rely on console.file.flush() for immediate visibility.
+    """
+    console.print(prompt, markup=False, highlight=False, end="")
+    if hasattr(console.file, "flush"):
+        console.file.flush()
+
+
 def _indent_width(prefix: str) -> int:
     return len(prefix.expandtabs())
 

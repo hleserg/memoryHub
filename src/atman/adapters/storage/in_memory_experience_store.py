@@ -12,6 +12,7 @@ from atman.core.ports import (
     DateRangeQuery,
     DepthQuery,
     ExperienceQuery,
+    FactRefsContainsQuery,
     SessionExperienceQuery,
     StateStore,
     ValuesTouchedQuery,
@@ -123,6 +124,14 @@ class InMemoryExperienceStore(StateStore):
 
         elif isinstance(query, DateRangeQuery):
             return query.start_date <= exp.timestamp <= query.end_date
+
+        elif isinstance(query, FactRefsContainsQuery):
+            # Fetch key moments and check fact_refs
+            for moment_id in exp.key_moment_ids:
+                moment = self._key_moments.get(moment_id)
+                if moment and query.fact_id in moment.fact_refs:
+                    return True
+            return False
 
         return False
 

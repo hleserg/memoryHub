@@ -21,6 +21,7 @@ from atman.core.ports.state_store import (
     DateRangeQuery,
     DepthQuery,
     ExperienceQuery,
+    FactRefsContainsQuery,
     SessionExperienceQuery,
     StateStore,
     ValuesTouchedQuery,
@@ -119,6 +120,16 @@ class InMemoryStateStore(StateStore):
         elif isinstance(query, DateRangeQuery):
             results = [
                 r for r in results if query.start_date <= r.experience.timestamp <= query.end_date
+            ]
+        elif isinstance(query, FactRefsContainsQuery):
+            results = [
+                r
+                for r in results
+                if any(
+                    query.fact_id in moment.fact_refs
+                    for moment_id in r.experience.key_moment_ids
+                    if (moment := self._key_moments.get(moment_id)) is not None
+                )
             ]
 
         results.sort(key=lambda r: r.experience.timestamp, reverse=True)

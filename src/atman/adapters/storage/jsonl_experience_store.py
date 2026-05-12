@@ -15,6 +15,7 @@ from atman.core.ports import (
     DateRangeQuery,
     DepthQuery,
     ExperienceQuery,
+    FactRefsContainsQuery,
     SessionExperienceQuery,
     StateStore,
     ValuesTouchedQuery,
@@ -245,6 +246,15 @@ class JsonlExperienceStore(StateStore):
 
         elif isinstance(query, DateRangeQuery):
             return query.start_date <= exp.timestamp <= query.end_date
+
+        elif isinstance(query, FactRefsContainsQuery):
+            # Check if any key moment contains the fact_id
+            moments = self._read_all_key_moments()
+            for moment_id in exp.key_moment_ids:
+                moment = moments.get(moment_id)
+                if moment and query.fact_id in moment.fact_refs:
+                    return True
+            return False
 
         return False
 
