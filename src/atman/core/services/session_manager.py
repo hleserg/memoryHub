@@ -449,7 +449,7 @@ class SessionManager:
                     incomplete_coloring=session_result.incomplete_coloring,
                     fact_refs=list(fact_refs_set),
                     close_reason=close_reason,
-                    restart_reason=restart_reason,
+                    restart_reason=restart_reason or "",  # Convert None to empty string
                     agent_recap=agent_recap,
                 )
                 experience_record = ExperienceRecord(experience=experience)
