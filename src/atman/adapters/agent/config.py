@@ -7,6 +7,8 @@ and LLM model settings.
 
 from __future__ import annotations
 
+from typing import Literal
+
 from pydantic import BaseModel, Field
 
 
@@ -107,5 +109,14 @@ class AgentConfig(BaseModel):
             "Enable thinking/reasoning mode for the LLM. "
             "Disabled by default: qwen3 with thinking=True and tool calling "
             "produces broken tool args and returns tool results as JSON text."
+        ),
+    )
+    memory_injection_mode: Literal["system_prompt", "assistant_message", "user_message"] = Field(
+        default="assistant_message",
+        description=(
+            "Where to inject recalled memory context into the agent. "
+            "'assistant_message': as agent's own prior output (recommended — feels like recall). "
+            "'system_prompt': appended to instructions (requires access to system prompt). "
+            "'user_message': as a user-side turn (fallback for restricted host systems)."
         ),
     )

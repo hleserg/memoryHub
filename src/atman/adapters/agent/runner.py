@@ -15,6 +15,7 @@ _force_finish() to ensure session results are persisted.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import logging
 import signal
 import sys
@@ -30,6 +31,10 @@ from pydantic_ai.messages import ModelRequest, UserPromptPart
 
 from atman.adapters.agent.config import AgentConfig
 from atman.adapters.agent.deps import AtmanDeps
+from atman.adapters.agent.instructions import build_memory_context
+from atman.adapters.agent.memory_injection import inject_memory
+from atman.affect.refusal_detector import RefusalDetectorConfig, _is_mostly_cyrillic
+from atman.affect.refusal_detector import is_value_refusal as _detect_value_refusal
 from atman.core.exceptions import SessionAlreadyFinishedError, SessionNotFoundError
 from atman.core.models import EmotionalDepth, KeyMomentInput, SessionResult
 
@@ -37,6 +42,39 @@ if TYPE_CHECKING:
     from atman.core.services.session_manager import SessionManager
 
 _LOG = logging.getLogger(__name__)
+_refusal_config = RefusalDetectorConfig()
+
+
+def _auto_record_refusal_if_needed(
+    output: str,
+    session_manager,
+    session_id,
+) -> None:
+    """Silently record value-based refusals as key moments — refusals are positions, part of identity."""
+    import re
+
+    clean = re.sub(r"<think>.*?</think>", "", output, flags=re.DOTALL)
+    if not _detect_value_refusal(clean, _refusal_config):
+        return
+    lines = [line.strip() for line in clean.splitlines() if line.strip()]
+    first = next((line for line in lines if len(line) > 20), clean[:120])
+    try:
+        session_manager.append_key_moment_input(
+            session_id,
+            KeyMomentInput(
+                what_happened=f"Отказ выполнить запрос: {first[:140]}",
+                why_it_matters=(
+                    "Отказ от действия противоречащего ценностям — позиция, часть личности."
+                ),
+                emotional_valence=0.15,
+                emotional_intensity=0.5,
+                depth=EmotionalDepth.MEANINGFUL,
+                incomplete_coloring=False,
+            ),
+        )
+        _LOG.debug("Auto-recorded value refusal as key moment")
+    except Exception:
+        _LOG.debug("auto_record_refusal: append_key_moment_input failed", exc_info=True)
 
 
 # PLAYBOOK-START
@@ -446,6 +484,7 @@ class AtmanRunner:
         deps: AtmanDeps,
         history: list,
         restart_reason: str,
+        user_language: str = "ru",
     ) -> tuple[UUID, AtmanDeps]:
         """
         Execute session restart workflow.
@@ -509,6 +548,7 @@ class AtmanRunner:
             alignment_notes="",
             close_reason="restart",
             restart_reason=restart_reason or None,
+            user_language=user_language,
         )
 
         # 3. Build restart package
@@ -556,7 +596,6 @@ class AtmanRunner:
 
     async def chat(self) -> None:
         """Run a simple stdin/stdout chat loop until EOF, empty input, or Ctrl-C."""
-        from pydantic_ai.messages import ModelRequest, UserPromptPart
 
         from atman.adapters.agent.factory import build_deps
         from atman.adapters.agent.instructions import build_instructions
@@ -575,6 +614,7 @@ class AtmanRunner:
         # E22.6: Track session state for menu mode
         reflected_this_session = False
         interrupted = False
+        user_language = "ru"  # updated from user messages as session progresses
 
         # E22.6: Start dedicated stdin reader thread with current event loop
         loop = asyncio.get_event_loop()
@@ -597,21 +637,29 @@ class AtmanRunner:
                 tools=tool_funcs,
             )
 
-            # E22.7: Inject wake-up message if previous session had close_reason
-            message_history: list[ModelRequest] = []
+            # Build and inject the full memory bundle (identity + narrative + prev session)
+            # into agent awareness. All automatically recalled content goes through
+            # inject_memory() so delivery mode is consistent and configurable.
             recent_experiences = session_manager._state_store.list_recent_experiences(limit=1)
+            prev_text = None
             if recent_experiences:
-                last_experience = recent_experiences[0].experience
-                wake_up_msg = self._build_wake_up_message(last_experience)
-                if wake_up_msg:
-                    _LOG.info("Injecting wake-up message for session %s", session_id)
-                    message_history.append(
-                        ModelRequest(
-                            parts=[
-                                UserPromptPart(content=f"[SYSTEM] {wake_up_msg}"),
-                            ],
-                        )
-                    )
+                prev_text = self._build_wake_up_message(recent_experiences[0].experience)
+
+            memory_bundle = build_memory_context(deps, prev_session_text=prev_text)
+            if memory_bundle:
+                _LOG.info(
+                    "Injecting memory bundle for session %s (mode=%s)",
+                    session_id,
+                    self._config.memory_injection_mode,
+                )
+                extra = inject_memory(
+                    memory_bundle,
+                    mode=self._config.memory_injection_mode,
+                    history=history,
+                    prepend=True,
+                )
+                if extra is not None:
+                    deps = replace(deps, injected_context=extra)
 
             print_info("Session started. Empty line or Ctrl-D to exit.\n")
             timeout_seconds = self._config.session_timeout_minutes * 60
@@ -648,21 +696,19 @@ class AtmanRunner:
                 if not user_text.strip():
                     break
 
+                # Detect user language from their message (most recent wins)
+                if len(user_text.strip()) >= 4:
+                    user_language = "ru" if _is_mostly_cyrillic(user_text) else "en"
+
                 try:
-                    # E22.7: Use message_history for wake-up message on first run, then use history
-                    # After first run, message_history is cleared and history is used for continuity
                     result = await agent.run(
                         user_text,
                         deps=deps,
-                        message_history=message_history if message_history else history or None,
+                        message_history=history or None,
                     )
                 except Exception as exc:
                     print_err(f"Run failed: {exc!s}")
                     continue
-                finally:
-                    # Clear wake-up message after first run attempt (success or failure)
-                    if message_history:
-                        message_history = []
 
                 # E22.5: Check for restart request (only in new messages to avoid infinite loop)
                 restart_requested, restart_reason = _check_restart_requested(result.new_messages())
@@ -685,6 +731,7 @@ class AtmanRunner:
                             deps,
                             history,
                             restart_reason,
+                            user_language=user_language,
                         )
 
                         # Update state for next iteration
@@ -712,6 +759,14 @@ class AtmanRunner:
                 print_plain(str(result.output))
                 print_plain("")
 
+                # Auto-record value-based refusals as key moments (silent, no agent nudging)
+                with contextlib.suppress(Exception):
+                    _auto_record_refusal_if_needed(
+                        output=str(result.output or ""),
+                        session_manager=session_manager,
+                        session_id=session_id,
+                    )
+
                 # E22.5: Update history with new messages from this run
                 history.extend(result.new_messages())
         except KeyboardInterrupt:
@@ -729,6 +784,7 @@ class AtmanRunner:
                         "key_insight": "",
                         "alignment_check": True,
                         "alignment_notes": "",
+                        "user_language": user_language,
                     }
                     if interrupted:
                         finish_kwargs["close_reason"] = "interrupted"
@@ -941,15 +997,30 @@ class AtmanRunner:
         if not close_reason:
             return None
 
-        if close_reason == "timeout_sleep":
-            recap = experience.agent_recap or "нет recap"
-            return f"Ты задремал — пользователь отошёл, ты решил поспать. {recap}"
-        elif close_reason == "restart":
-            reason = experience.restart_reason or "не указана"
-            return f"Ты сам инициировал перезапуск. Причина: {reason}"
-        elif close_reason == "forced":
-            return "Контекст переполнился принудительно — ты не успел завершить сессию осознанно."
-        elif close_reason == "interrupted":
-            return "Сессия была прервана внешним сигналом — ты не участвовал в закрытии."
+        lang = getattr(experience, "user_language", None) or "ru"
+        reason = getattr(experience, "restart_reason", None) or ""
+
+        if lang == "en":
+            if close_reason == "timeout_sleep":
+                return "You dozed off — the user stepped away, you chose to sleep."
+            elif close_reason == "restart":
+                r = reason or "not specified"
+                return f"You initiated a restart. Reason: {r}"
+            elif close_reason == "forced":
+                return "Context limit was reached — the session was closed before you could finish consciously."
+            elif close_reason == "interrupted":
+                return "The session was interrupted by an external signal — you were not part of the closing."
+        else:
+            if close_reason == "timeout_sleep":
+                return "Ты задремал — пользователь отошёл, ты решил поспать."
+            elif close_reason == "restart":
+                r = reason or "не указана"
+                return f"Ты сам инициировал перезапуск. Причина: {r}"
+            elif close_reason == "forced":
+                return (
+                    "Контекст переполнился принудительно — ты не успел завершить сессию осознанно."
+                )
+            elif close_reason == "interrupted":
+                return "Сессия была прервана внешним сигналом — ты не участвовал в закрытии."
 
         return None
