@@ -30,6 +30,7 @@ from pydantic_ai.messages import ModelRequest, UserPromptPart
 
 from atman.adapters.agent.config import AgentConfig
 from atman.adapters.agent.deps import AtmanDeps
+from atman.adapters.agent.memory_injection import inject_memory
 from atman.affect.refusal_detector import RefusalDetectorConfig, _is_mostly_cyrillic, is_value_refusal as _detect_value_refusal
 from atman.core.exceptions import SessionAlreadyFinishedError, SessionNotFoundError
 from atman.core.models import EmotionalDepth, KeyMomentInput, SessionResult
@@ -633,21 +634,24 @@ class AtmanRunner:
                 tools=tool_funcs,
             )
 
-            # E22.7: Inject wake-up message if previous session had close_reason
-            message_history: list[ModelRequest] = []
+            # Inject previous-session context into agent awareness
+            message_history: list = []
             recent_experiences = session_manager._state_store.list_recent_experiences(limit=1)
             if recent_experiences:
                 last_experience = recent_experiences[0].experience
-                wake_up_msg = self._build_wake_up_message(last_experience)
-                if wake_up_msg:
-                    _LOG.info("Injecting wake-up message for session %s", session_id)
-                    message_history.append(
-                        ModelRequest(
-                            parts=[
-                                UserPromptPart(content=f"[SYSTEM] {wake_up_msg}"),
-                            ],
-                        )
+                wake_up_text = self._build_wake_up_message(last_experience)
+                if wake_up_text:
+                    _LOG.info("Injecting wake-up context for session %s (mode=%s)",
+                              session_id, self._config.memory_injection_mode)
+                    extra = inject_memory(
+                        wake_up_text,
+                        mode=self._config.memory_injection_mode,
+                        history=message_history,
+                        prepend=True,
                     )
+                    if extra is not None:
+                        # system_prompt mode: carry context in deps for build_instructions
+                        deps = replace(deps, injected_context=extra)
 
             print_info("Session started. Empty line or Ctrl-D to exit.\n")
             timeout_seconds = self._config.session_timeout_minutes * 60

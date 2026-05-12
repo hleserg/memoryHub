@@ -67,6 +67,10 @@ class AtmanDeps:
     model_config: ModelConfig | None = None
     """Model configuration for agent (context limits, temperature, etc.) - E22.3"""
 
+    injected_context: str | None = None
+    """Pending memory context for system_prompt injection mode.
+    Set via replace(deps, injected_context=...) and consumed by build_instructions()."""
+
     @classmethod
     def from_config(
         cls,

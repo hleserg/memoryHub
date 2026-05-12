@@ -141,6 +141,11 @@ def build_instructions(deps: AtmanDeps) -> str:
         "Если ничего не тронуло — так и есть. Лучше тишина, чем фальшь.\n"
     )
 
+    # Injected memory context (system_prompt mode) — appended last so it
+    # surfaces as the most recent layer of self-knowledge.
+    if deps.injected_context:
+        parts.append(f"\n## Из прошлого\n{deps.injected_context}\n")
+
     return "".join(parts)
 
 
