@@ -35,6 +35,7 @@ from atman.core.models import (
 from atman.core.ports.state_store import (
     DateRangeQuery,
     DepthQuery,
+    FactRefsContainsQuery,
     SessionExperienceQuery,
     StateStore,
     ValuesTouchedQuery,
@@ -211,6 +212,74 @@ def test_search_by_date_range_excludes_outside(store: StateStore) -> None:
     results = store.search_experiences(q)
     assert len(results) == 1
     assert results[0].experience.id == inside.experience.id
+
+
+def test_search_by_fact_refs(store: StateStore) -> None:
+    """Contract test: FactRefsContainsQuery filters by fact_refs in key_moments."""
+    fact_id = uuid4()
+    other_fact_id = uuid4()
+
+    # Create experience with target fact_id
+    with_fact = ExperienceRecord(
+        experience=SessionExperience(
+            session_id=uuid4(),
+            key_moments=[
+                KeyMoment(
+                    what_happened="used fact",
+                    how_i_felt=FeltSense(
+                        emotional_valence=0.1, emotional_intensity=0.5, depth=EmotionalDepth.SURFACE
+                    ),
+                    why_it_matters="test",
+                    fact_refs=[fact_id],
+                )
+            ],
+        )
+    )
+
+    # Create experience without target fact_id
+    without_fact = ExperienceRecord(
+        experience=SessionExperience(
+            session_id=uuid4(),
+            key_moments=[
+                KeyMoment(
+                    what_happened="no fact",
+                    how_i_felt=FeltSense(
+                        emotional_valence=0.0, emotional_intensity=0.5, depth=EmotionalDepth.SURFACE
+                    ),
+                    why_it_matters="test",
+                )
+            ],
+        )
+    )
+
+    # Create experience with different fact_id
+    with_other_fact = ExperienceRecord(
+        experience=SessionExperience(
+            session_id=uuid4(),
+            key_moments=[
+                KeyMoment(
+                    what_happened="other fact",
+                    how_i_felt=FeltSense(
+                        emotional_valence=0.0, emotional_intensity=0.5, depth=EmotionalDepth.SURFACE
+                    ),
+                    why_it_matters="test",
+                    fact_refs=[other_fact_id],
+                )
+            ],
+        )
+    )
+
+    store.create_experience(with_fact)
+    store.create_experience(without_fact)
+    store.create_experience(with_other_fact)
+
+    # Query by fact_id
+    results = store.search_experiences(FactRefsContainsQuery(fact_id=fact_id))
+
+    # Should return only the experience with matching fact_id
+    assert len(results) == 1
+    assert results[0].experience.id == with_fact.experience.id
+    assert fact_id in results[0].experience.key_moments[0].fact_refs
 
 
 # ---------------------------------------------------------------------------

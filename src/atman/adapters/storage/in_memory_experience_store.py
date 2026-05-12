@@ -12,6 +12,7 @@ from atman.core.ports import (
     DateRangeQuery,
     DepthQuery,
     ExperienceQuery,
+    FactRefsContainsQuery,
     SessionExperienceQuery,
     StateStore,
     ValuesTouchedQuery,
@@ -104,20 +105,19 @@ class InMemoryExperienceStore(StateStore):
             return exp.session_id == query.session_id
 
         elif isinstance(query, ValuesTouchedQuery):
-            query_values_lower = [v.lower() for v in query.values]
             for moment in exp.key_moments:
-                moment_values_lower = [v.lower() for v in moment.values_touched]
-                if any(qv in moment_values_lower for qv in query_values_lower):
+                if any(qv in moment.values_touched for qv in query.values):
                     return True
             return False
 
         elif isinstance(query, DepthQuery):
-            return any(
-                moment.how_i_felt.depth.value == query.depth.lower() for moment in exp.key_moments
-            )
+            return any(moment.how_i_felt.depth == query.depth for moment in exp.key_moments)
 
         elif isinstance(query, DateRangeQuery):
             return query.start_date <= exp.timestamp <= query.end_date
+
+        elif isinstance(query, FactRefsContainsQuery):
+            return any(query.fact_id in moment.fact_refs for moment in exp.key_moments)
 
         return False
 

@@ -59,6 +59,13 @@ class DateRangeQuery(ExperienceQuery):
         self.end_date = end_date
 
 
+class FactRefsContainsQuery(ExperienceQuery):
+    """Query experiences that reference a specific fact."""
+
+    def __init__(self, fact_id: UUID):
+        self.fact_id = fact_id
+
+
 class StateStore(ABC):
     """
     Interface for experience state storage.
@@ -149,6 +156,7 @@ class StateStore(ABC):
         - values_touched (ValuesTouchedQuery)
         - depth (DepthQuery)
         - date_range (DateRangeQuery)
+        - fact_refs_contains (FactRefsContainsQuery)
 
         Args:
             query: Query object specifying search criteria
