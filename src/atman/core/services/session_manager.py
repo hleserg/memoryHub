@@ -18,6 +18,7 @@ Critical design principle:
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import threading
 from pathlib import Path
@@ -86,6 +87,7 @@ class SessionManager:
         clock: ClockPort | None = None,
         affect_workspace: Path | None = None,
         affect_config: AffectDetectorConfig | None = None,
+        workspace: Path | None = None,
     ) -> None:
         """
         Initialize Session Manager.
@@ -96,12 +98,14 @@ class SessionManager:
             clock: Clock for reproducible timestamps (defaults to SystemClock)
             affect_workspace: Optional workspace directory for affect baseline JSONL
             affect_config: Optional :class:`AffectDetectorConfig` (requires ``affect_workspace``)
+            workspace: Optional workspace directory for session journals
         """
         self._state_store = state_store
         self._max_active_sessions = max_active_sessions
         self._clock = clock or SystemClock()
         self._active_sessions: dict[UUID, SessionResult] = {}
         self._lock = threading.Lock()
+        self._workspace = workspace
         self._affect_detector: AffectDetector | None = None
         if affect_workspace is not None and affect_config is not None:
             from atman.affect.detector import AffectDetector
@@ -117,6 +121,118 @@ class SessionManager:
         """Optional behavioural detector wired to :meth:`append_key_moment`."""
         return self._affect_detector
 
+    def _journal_path(self, agent_id: UUID, session_id: UUID) -> Path | None:
+        """Return journal path for a session, or None if workspace not configured."""
+        if self._workspace is None:
+            return None
+        sessions_dir = self._workspace / str(agent_id) / "sessions"
+        sessions_dir.mkdir(parents=True, exist_ok=True)
+        return sessions_dir / f"active_{session_id}.jsonl"
+
+    def _write_journal_entry(
+        self, agent_id: UUID, session_id: UUID, entry: dict[str, object]
+    ) -> None:
+        """Append journal entry to session journal (if workspace configured)."""
+        journal_path = self._journal_path(agent_id, session_id)
+        if journal_path is None:
+            return
+        try:
+            with journal_path.open("a", encoding="utf-8") as f:
+                json.dump(entry, f, default=str)
+                f.write("\n")
+        except (OSError, ValueError) as exc:
+            _LOG.warning("Failed to write journal entry for session %s: %s", session_id, exc)
+
+    def _recover_orphaned_sessions(self, agent_id: UUID) -> None:
+        """
+        Scan for orphaned session journals and convert to SessionExperience.
+
+        Orphaned journals are from interrupted sessions that didn't complete finish_session.
+        Each orphan is converted to a SessionExperience with close_reason="interrupted".
+        """
+        if self._workspace is None:
+            return
+        sessions_dir = self._workspace / str(agent_id) / "sessions"
+        if not sessions_dir.exists():
+            return
+
+        for journal_file in sessions_dir.glob("active_*.jsonl"):
+            try:
+                # Extract session_id from filename: active_{session_id}.jsonl
+                session_id_str = journal_file.stem.replace("active_", "")
+                session_id = UUID(session_id_str)
+
+                # Compute deterministic experience_id
+                experience_id = deterministic_session_experience_id(session_id)
+
+                # Check if experience already exists in StateStore
+                existing_exp = self._state_store.get_experience(experience_id)
+                if existing_exp is not None:
+                    # Already saved - journal is stale, just delete it
+                    journal_file.unlink()
+                    _LOG.info("Deleted stale journal for session %s", session_id)
+                    continue
+
+                # Parse journal to extract key moments and facts
+                key_moment_ids: list[UUID] = []
+                fact_refs_set: set[UUID] = set()
+
+                with journal_file.open("r", encoding="utf-8") as f:
+                    for line in f:
+                        line = line.strip()
+                        if not line:
+                            continue
+                        try:
+                            entry = json.loads(line)
+                            if entry.get("type") == "key_moment":
+                                moment_id = UUID(entry["moment_id"])
+                                key_moment_ids.append(moment_id)
+                                # Extract fact_refs if present
+                                for fact_id_str in entry.get("fact_refs", []):
+                                    fact_refs_set.add(UUID(fact_id_str))
+                            elif entry.get("type") == "facts_read":
+                                for fact_id_str in entry.get("fact_ids", []):
+                                    fact_refs_set.add(UUID(fact_id_str))
+                        except (json.JSONDecodeError, KeyError, ValueError) as exc:
+                            _LOG.warning(
+                                "Skipping malformed journal line in %s: %s", journal_file, exc
+                            )
+                            continue
+
+                # If we have key moments, create SessionExperience
+                if key_moment_ids:
+                    experience = SessionExperience(
+                        id=experience_id,
+                        session_id=session_id,
+                        timestamp=self._clock.now(),
+                        key_moment_ids=key_moment_ids,
+                        recorded_by="session_manager_recovery",
+                        identity_snapshot_id=None,  # Unknown for orphaned sessions
+                        importance=0.5,
+                        salience=0.5,
+                        avg_emotional_intensity=0.5,
+                        has_profound_moment=False,
+                        incomplete_coloring=True,  # Orphaned sessions didn't complete proper coloring
+                        fact_refs=list(fact_refs_set),
+                        close_reason="interrupted",
+                        restart_reason="",
+                        agent_recap=None,
+                    )
+                    experience_record = ExperienceRecord(experience=experience)
+                    self._state_store.create_experience(experience_record)
+                    _LOG.info(
+                        "Recovered orphaned session %s with %d key moments",
+                        session_id,
+                        len(key_moment_ids),
+                    )
+
+                # Delete journal after successful recovery (or if no key moments)
+                journal_file.unlink()
+
+            except (ValueError, OSError) as exc:
+                _LOG.error("Failed to recover orphaned journal %s: %s", journal_file, exc)
+                continue
+
     def start_session(self, agent_id: UUID) -> SessionContext:
         """
         Start a new session with personality context.
@@ -128,6 +244,9 @@ class SessionManager:
         4. Emotional baseline from identity
         5. Last eigenstate (if exists)
         6. Recent reflections summary (placeholder for now)
+
+        Also scans for orphaned session journals (from interrupted sessions)
+        and converts them to SessionExperience with close_reason="interrupted".
 
         The identity snapshot establishes provenance chain: later Reflection/Identity
         can link session experience to the specific identity state that was active
@@ -143,6 +262,9 @@ class SessionManager:
             ValueError: If identity or narrative not found
             TooManyActiveSessionsError: If active session limit is exceeded
         """
+        # Recover orphaned sessions before starting new one
+        self._recover_orphaned_sessions(agent_id)
+
         identity = self._state_store.load_identity(agent_id)
         if identity is None:
             raise ValueError(f"Identity not found for agent {agent_id}")
@@ -294,6 +416,23 @@ class SessionManager:
 
             session_result.key_moments.append(key_moment)
 
+            # Write journal entry (outside lock to avoid blocking)
+            agent_id = session_result.identity_id
+
+        # Write to journal after releasing lock
+        if agent_id is not None:
+            self._write_journal_entry(
+                agent_id,
+                session_id,
+                {
+                    "type": "key_moment",
+                    "moment_id": str(key_moment.id),
+                    "timestamp": self._clock.now().isoformat(),
+                    "what_happened": key_moment.what_happened,
+                    "fact_refs": [str(fid) for fid in key_moment.fact_refs],
+                },
+            )
+
     def record_key_moment(self, session_id: UUID, moment: KeyMomentInput) -> None:
         """
         Removed — use :class:`~atman.affect.detector.AffectDetector` or
@@ -330,6 +469,21 @@ class SessionManager:
 
             # Store fact IDs in the SessionResult PrivateAttr for aggregation at finish.
             session_result._facts_read.update(fact_ids)
+
+            # Get agent_id for journal
+            agent_id = session_result.identity_id
+
+        # Write to journal after releasing lock
+        if agent_id is not None and fact_ids:
+            self._write_journal_entry(
+                agent_id,
+                session_id,
+                {
+                    "type": "facts_read",
+                    "timestamp": self._clock.now().isoformat(),
+                    "fact_ids": [str(fid) for fid in fact_ids],
+                },
+            )
 
     def finish_session(
         self,
@@ -501,6 +655,16 @@ class SessionManager:
         # Remove from active sessions only after successful persistence
         with self._lock:
             self._active_sessions.pop(session_id, None)
+
+        # Delete journal after successful persistence
+        if session_result.identity_id is not None:
+            journal_path = self._journal_path(session_result.identity_id, session_id)
+            if journal_path is not None and journal_path.exists():
+                try:
+                    journal_path.unlink()
+                    _LOG.debug("Deleted journal for completed session %s", session_id)
+                except OSError as exc:
+                    _LOG.warning("Failed to delete journal for session %s: %s", session_id, exc)
 
         return session_result.model_copy(deep=True)
 
