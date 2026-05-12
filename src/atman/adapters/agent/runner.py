@@ -241,6 +241,7 @@ def _force_finish(
             key_insight=f"Session {close_reason}",
             alignment_check=True,
             alignment_notes="",
+            close_reason=close_reason,
         )
         _LOG.info("Session %s force-finished successfully", session_id)
 
@@ -319,12 +320,13 @@ class AtmanRunner:
                         deps=deps,
                         message_history=message_history if message_history else None,
                     )
-                    # Only use history once for wake-up message
-                    if message_history:
-                        message_history = []
                 except Exception as exc:
                     print_err(f"Run failed: {exc!s}")
                     continue
+                finally:
+                    # Clear wake-up message after first run attempt (success or failure)
+                    if message_history:
+                        message_history = []
                 print_plain(str(result.output))
                 print_plain("")
         except KeyboardInterrupt:

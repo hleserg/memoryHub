@@ -550,3 +550,27 @@ def test_build_wake_up_message_no_close_reason(
     )
     msg = runner._build_wake_up_message(last_exp)
     assert msg is None
+
+
+def test_force_finish_persists_close_reason(
+    session_manager: SessionManager,
+    identity_with_narrative: Identity,
+) -> None:
+    """Test that _force_finish persists close_reason to SessionExperience."""
+    ctx = session_manager.start_session(identity_with_narrative.id)
+    moment = KeyMomentInput(
+        what_happened="Some work",
+        emotional_valence=0.0,
+        emotional_intensity=0.4,
+        depth=EmotionalDepth.SURFACE,
+        why_it_matters="Task in progress",
+    )
+    session_manager.append_key_moment_input(ctx.session_id, moment)
+
+    # Force finish with specific close_reason
+    _force_finish(session_manager, ctx.session_id, close_reason="interrupted")
+
+    # Verify SessionExperience has the close_reason
+    experiences = session_manager._state_store.list_recent_experiences(limit=1)
+    assert len(experiences) == 1
+    assert experiences[0].experience.close_reason == "interrupted"
