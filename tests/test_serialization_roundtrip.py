@@ -46,22 +46,25 @@ from atman.core.services import IdentityService
 
 
 def _make_experience_record() -> ExperienceRecord:
+    # Create key moment with ID first
+    moment1 = KeyMoment(
+        what_happened="round-trip test",
+        how_i_felt=FeltSense(
+            emotional_valence=0.6,
+            emotional_intensity=0.7,
+            depth=EmotionalDepth.MEANINGFUL,
+        ),
+        why_it_matters="coverage",
+        values_touched=["honesty", "competence"],
+    )
+    
     return ExperienceRecord(
         experience=SessionExperience(
             session_id=uuid4(),
             timestamp=datetime.now(UTC),
-            key_moments=[
-                KeyMoment(
-                    what_happened="round-trip test",
-                    how_i_felt=FeltSense(
-                        emotional_valence=0.6,
-                        emotional_intensity=0.7,
-                        depth=EmotionalDepth.MEANINGFUL,
-                    ),
-                    why_it_matters="coverage",
-                    values_touched=["honesty", "competence"],
-                )
-            ],
+            key_moment_ids=[moment1.id],
+            avg_emotional_intensity=0.7,
+            has_profound_moment=False,
         )
     )
 
@@ -83,9 +86,9 @@ def test_experience_record_json_roundtrip() -> None:
 
     assert restored.experience.id == record.experience.id
     assert restored.experience.session_id == record.experience.session_id
-    assert restored.experience.key_moments[0].what_happened == "round-trip test"
-    assert restored.experience.key_moments[0].how_i_felt.depth == EmotionalDepth.MEANINGFUL
-    assert set(restored.experience.key_moments[0].values_touched) == {"honesty", "competence"}
+    assert len(restored.experience.key_moment_ids) == 1
+    assert restored.experience.avg_emotional_intensity == 0.7
+    assert restored.experience.has_profound_moment is False
 
 
 def test_experience_record_with_reframing_note_roundtrip() -> None:
@@ -182,7 +185,7 @@ def test_experience_persists_across_store_restart(tmp_path: Path) -> None:
 
     assert loaded is not None
     assert loaded.experience.id == record.experience.id
-    assert loaded.experience.key_moments[0].what_happened == "round-trip test"
+    assert len(loaded.experience.key_moment_ids) == 1
 
 
 def test_identity_persists_across_store_restart(tmp_path: Path) -> None:
@@ -325,22 +328,9 @@ _MINIMAL_EXPERIENCE_JSON = json.dumps(
             "id": "11111111-1111-4111-8111-111111111111",
             "session_id": "22222222-2222-4222-8222-222222222222",
             "timestamp": "2025-01-01T12:00:00+00:00",
-            "key_moments": [
-                {
-                    "id": "33333333-3333-4333-8333-333333333333",
-                    "what_happened": "schema stability test",
-                    "how_i_felt": {
-                        "emotional_valence": 0.5,
-                        "emotional_intensity": 0.5,
-                        "depth": "surface",
-                        "physical_sensation": None,
-                        "cognitive_state": None,
-                    },
-                    "why_it_matters": "stability",
-                    "values_touched": ["honesty"],
-                    "reframing_notes": [],
-                }
-            ],
+            "key_moment_ids": ["33333333-3333-4333-8333-333333333333"],
+            "avg_emotional_intensity": 0.5,
+            "has_profound_moment": False,
             "reframing_notes": [],
             "salience": 1.0,
             "access_count": 0,
@@ -353,11 +343,10 @@ def test_known_good_experience_json_still_deserializes() -> None:
     """If this fails, a model field was renamed or removed — check migration path."""
     record = ExperienceRecord.model_validate_json(_MINIMAL_EXPERIENCE_JSON)
     assert str(record.experience.id) == "11111111-1111-4111-8111-111111111111"
-    assert record.experience.key_moments[0].what_happened == "schema stability test"
-    # Pre-E24 JSON omits ``fact_refs``; new field defaults to ``[]`` so old
-    # on-disk experiences continue to load without migration.
+    assert len(record.experience.key_moment_ids) == 1
+    assert str(record.experience.key_moment_ids[0]) == "33333333-3333-4333-8333-333333333333"
+    # Field defaults
     assert record.experience.fact_refs == []
-    assert record.experience.key_moments[0].fact_refs == []
 
 
 # ---------------------------------------------------------------------------
@@ -446,23 +435,24 @@ def test_fact_record_persists_across_file_backend_restart(tmp_path: Path) -> Non
 def test_session_experience_with_fact_refs_json_roundtrip() -> None:
     """E24.2: KeyMoment.fact_refs and SessionExperience.fact_refs round-trip."""
     fact_id = uuid4()
+    moment = KeyMoment(
+        what_happened="used a fact",
+        how_i_felt=FeltSense(
+            emotional_valence=0.1,
+            emotional_intensity=0.2,
+            depth=EmotionalDepth.SURFACE,
+        ),
+        why_it_matters="context",
+        values_touched=["honesty"],
+        fact_refs=[fact_id],
+    )
     record = ExperienceRecord(
         experience=SessionExperience(
             session_id=uuid4(),
             timestamp=datetime.now(UTC),
-            key_moments=[
-                KeyMoment(
-                    what_happened="used a fact",
-                    how_i_felt=FeltSense(
-                        emotional_valence=0.1,
-                        emotional_intensity=0.2,
-                        depth=EmotionalDepth.SURFACE,
-                    ),
-                    why_it_matters="context",
-                    values_touched=["honesty"],
-                    fact_refs=[fact_id],
-                )
-            ],
+            key_moment_ids=[moment.id],
+            avg_emotional_intensity=0.2,
+            has_profound_moment=False,
             fact_refs=[fact_id],
         )
     )
@@ -470,4 +460,4 @@ def test_session_experience_with_fact_refs_json_roundtrip() -> None:
     restored = ExperienceRecord.model_validate_json(j)
 
     assert restored.experience.fact_refs == [fact_id]
-    assert restored.experience.key_moments[0].fact_refs == [fact_id]
+    assert len(restored.experience.key_moment_ids) == 1
