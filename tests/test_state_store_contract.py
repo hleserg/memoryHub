@@ -17,7 +17,12 @@ from uuid import uuid4
 
 import pytest
 
-from atman.adapters.storage import FileStateStore, InMemoryStateStore
+from atman.adapters.storage import (
+    FileStateStore,
+    InMemoryExperienceStore,
+    InMemoryStateStore,
+    JsonlExperienceStore,
+)
 from atman.core.models import (
     Eigenstate,
     EmotionalDepth,
@@ -470,3 +475,98 @@ def test_archive_narrative_and_list(store: StateStore) -> None:
     assert len(archived) >= 1
     assert archived[0][0].id == narrative.id
     assert "integration test archive" in archived[0][1]
+
+
+# ---------------------------------------------------------------------------
+# KeyMoment operations (E21.3)
+# ---------------------------------------------------------------------------
+
+
+def test_create_and_get_key_moment(store: StateStore) -> None:
+    """Test creating and retrieving a key moment."""
+    km = KeyMoment(
+        what_happened="test event",
+        how_i_felt=FeltSense(
+            emotional_valence=0.5,
+            emotional_intensity=0.7,
+            depth=EmotionalDepth.MEANINGFUL,
+        ),
+        why_it_matters="test reason",
+    )
+    stored = store.create_key_moment(km)
+    assert stored.id == km.id
+
+    retrieved = store.get_key_moment(km.id)
+    assert retrieved.id == km.id
+    assert retrieved.what_happened == "test event"
+    assert retrieved.why_it_matters == "test reason"
+
+
+def test_create_key_moment_duplicate_raises(store: StateStore) -> None:
+    """Test that creating duplicate key moment raises ValueError."""
+    km = KeyMoment(
+        what_happened="test",
+        how_i_felt=FeltSense(
+            emotional_valence=0.0,
+            emotional_intensity=0.5,
+            depth=EmotionalDepth.SURFACE,
+        ),
+        why_it_matters="reason",
+    )
+    store.create_key_moment(km)
+
+    with pytest.raises(ValueError, match="already exists"):
+        store.create_key_moment(km)
+
+
+def test_get_key_moment_unknown_raises(store: StateStore) -> None:
+    """Test that getting unknown key moment raises KeyError."""
+    with pytest.raises(KeyError):
+        store.get_key_moment(uuid4())
+
+
+def test_list_key_moments_empty(store: StateStore) -> None:
+    """Test listing key moments when none exist."""
+    moments = store.list_key_moments()
+    assert moments == []
+
+
+def test_list_key_moments_returns_all(store: StateStore) -> None:
+    """Test listing all key moments."""
+    km1 = KeyMoment(
+        what_happened="first",
+        how_i_felt=FeltSense(
+            emotional_valence=0.1,
+            emotional_intensity=0.5,
+            depth=EmotionalDepth.SURFACE,
+        ),
+        why_it_matters="reason1",
+    )
+    km2 = KeyMoment(
+        what_happened="second",
+        how_i_felt=FeltSense(
+            emotional_valence=0.2,
+            emotional_intensity=0.6,
+            depth=EmotionalDepth.MEANINGFUL,
+        ),
+        why_it_matters="reason2",
+    )
+
+    store.create_key_moment(km1)
+    store.create_key_moment(km2)
+
+    moments = store.list_key_moments()
+    assert len(moments) == 2
+    ids = {m.id for m in moments}
+    assert km1.id in ids
+    assert km2.id in ids
+
+
+def test_list_key_moments_with_session_id_raises_not_implemented(store: StateStore) -> None:
+    """Test that filtering by session_id raises NotImplementedError."""
+    # Skip for stores that don't support KeyMoment operations
+    if isinstance(store, InMemoryExperienceStore | JsonlExperienceStore):
+        pytest.skip("Store doesn't support KeyMoment operations")
+
+    with pytest.raises(NotImplementedError, match="session_id"):
+        store.list_key_moments(session_id=uuid4())

@@ -105,6 +105,9 @@ class KeyMoment(BaseModel):
     Immutable after creation - no methods to modify.
     """
 
+    # IDENTITY
+    id: UUID = Field(default_factory=uuid4, description="Unique identifier for this key moment")
+
     # WHAT HAPPENED
     what_happened: str = Field(min_length=1, description="Description of what actually happened")
     when: datetime = Field(

@@ -243,3 +243,17 @@ class JsonlExperienceStore(StateStore):
     def load_latest_eigenstate(self, session_id=None, identity_id=None):  # type: ignore
         """Not implemented - use FileStateStore for eigenstate operations."""
         raise NotImplementedError("Eigenstate operations not supported in JsonlExperienceStore")
+
+    # KeyMoment operations (not implemented - for compatibility)
+
+    def create_key_moment(self, key_moment):  # type: ignore
+        """Not implemented - use FileStateStore for key moment operations."""
+        raise NotImplementedError("KeyMoment operations not supported in JsonlExperienceStore")
+
+    def list_key_moments(self, session_id=None):  # type: ignore
+        """Not implemented - use FileStateStore for key moment operations."""
+        raise NotImplementedError("KeyMoment operations not supported in JsonlExperienceStore")
+
+    def get_key_moment(self, key_moment_id):  # type: ignore
+        """Not implemented - use FileStateStore for key moment operations."""
+        raise NotImplementedError("KeyMoment operations not supported in JsonlExperienceStore")

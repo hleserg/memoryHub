@@ -21,7 +21,7 @@ All paths are absolute relative to the repository root.
 | File | Purpose | Public classes |
 |------|---------|----------------|
 | `core/models/fact.py` | Verifiable facts and links between them | `FactRecord`, `Relation` |
-| `core/models/experience.py` | Lived experience, key moments, reframing, session closure metadata (E22.7: `close_reason`, `restart_reason`, `agent_recap`) | `SessionExperience`, `KeyMoment`, `FeltSense`, `ContextHalo`, `ReframingNote`, `EmotionalDepth`, `ReframingNoteAppendResult` |
+| `core/models/experience.py` | Lived experience, key moments (with `id: UUID` for independent storage), reframing, session closure metadata (E22.7: `close_reason`, `restart_reason`, `agent_recap`) | `SessionExperience`, `KeyMoment`, `FeltSense`, `ContextHalo`, `ReframingNote`, `EmotionalDepth`, `ReframingNoteAppendResult` |
 | `core/models/identity.py` | Agent's self-representation (values, habits, principles, goals, open questions) | `Identity`, `CoreValue`, `Habit`, `Principle`, `Goal`, `OpenQuestion`, `IdentitySnapshot`, `HelpfulnessLevel` |
 | `core/models/narrative.py` | Self-narrative document (CORE/RECENT/THREADS) and eigenstate | `NarrativeDocument`, `NarrativeLayer`, `NarrativeThread`, `Eigenstate` (`schema_version`, optional `identity_id`), `LayerType` |
 | `core/models/session.py` | Session runtime models: context, events, key moment input, result, active listing | `SessionContext`, `SessionEvent`, `KeyMomentInput`, `SessionResult`, `ActiveSessionSummary` |
@@ -34,7 +34,7 @@ All paths are absolute relative to the repository root.
 |------|---------|-----------|
 | `core/ports/memory_backend.py` | Factual memory interface | `FactualMemory` (ABC) |
 | `core/ports/clock.py` | Domain clock for reproducibility | `ClockPort` (Protocol) |
-| `core/ports/state_store.py` | Storage for experience/identity/narrative | `StateStore`, `ExperienceQuery`, `SessionExperienceQuery`, `ValuesTouchedQuery`, `DepthQuery`, `DateRangeQuery`, `FactRefsContainsQuery` |
+| `core/ports/state_store.py` | Storage for experience/identity/narrative/eigenstate/key moments | `StateStore` (with `create_key_moment`, `list_key_moments`, `get_key_moment`), `ExperienceQuery`, `SessionExperienceQuery`, `ValuesTouchedQuery`, `DepthQuery`, `DateRangeQuery`, `FactRefsContainsQuery` |
 | `core/ports/reflection.py` | Reflection Engine dependencies; `ReflectionModel` returns structured DTOs (#146) | `ExperienceRepository`, `IdentityRepository`, `NarrativeRepository`, `ReflectionModel`, `PatternStore`, `ReflectionEventStore`, `HealthAssessmentStore`, `ReflectionEventPersistenceObserver`, `NarrativeWriteAuditPort` |
 | `core/ports/embedding.py` (E24.6) | Text embedding generation for semantic similarity | `EmbeddingPort` (Protocol) |
 | `core/ports/memory_middleware.py` (E24) | Memory surfacing context wrapping | `MemoryMiddlewarePort` (Protocol), `MemoryContext` |
@@ -89,9 +89,10 @@ All paths are absolute relative to the repository root.
 | `adapters/memory/bm25_embedding.py` (`BM25EmbeddingAdapter`) | `EmbeddingPort` | local BM25 sparse vectors via fixed-dimension feature hashing (Unicode-aware tokenizer); corpus stats from `embed_batch`/`embed_with_corpus` are reused by later `embed` calls |
 | `adapters/memory/ollama_embedding.py` (`OllamaEmbeddingAdapter`) | `EmbeddingPort` | Ollama HTTP `/api/embeddings`; configurable host/model/timeout |
 | `adapters/memory/in_memory_usage_log.py` (`InMemoryUsageLog`) | `MemoryUsageLog` | in-memory append-only list with filtering by item/usage_type/time (no eviction) |
-| `adapters/storage/in_memory_experience_store.py` (`InMemoryExperienceStore`) | `StateStore` | in-memory |
-| `adapters/storage/jsonl_experience_store.py` (`JsonlExperienceStore`) | `StateStore` | JSONL for experience |
-| `adapters/storage/file_state_store.py` (`FileStateStore`) | `StateStore` | JSON files (experience + identity + narrative + eigenstate) |
+| `adapters/storage/in_memory_experience_store.py` (`InMemoryExperienceStore`) | `StateStore` | in-memory (partial: experience only; KeyMoment/Identity/Narrative ops raise `NotImplementedError`) |
+| `adapters/storage/jsonl_experience_store.py` (`JsonlExperienceStore`) | `StateStore` | JSONL for experience (partial: experience only; KeyMoment/Identity/Narrative ops raise `NotImplementedError`) |
+| `adapters/storage/in_memory_state_store.py` (`InMemoryStateStore`) | `StateStore` | full in-memory implementation with deep copies (experience + identity + narrative + eigenstate + key moments dict) |
+| `adapters/storage/file_state_store.py` (`FileStateStore`) | `StateStore` | JSON files (experience + identity + narrative + eigenstate) + `key_moments.jsonl` (append-only JSONL with corruption recovery) |
 | `adapters/storage/in_memory_reflection_store.py` | `PatternStore`, `ReflectionEventStore`, `HealthAssessmentStore` | reflection output stores |
 | **`adapters/storage/in_memory_postgres_reflection_store.py`** (`InMemoryReflectionStore`) | **`ReflectionStore`** | **E27**: in-memory with BIGSERIAL + RLS simulation |
 | `adapters/storage/reflection_persistence_helper.py` | — | **E27**: helper functions for persisting reflections (`persist_micro_reflection`, `persist_daily_reflection`, `persist_deep_reflection`) |

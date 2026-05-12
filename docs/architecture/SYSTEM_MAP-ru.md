@@ -24,7 +24,7 @@
 | Файл | Назначение | Публичные классы |
 |------|------------|------------------|
 | `core/models/fact.py` | Верифицируемые факты и связи между ними | `FactRecord`, `Relation` |
-| `core/models/experience.py` | Прожитый опыт, ключевые моменты, переосмысление, метаданные завершения сессии (E22.7: `close_reason`, `restart_reason`, `agent_recap`) | `SessionExperience`, `KeyMoment`, `FeltSense`, `ContextHalo`, `ReframingNote`, `EmotionalDepth`, `ReframingNoteAppendResult` |
+| `core/models/experience.py` | Прожитый опыт, ключевые моменты (с `id: UUID` для независимого хранения), переосмысление, метаданные завершения сессии (E22.7: `close_reason`, `restart_reason`, `agent_recap`) | `SessionExperience`, `KeyMoment`, `FeltSense`, `ContextHalo`, `ReframingNote`, `EmotionalDepth`, `ReframingNoteAppendResult` |
 | `core/models/identity.py` | Самопредставление агента (ценности, привычки, принципы, цели, открытые вопросы) | `Identity`, `CoreValue`, `Habit`, `Principle`, `Goal`, `OpenQuestion`, `IdentitySnapshot`, `HelpfulnessLevel` |
 | `core/models/narrative.py` | Документ самонарратива (CORE/RECENT/THREADS) и собственное состояние | `NarrativeDocument`, `NarrativeLayer`, `NarrativeThread`, `Eigenstate` (`schema_version`, опциональный `identity_id`), `LayerType` |
 | `core/models/session.py` | Модели сессионного runtime: контекст, события, входящий key moment, результат, сводка активных | `SessionContext`, `SessionEvent`, `KeyMomentInput`, `SessionResult`, `ActiveSessionSummary` |
@@ -37,7 +37,7 @@
 |------|------------|-----------|
 | `core/ports/memory_backend.py` | Интерфейс факт-памяти | `FactualMemory` (ABC) |
 | `core/ports/clock.py` | Доменные часы для воспроизводимости | `ClockPort` (Protocol) |
-| `core/ports/state_store.py` | Хранилище опыта/identity/нарратива | `StateStore`, `ExperienceQuery`, `SessionExperienceQuery`, `ValuesTouchedQuery`, `DepthQuery`, `DateRangeQuery`, `FactRefsContainsQuery` |
+| `core/ports/state_store.py` | Хранилище опыта/identity/нарратива/eigenstate/ключевых моментов | `StateStore` (с `create_key_moment`, `list_key_moments`, `get_key_moment`), `ExperienceQuery`, `SessionExperienceQuery`, `ValuesTouchedQuery`, `DepthQuery`, `DateRangeQuery`, `FactRefsContainsQuery` |
 | `core/ports/reflection.py` | Зависимости Reflection Engine; `ReflectionModel` возвращает DTO (#146) | `ExperienceRepository`, `IdentityRepository`, `NarrativeRepository`, `ReflectionModel`, `PatternStore`, `ReflectionEventStore`, `HealthAssessmentStore`, `ReflectionEventPersistenceObserver`, `NarrativeWriteAuditPort` |
 | **`core/ports/reflection_store.py`** | **E27**: Интерфейс таблицы PostgreSQL `reflections` | `ReflectionStore` (ABC): `add`, `get`, `list_by_session`, `list_recent`, `list_by_level`, `list_by_experience` |
 | `core/ports/embedding.py` | Интерфейс эмбеддингов для семантического поиска | `EmbeddingPort` (ABC) — `embed()`, `embed_batch()`, `dimension()`, `model_name()` |
@@ -93,9 +93,10 @@
 | `adapters/memory/bm25_embedding.py` (`BM25EmbeddingAdapter`) | `EmbeddingPort` | разреженные лексические BM25 эмбеддинги |
 | `adapters/memory/ollama_embedding.py` (`OllamaEmbeddingAdapter`) | `EmbeddingPort` | Ollama API эмбеддинги; по умолчанию `qwen3-embedding:4b` (2560-мерные); `model_name()` возвращает настроенную модель; доступен `health_check()` |
 | `adapters/memory/in_memory_usage_log.py` (`InMemoryUsageLog`) | `MemoryUsageLog` | in-memory трекинг использования |
-| `adapters/storage/in_memory_experience_store.py` (`InMemoryExperienceStore`) | `StateStore` | в памяти |
-| `adapters/storage/jsonl_experience_store.py` (`JsonlExperienceStore`) | `StateStore` | JSONL для опыта |
-| `adapters/storage/file_state_store.py` (`FileStateStore`) | `StateStore` | JSON-файлы (опыт + identity + нарратив + eigenstate) |
+| `adapters/storage/in_memory_experience_store.py` (`InMemoryExperienceStore`) | `StateStore` | в памяти (частичная: только опыт; операции KeyMoment/Identity/Narrative выбрасывают `NotImplementedError`) |
+| `adapters/storage/jsonl_experience_store.py` (`JsonlExperienceStore`) | `StateStore` | JSONL для опыта (частичная: только опыт; операции KeyMoment/Identity/Narrative выбрасывают `NotImplementedError`) |
+| `adapters/storage/in_memory_state_store.py` (`InMemoryStateStore`) | `StateStore` | полная реализация в памяти с deep copies (опыт + identity + нарратив + eigenstate + словарь ключевых моментов) |
+| `adapters/storage/file_state_store.py` (`FileStateStore`) | `StateStore` | JSON-файлы (опыт + identity + нарратив + eigenstate) + `key_moments.jsonl` (append-only JSONL с восстановлением после повреждений) |
 | `adapters/storage/in_memory_reflection_store.py` | `PatternStore`, `ReflectionEventStore`, `HealthAssessmentStore` | хранилища выводов рефлексии |
 | **`adapters/storage/in_memory_postgres_reflection_store.py`** (`InMemoryReflectionStore`) | **`ReflectionStore`** | **E27**: в памяти с симуляцией BIGSERIAL + RLS |
 | `adapters/storage/reflection_persistence_helper.py` | — | **E27**: функции-помощники для персистенса рефлексий (`persist_micro_reflection`, `persist_daily_reflection`, `persist_deep_reflection`) |

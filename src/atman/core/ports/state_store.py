@@ -18,6 +18,7 @@ from atman.core.models import (
     ExperienceRecord,
     Identity,
     IdentitySnapshot,
+    KeyMoment,
     NarrativeDocument,
     ReframingNote,
 )
@@ -333,5 +334,52 @@ class StateStore(ABC):
 
         Returns:
             Eigenstate | None: Latest eigenstate if exists, None otherwise
+        """
+        pass
+
+    # KeyMoment operations
+
+    @abstractmethod
+    def create_key_moment(self, key_moment: "KeyMoment") -> "KeyMoment":
+        """
+        Create a new key moment in storage.
+
+        Args:
+            key_moment: KeyMoment to store
+
+        Returns:
+            KeyMoment: The stored key moment
+
+        Raises:
+            ValueError: If the key moment is invalid or already exists
+        """
+        pass
+
+    @abstractmethod
+    def list_key_moments(self, session_id: UUID | None = None) -> list["KeyMoment"]:
+        """
+        List key moments, optionally filtered by session_id.
+
+        Args:
+            session_id: If provided, return only key moments from this session
+
+        Returns:
+            list[KeyMoment]: List of key moments
+        """
+        pass
+
+    @abstractmethod
+    def get_key_moment(self, key_moment_id: UUID) -> "KeyMoment":
+        """
+        Retrieve a key moment by its ID.
+
+        Args:
+            key_moment_id: UUID of the key moment
+
+        Returns:
+            KeyMoment: The key moment
+
+        Raises:
+            KeyError: If key moment not found
         """
         pass
