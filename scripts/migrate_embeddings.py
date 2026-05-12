@@ -65,12 +65,12 @@ def check_current_dimension(conn: psycopg.Connection) -> int | None:
         # Check dimension by querying a sample embedding
         cur.execute("SELECT embedding FROM public.facts WHERE embedding IS NOT NULL LIMIT 1")
         row = cur.fetchone()
-        if not row or not row[0]:
+        if not row or not row["embedding"]:
             print("INFO: No embeddings found in database")
             return None
 
         # Parse dimension from pgvector representation
-        vec_str = str(row[0])
+        vec_str = str(row["embedding"])
         # pgvector format: [1.0, 2.0, 3.0, ...]
         dimension = len(vec_str.strip("[]").split(","))
         return dimension
@@ -87,7 +87,7 @@ def migrate_embeddings(dry_run: bool = False) -> None:
     embedding_model = os.environ.get("EMBEDDING_MODEL", "bge-m3")
     ollama_host = os.environ.get("EMBEDDING_OLLAMA_HOST", "http://localhost:11434")
 
-    print(f"Migration Configuration:")
+    print("Migration Configuration:")
     print(f"  Database: {db_url.split('@')[-1] if '@' in db_url else db_url}")
     print(f"  Embedding Model: {embedding_model}")
     print(f"  Ollama Host: {ollama_host}")
@@ -121,7 +121,9 @@ def migrate_embeddings(dry_run: bool = False) -> None:
         print()
 
         if current_dim == new_dimension:
-            print(f"INFO: Embeddings are already at target dimension {new_dimension}. Nothing to do.")
+            print(
+                f"INFO: Embeddings are already at target dimension {new_dimension}. Nothing to do."
+            )
             return
 
         # Count facts with embeddings
@@ -179,8 +181,8 @@ def migrate_embeddings(dry_run: bool = False) -> None:
                 for fact_id, new_vec in zip(batch_ids, new_embeddings, strict=True):
                     vec_str = "[" + ",".join(str(v) for v in new_vec) + "]"
                     cur.execute(
-                        "UPDATE public.facts SET embedding = %s::vector WHERE id = %s",
-                        (vec_str, fact_id),
+                        "UPDATE public.facts SET embedding = %s::vector, embed_model = %s WHERE id = %s",
+                        (vec_str, embedding.model_name(), fact_id),
                     )
                     updated_count += 1
 
@@ -195,7 +197,7 @@ def migrate_embeddings(dry_run: bool = False) -> None:
 
         # Verify dimension
         new_dim = check_current_dimension(conn)
-        print(f"Verification:")
+        print("Verification:")
         print(f"  New dimension: {new_dim}")
         print(f"  Expected dimension: {new_dimension}")
 
