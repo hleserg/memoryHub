@@ -762,6 +762,11 @@ class AtmanRunner:
                         input_tokens, context_limit
                     )
 
+                    # Display agent's response FIRST (before warnings), so user sees
+                    # the actual content before meta-information about session state
+                    print_plain(str(result.output))
+                    print_plain("")
+
                     # Display warnings for newly triggered thresholds
                     remaining = context_limit - input_tokens
                     if 70 in newly_triggered:
@@ -788,9 +793,6 @@ class AtmanRunner:
                             input_tokens,
                             context_limit,
                         )
-                        # Display agent's response before force-close warning
-                        print_plain(str(result.output))
-                        print_plain("")
                         print_warn(
                             f"\n⚠️  Context 95% full ({input_tokens}/{context_limit} tokens). "
                             "Forcing session close.\n"
@@ -801,6 +803,10 @@ class AtmanRunner:
                             _LOG.exception("Failed to force-finish session %s", session_id)
                             print_err(f"Force-finish failed: {exc!s}")
                         break  # Exit main loop
+                else:
+                    # No token usage info or no thresholds triggered - show response normally
+                    print_plain(str(result.output))
+                    print_plain("")
 
                 # E22.5: Check for wait request (agent-triggered timeout adjustment)
                 wait_requested, wait_minutes = _check_wait_requested(result.new_messages())
@@ -809,10 +815,6 @@ class AtmanRunner:
                     timeout_seconds = wait_minutes * 60
                     _LOG.info("Wait requested by agent: %d minutes (timeout reset)", wait_minutes)
                     print_info(f"\n⏱️  Timer reset to {wait_minutes} minutes (agent request).\n")
-
-                # Normal flow: display output and update history
-                print_plain(str(result.output))
-                print_plain("")
 
                 # E22.5: Update history with new messages from this run
                 history.extend(result.new_messages())
