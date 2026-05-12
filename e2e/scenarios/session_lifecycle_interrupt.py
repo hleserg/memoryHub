@@ -207,7 +207,7 @@ def scenario_a_keyboard_interrupt(workspace: Path) -> dict:
         "journal_survived": False,  # удалили после успешного finish
         "journal_cleaned": not journal.exists(session_id),
         "experience_saved": exp_rec is not None,
-        "key_moments_saved": len(exp_rec.experience.key_moments) if exp_rec else 0,
+        "key_moments_saved": len(exp_rec.experience.key_moment_ids) if exp_rec else 0,
         "fact_refs_saved": len(exp_rec.experience.fact_refs) if exp_rec else 0,
         "close_reason_planned": "interrupted",
         # exp_rec.experience.close_reason после реализации

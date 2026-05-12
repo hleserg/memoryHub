@@ -18,6 +18,7 @@ from atman.core.models import (
     ExperienceRecord,
     Identity,
     IdentitySnapshot,
+    KeyMoment,
     NarrativeDocument,
     ReframingNote,
 )
@@ -56,6 +57,13 @@ class DateRangeQuery(ExperienceQuery):
     def __init__(self, start_date: datetime, end_date: datetime):
         self.start_date = start_date
         self.end_date = end_date
+
+
+class FactRefsContainsQuery(ExperienceQuery):
+    """Query experiences that reference a specific fact."""
+
+    def __init__(self, fact_id: UUID):
+        self.fact_id = fact_id
 
 
 class StateStore(ABC):
@@ -148,6 +156,7 @@ class StateStore(ABC):
         - values_touched (ValuesTouchedQuery)
         - depth (DepthQuery)
         - date_range (DateRangeQuery)
+        - fact_refs_contains (FactRefsContainsQuery)
 
         Args:
             query: Query object specifying search criteria
@@ -168,6 +177,45 @@ class StateStore(ABC):
 
         Returns:
             list[ExperienceRecord]: List of recent experiences, newest first
+        """
+        pass
+
+    # KeyMoment operations
+
+    @abstractmethod
+    def store_key_moments(self, session_id: UUID, moments: list[KeyMoment]) -> None:
+        """
+        Store key moments for a session.
+
+        Args:
+            session_id: UUID of the session
+            moments: List of key moments to store
+        """
+        pass
+
+    @abstractmethod
+    def get_key_moment(self, moment_id: UUID) -> KeyMoment | None:
+        """
+        Retrieve a key moment by its ID.
+
+        Args:
+            moment_id: UUID of the key moment
+
+        Returns:
+            KeyMoment | None: The key moment if found, None otherwise
+        """
+        pass
+
+    @abstractmethod
+    def get_key_moments_for_session(self, session_id: UUID) -> list[KeyMoment]:
+        """
+        Retrieve all key moments for a session.
+
+        Args:
+            session_id: UUID of the session
+
+        Returns:
+            list[KeyMoment]: List of key moments for the session
         """
         pass
 
@@ -325,5 +373,36 @@ class StateStore(ABC):
 
         Returns:
             Eigenstate | None: Latest eigenstate if exists, None otherwise
+        """
+        pass
+
+    # KeyMoment operations
+
+    @abstractmethod
+    def create_key_moment(self, key_moment: "KeyMoment") -> "KeyMoment":
+        """
+        Create a new key moment in storage.
+
+        Args:
+            key_moment: KeyMoment to store
+
+        Returns:
+            KeyMoment: The stored key moment
+
+        Raises:
+            ValueError: If the key moment is invalid or already exists
+        """
+        pass
+
+    @abstractmethod
+    def list_key_moments(self, session_id: UUID | None = None) -> list["KeyMoment"]:
+        """
+        List key moments, optionally filtered by session_id.
+
+        Args:
+            session_id: If provided, return only key moments from this session
+
+        Returns:
+            list[KeyMoment]: List of key moments
         """
         pass

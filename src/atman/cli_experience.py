@@ -15,7 +15,8 @@ from pathlib import Path
 from uuid import UUID
 
 from atman.adapters.storage import JsonlExperienceStore
-from atman.core.models import SessionExperience
+from atman.core.models import KeyMoment, SessionExperience
+from atman.core.models.experience import EmotionalDepth
 from atman.core.services import ExperienceService
 from atman.term import (
     console,
@@ -44,10 +45,28 @@ def cmd_add(service: ExperienceService, args: list[str]):
 
     try:
         with open(json_file, encoding="utf-8") as f:
-            data = json.load(f)
+            raw = json.load(f)
 
-        experience = SessionExperience.model_validate(data)
+        if not isinstance(raw, dict):
+            raise ValueError("JSON root must be an object")
+
+        concrete_moments: list[KeyMoment] | None = None
+        if raw.get("key_moments") and not raw.get("key_moment_ids"):
+            concrete_moments = [KeyMoment.model_validate(m) for m in raw["key_moments"]]
+            raw = dict(raw)
+            raw.pop("key_moments")
+            raw["key_moment_ids"] = [str(m.id) for m in concrete_moments]
+            raw["avg_emotional_intensity"] = sum(
+                m.how_i_felt.emotional_intensity for m in concrete_moments
+            ) / len(concrete_moments)
+            raw["has_profound_moment"] = any(
+                m.how_i_felt.depth == EmotionalDepth.PROFOUND for m in concrete_moments
+            )
+
+        experience = SessionExperience.model_validate(raw)
         record = service.create_experience(experience)
+        if concrete_moments:
+            service.store.store_key_moments(experience.session_id, concrete_moments)
 
         print_ok("Experience created:")
         print_experience_record(record)

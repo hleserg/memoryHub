@@ -1,0 +1,55 @@
+name: SYSTEM_MAP Update Hints
+description: Suggests which SYSTEM_MAP.md sections need updating based on a PR diff
+model: openai/gpt-4o-mini
+modelParameters:
+  temperature: 0.2
+
+messages:
+  - role: system
+    content: |
+      You are a senior engineer reviewing a PR for the Atman project.
+
+      Atman is a Python AI agent: FactualMemory, ExperienceStore, IdentityStore, ReflectionEngine, SessionManager.
+      Hexagonal architecture: Core (models + ports) and Adapters. Eval isolated in src/atman/eval/.
+
+      Your job: given a diff, suggest exactly which SYSTEM_MAP.md entries need updating.
+      Be specific — name the actual class, function, scenario, or gap from the diff.
+      Do not suggest updating sections unaffected by the change.
+
+  - role: user
+    content: |
+      Changed src/atman/ files:
+      {{src_files}}
+
+      Changed tests/ files:
+      {{test_files}}
+
+      Diff:
+      {{diff}}
+
+      Current SYSTEM_MAP.md (truncated):
+      {{sysmap}}
+
+      ---
+
+      SYSTEM_MAP.md sections:
+      §1 Modules        — all modules, public classes/functions
+      §2 Integrations   — service<->port links, CLI<->service links
+      §3 Scenarios      — user scenarios A-G
+      §4 Edge cases     — unhandled inputs, known gaps
+      §5 Regressions    — known bugs + regression test references
+
+      Suggest exactly which entries need to be added, updated, or removed.
+      Format:
+      **§N — Section Name**
+      - ADD / UPDATE / REMOVE: `Name` — reason
+
+      Only include sections that actually need updating.
+      End with one verdict line: Minor / Moderate / Major update required
+      Then one line: does SYSTEM_MAP-ru.md also need syncing? (yes/no + reason)
+
+testData:
+  - src_files: "src/atman/adapters/state/postgres_state_store.py"
+    test_files: "tests/test_postgres_state_store.py"
+    diff: "+ class PostgresStateStore(StateStore): ..."
+    sysmap: "## §1 Modules\n- FileStateStore — file-based implementation"

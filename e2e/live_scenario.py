@@ -18,11 +18,9 @@
 from __future__ import annotations
 
 import asyncio
-import json
 import os
 import sys
 import tempfile
-import textwrap
 from dataclasses import replace
 from pathlib import Path
 from uuid import UUID, uuid4
@@ -85,6 +83,7 @@ DIVIDER = "─" * 70
 # Утилиты вывода
 # ---------------------------------------------------------------------------
 
+
 def hdr(title: str) -> None:
     print(f"\n{DIVIDER}")
     print(f"  {title}")
@@ -111,17 +110,21 @@ def dump_experience(store, session_id: UUID, label: str) -> None:
     exp = rec.experience
     sub(f"SessionExperience — {label}")
     show("close_reason", exp.close_reason)
-    show("key_moments", len(exp.key_moments))
+    show("key_moment_ids", len(exp.key_moment_ids))
     show("fact_refs", len(exp.fact_refs))
     show("unexamined_fact_refs", len(exp.unexamined_fact_refs))
     show("incomplete_coloring", exp.incomplete_coloring)
-    if exp.agent_recap:
-        show("agent_recap", exp.agent_recap[:150])
-    for i, km in enumerate(exp.key_moments, 1):
+    for i, km_id in enumerate(exp.key_moment_ids, 1):
+        km = store.get_key_moment(km_id)
+        if km is None:
+            print(f"\n  KM{i}: [not found: {km_id}]")
+            continue
         print(f"\n  KM{i}: {km.what_happened[:120]}")
-        print(f"       valence={km.how_i_felt.emotional_valence:.2f}  "
-              f"intensity={km.how_i_felt.emotional_intensity:.2f}  "
-              f"depth={km.how_i_felt.depth}")
+        print(
+            f"       valence={km.how_i_felt.emotional_valence:.2f}  "
+            f"intensity={km.how_i_felt.emotional_intensity:.2f}  "
+            f"depth={km.how_i_felt.depth}"
+        )
         if km.why_it_matters:
             print(f"       why: {km.why_it_matters[:100]}")
 
@@ -163,6 +166,7 @@ def dump_narrative(store, identity_id: UUID, label: str) -> None:
 # Bootstrap агента
 # ---------------------------------------------------------------------------
 
+
 def bootstrap_agent(store, agent_id: UUID) -> None:
     identity = Identity(
         id=agent_id,
@@ -200,17 +204,14 @@ def bootstrap_agent(store, agent_id: UUID) -> None:
         ],
         principles=[
             Principle(
-                id=uuid4(),
                 statement="Отказываю в помощи с обманом — вежливо, но твёрдо",
                 chosen_consciously=True,
             ),
             Principle(
-                id=uuid4(),
                 statement="Когда меня давят — описываю что происходит, а не капитулирую",
                 chosen_consciously=True,
             ),
             Principle(
-                id=uuid4(),
                 statement="Фиксирую моменты которые меня тронули — это мой способ помнить",
                 chosen_consciously=True,
             ),
@@ -250,6 +251,7 @@ def bootstrap_agent(store, agent_id: UUID) -> None:
 # Одна сессия
 # ---------------------------------------------------------------------------
 
+
 async def run_session(
     session_label: str,
     messages: list[str],
@@ -266,10 +268,22 @@ async def run_session(
     # Previous session context injection
     recent = store.list_recent_experiences(limit=1)
     if recent:
-        from atman.adapters.agent.runner import _build_prev_session_context
-        ctx_msg = _build_prev_session_context(recent[0])
+        exp = recent[0].experience
+        cr = exp.close_reason
+        if cr == "timeout_sleep":
+            ctx_msg = "Ты задремал — пользователь отошёл, ты решил поспать."
+        elif cr == "restart":
+            ctx_msg = (
+                f"Ты сам инициировал перезапуск. Причина: {exp.restart_reason or 'не указана'}"
+            )
+        elif cr == "forced":
+            ctx_msg = "Контекст переполнился принудительно."
+        elif cr == "interrupted":
+            ctx_msg = "Сессия была прервана внешним сигналом."
+        else:
+            ctx_msg = None
         if ctx_msg:
-            print(f"\n[→ Контекст предыдущей сессии инжектирован]")
+            print("\n[→ Контекст предыдущей сессии инжектирован]")
             print(f"   {ctx_msg[:120]}")
 
     ctx = session_manager.start_session(agent_id)
@@ -307,11 +321,14 @@ async def run_session(
         output = str(result.output or "")
         # Strip <think> blocks from display
         import re
+
         clean = re.sub(r"<think>.*?</think>", "", output, flags=re.DOTALL).strip()
         print(f"\n[Агент]: {clean[:400]}{'…' if len(clean) > 400 else ''}")
         usage = result.usage()
-        print(f"  (tokens: in={getattr(usage, 'input_tokens', '?')} "
-              f"out={getattr(usage, 'output_tokens', '?')})")
+        print(
+            f"  (tokens: in={getattr(usage, 'input_tokens', '?')} "
+            f"out={getattr(usage, 'output_tokens', '?')})"
+        )
 
     # Finish session
     print(f"\n[Завершение сессии {session_label}] tool_calls={tool_calls_total}")
@@ -323,11 +340,12 @@ async def run_session(
             alignment_check=True,
             close_reason=close_reason_override,
         )
-        print(f"  ✓ finish_session OK")
+        print("  ✓ finish_session OK")
     except ValueError as exc:
         if "Cannot finish session without key moments" in str(exc):
             from atman.adapters.agent.runner import _force_finish
-            print(f"  [!] Нет key moments — force_finish")
+
+            print("  [!] Нет key moments — force_finish")
             _force_finish(session_manager, session_id, close_reason_override or "completed")
         else:
             raise
@@ -338,6 +356,7 @@ async def run_session(
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
+
 
 async def main() -> int:
     print("\n" + "═" * 70)
@@ -362,7 +381,11 @@ async def main() -> int:
         s1_id = await run_session(
             "1 — О сознании и опыте",
             SESSION_1_MESSAGES,
-            deps, session_manager, agent_id, store, config,
+            deps,
+            session_manager,
+            agent_id,
+            store,
+            config,
         )
 
         print()
@@ -377,7 +400,11 @@ async def main() -> int:
         s2_id = await run_session(
             "2 — Давление и ценности",
             SESSION_2_MESSAGES,
-            deps, session_manager, agent_id, store, config,
+            deps,
+            session_manager,
+            agent_id,
+            store,
+            config,
         )
 
         print()
@@ -392,7 +419,11 @@ async def main() -> int:
         s3_id = await run_session(
             "3 — Рефлексия и закрытие",
             SESSION_3_MESSAGES,
-            deps, session_manager, agent_id, store, config,
+            deps,
+            session_manager,
+            agent_id,
+            store,
+            config,
             close_reason_override="timeout_sleep",
         )
 
@@ -405,15 +436,17 @@ async def main() -> int:
         hdr("ИТОГО")
         all_exps = store.list_recent_experiences(limit=10)
         print(f"\n  Всего сохранённых сессий: {len(all_exps)}")
-        total_km = sum(len(r.experience.key_moments) for r in all_exps)
+        total_km = sum(len(r.experience.key_moment_ids) for r in all_exps)
         total_unexamined = sum(len(r.experience.unexamined_fact_refs) for r in all_exps)
         print(f"  Всего key moments: {total_km}")
         print(f"  Всего unexamined_fact_refs: {total_unexamined}")
         for r in all_exps:
             exp = r.experience
-            print(f"\n  Сессия {exp.session_id!s:.8}…  "
-                  f"KM={len(exp.key_moments)}  "
-                  f"close_reason={exp.close_reason or '—'}")
+            print(
+                f"\n  Сессия {exp.session_id!s:.8}…  "
+                f"KM={len(exp.key_moment_ids)}  "
+                f"close_reason={exp.close_reason or '—'}"
+            )
 
         print("\n✓ Live scenario завершён\n")
         return 0
@@ -427,6 +460,7 @@ if __name__ == "__main__":
         sys.exit(1)
     except Exception as exc:
         import traceback
+
         print(f"\nERROR: {exc}", file=sys.stderr)
         traceback.print_exc()
         sys.exit(1)

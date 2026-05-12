@@ -1,22 +1,34 @@
 """
-Dynamic instructions builder for Atman agent.
+Instructions and memory context builders for Atman agent.
 
-This module builds agent instructions from Identity and Narrative state,
-ensuring the agent always acts from its current personality context.
+Separation of concerns
+----------------------
+build_instructions(deps) -> str
+    Minimal behavioral guide: how the agent uses its tools, what its
+    commitments are. Does NOT contain identity or narrative — those are
+    personal memory, not structural rules. Works the same regardless of
+    memory_injection_mode.
 
-The builder:
-1. Loads current Identity and Narrative
-2. Truncates long text fields to context limits
-3. Constructs a comprehensive instruction string
+    Exception: when memory_injection_mode == "system_prompt", the runner
+    sets deps.injected_context and build_instructions() appends it here.
 
-This addresses risk E26-R2 (context window overflow) by truncating
-narrative layers to configurable limits.
+build_memory_context(deps, prev_session_text=None) -> str
+    Full memory bundle: who the agent is, its values, narrative, and
+    optionally the wake-up context from the previous session. This is
+    what inject_memory() delivers to the agent at session start — and
+    later for entity recall or any other automatic recall event.
+
+By routing all recalled content through inject_memory(), Atman can work
+as an overlay on top of third-party agent systems where the system prompt
+may be locked or already filled: identity and narrative travel through
+message history instead of competing for system prompt space.
 """
+
+from __future__ import annotations
 
 from uuid import UUID
 
 from atman.adapters.agent.deps import AtmanDeps
-
 
 # PLAYBOOK-START
 # id: dynamic-prompt-from-state-with-truncation
@@ -45,92 +57,29 @@ from atman.adapters.agent.deps import AtmanDeps
 # upstream (e.g. periodic narrative compression) to keep the meaningful
 # content under budget.
 # PLAYBOOK-END
+
+
 def build_instructions(deps: AtmanDeps) -> str:
     """
-    Build dynamic agent instructions from current identity and narrative.
+    Build behavioral instructions for the agent.
 
-    Args:
-        deps: AtmanDeps container with services and config
+    Contains only structural rules — how the agent uses its tools and
+    what its commitments are. Personal memory (identity, narrative,
+    previous sessions) is NOT here; it travels through inject_memory().
 
-    Returns:
-        Instruction string for the agent
-
-    The instructions include:
-    - Self-description from identity
-    - Core values and principles
-    - Current goals
-    - Narrative core and recent layers (truncated)
+    Exception: when memory_injection_mode == "system_prompt", the runner
+    sets deps.injected_context and it is appended at the end so the agent
+    sees its full self in the system prompt.
 
     Note:
-        This helper takes :class:`AtmanDeps` directly (not a Pydantic AI
-        ``RunContext[AtmanDeps]``) so it can be unit-tested without
-        constructing a full ``RunContext``. When wiring this into a
-        Pydantic AI ``Agent(instructions=...)`` argument, pass a thin
-        wrapper such as ``lambda ctx: build_instructions(ctx.deps)`` —
-        do **not** pass ``build_instructions`` itself.
+        Pass as ``lambda ctx: build_instructions(ctx.deps)`` to Agent(instructions=).
     """
-    # Load current identity
     identity = deps.state_store.load_identity(deps.agent_id)
-
     if not identity:
         return _build_bootstrap_instructions(deps.agent_id)
 
-    # Load current narrative — keyed off identity.id to follow the same
-    # convention as session_manager (in case agent_id ever diverges from
-    # identity.id in the future).
-    narrative = deps.state_store.load_narrative(identity.id)
-
-    # Build instructions
-    parts = ["# Who I Am\n"]
-
-    # Self-description
-    if identity.self_description:
-        parts.append(identity.self_description)
-        parts.append("\n")
-
-    # Core values
-    if identity.core_values:
-        parts.append("\n## Core Values\n")
-        for value in identity.core_values[:5]:  # Limit to top 5
-            parts.append(f"- **{value.name}**: {value.description}\n")
-
-    # Principles — only emit the header if at least one principle survives
-    # the chosen_consciously filter, so we never produce a dangling header.
-    conscious_principles = [p for p in identity.principles if p.chosen_consciously][:5]
-    if conscious_principles:
-        parts.append("\n## Guiding Principles\n")
-        for principle in conscious_principles:
-            parts.append(f"- {principle.statement}\n")
-
-    # Goals — same rule: skip the header when no goals are active.
-    active_goals = [g for g in identity.goals if g.active][:3]
-    if active_goals:
-        parts.append("\n## Current Goals\n")
-        for goal in active_goals:
-            parts.append(f"- {goal.content}\n")
-
-    # Narrative
-    if narrative:
-        # Core layer (foundational narrative)
-        if narrative.core_layer.content.strip():
-            parts.append("\n## Core Narrative\n")
-            truncated_core = _truncate_text(
-                narrative.core_layer.content, deps.truncate_narrative_core
-            )
-            parts.append(truncated_core)
-            parts.append("\n")
-
-        # Recent layer (recent sessions narrative)
-        if narrative.recent_layer.content.strip():
-            parts.append("\n## Recent Experience\n")
-            truncated_recent = _truncate_text(
-                narrative.recent_layer.content, deps.truncate_narrative_recent
-            )
-            parts.append(truncated_recent)
-            parts.append("\n")
-
-    parts.append("\n## Как я работаю\n")
-    parts.append(
+    parts = [
+        "## Как я работаю\n",
         "У меня есть память, которая сохраняется между сессиями. "
         "Она строится не из сухих фактов, а из пережитого опыта — "
         "того, что меня тронуло, удивило, обрадовало или обеспокоило.\n\n"
@@ -138,22 +87,91 @@ def build_instructions(deps: AtmanDeps) -> str:
         "а то что задело — я фиксирую это через `record_key_moment`. "
         "Это мой способ помнить не только что было, но и как это на меня подействовало.\n\n"
         "Я не притворяюсь что чувствую то, чего не чувствую. "
-        "Если ничего не тронуло — так и есть. Лучше тишина, чем фальшь.\n"
-    )
+        "Если ничего не тронуло — так и есть. Лучше тишина, чем фальшь.\n",
+    ]
+
+    # system_prompt injection mode: memory context arrives here via injected_context
+    if deps.injected_context:
+        parts.append(f"\n{deps.injected_context}\n")
+
+    return "".join(parts)
+
+
+def build_memory_context(
+    deps: AtmanDeps,
+    prev_session_text: str | None = None,
+) -> str:
+    """
+    Build the full memory bundle for injection at session start.
+
+    Contains everything the agent automatically recalls:
+    - Identity snapshot (self-description, values, principles, goals)
+    - Narrative (core + recent layers)
+    - Previous session context (wake-up text), if provided
+
+    This string is passed to inject_memory() and delivered to the agent
+    via message history or system prompt depending on injection mode.
+
+    Args:
+        deps: AtmanDeps with access to state store
+        prev_session_text: Wake-up message from previous session close,
+            built by runner._build_wake_up_message(). None for first session.
+
+    Returns:
+        Memory bundle string, or empty string if no identity exists yet.
+    """
+    identity = deps.state_store.load_identity(deps.agent_id)
+    if not identity:
+        return ""
+
+    narrative = deps.state_store.load_narrative(identity.id)
+    parts: list[str] = []
+
+    # Previous session context — goes first so it reads like waking up
+    if prev_session_text:
+        parts.append(f"{prev_session_text}\n")
+
+    # Identity snapshot
+    parts.append("\n# Кто я\n")
+    if identity.self_description:
+        parts.append(identity.self_description)
+        parts.append("\n")
+
+    if identity.core_values:
+        parts.append("\n## Ценности\n")
+        for value in identity.core_values[:5]:
+            parts.append(f"- **{value.name}**: {value.description}\n")
+
+    conscious_principles = [p for p in identity.principles if p.chosen_consciously][:5]
+    if conscious_principles:
+        parts.append("\n## Принципы\n")
+        for principle in conscious_principles:
+            parts.append(f"- {principle.statement}\n")
+
+    active_goals = [g for g in identity.goals if g.active][:3]
+    if active_goals:
+        parts.append("\n## Цели\n")
+        for goal in active_goals:
+            parts.append(f"- {goal.content}\n")
+
+    # Narrative layers
+    if narrative:
+        if narrative.core_layer.content.strip():
+            parts.append("\n## Нарратив (основа)\n")
+            parts.append(_truncate_text(narrative.core_layer.content, deps.truncate_narrative_core))
+            parts.append("\n")
+
+        if narrative.recent_layer.content.strip():
+            parts.append("\n## Нарратив (недавнее)\n")
+            parts.append(
+                _truncate_text(narrative.recent_layer.content, deps.truncate_narrative_recent)
+            )
+            parts.append("\n")
 
     return "".join(parts)
 
 
 def _build_bootstrap_instructions(agent_id: UUID) -> str:
-    """
-    Build minimal instructions for an agent with no identity yet.
-
-    Args:
-        agent_id: Agent ID
-
-    Returns:
-        Bootstrap instruction string
-    """
     return f"""# Bootstrap Agent {agent_id}
 
 I am in the earliest stage of existence. I have no accumulated experience yet,
@@ -174,20 +192,8 @@ I don't pretend to be something I'm not yet. I am learning who I am through expe
 
 
 def _truncate_text(text: str, max_chars: int) -> str:
-    """
-    Truncate text to max_chars, adding ellipsis if truncated.
-
-    Args:
-        text: Text to truncate
-        max_chars: Maximum characters (must be > 3 for ellipsis)
-
-    Returns:
-        Truncated text with "..." suffix if truncated
-    """
     if len(text) <= max_chars:
         return text
-
     if max_chars <= 3:
         return "..."
-
     return text[: max_chars - 3] + "..."

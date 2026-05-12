@@ -10,11 +10,12 @@ import warnings
 from pathlib import Path
 from uuid import UUID
 
-from atman.core.models import ExperienceRecord, ReframingNote
+from atman.core.models import ExperienceRecord, KeyMoment, ReframingNote
 from atman.core.ports import (
     DateRangeQuery,
     DepthQuery,
     ExperienceQuery,
+    FactRefsContainsQuery,
     SessionExperienceQuery,
     StateStore,
     ValuesTouchedQuery,
@@ -41,6 +42,11 @@ class JsonlExperienceStore(StateStore):
 
         if not self.storage_path.exists():
             self.storage_path.touch()
+
+        # Key moments storage (separate JSONL file)
+        self.key_moments_path = self.storage_path.parent / "key_moments.jsonl"
+        if not self.key_moments_path.exists():
+            self.key_moments_path.touch()
 
     def _read_all_experiences(self) -> dict[UUID, ExperienceRecord]:
         """
@@ -73,6 +79,50 @@ class JsonlExperienceStore(StateStore):
                     continue
 
         return experiences
+
+    def _read_all_key_moments(self) -> dict[UUID, KeyMoment]:
+        """
+        Read all key moments from the file into memory.
+
+        Returns:
+            dict[UUID, KeyMoment]: Map of moment ID to KeyMoment
+        """
+        moments: dict[UUID, KeyMoment] = {}
+
+        if not self.key_moments_path.exists():
+            return moments
+
+        with open(self.key_moments_path, encoding="utf-8") as f:
+            for line_num, line in enumerate(f, 1):
+                line = line.strip()
+                if not line:
+                    continue
+
+                try:
+                    data = json.loads(line)
+                    moment = KeyMoment.model_validate(data)
+                    moments[moment.id] = moment
+                except Exception as e:
+                    warnings.warn(
+                        f"Failed to parse key moment line {line_num}: {e}",
+                        UserWarning,
+                        stacklevel=1,
+                    )
+                    continue
+
+        return moments
+
+    def _write_all_key_moments(self, moments: dict[UUID, KeyMoment]) -> None:
+        """
+        Write all key moments to the file.
+
+        Args:
+            moments: Map of moment ID to KeyMoment
+        """
+        with open(self.key_moments_path, "w", encoding="utf-8") as f:
+            for moment in moments.values():
+                json_str = moment.model_dump_json()
+                f.write(json_str + "\n")
 
     def _write_all_experiences(self, experiences: dict[UUID, ExperienceRecord]) -> None:
         """
@@ -175,21 +225,33 @@ class JsonlExperienceStore(StateStore):
 
         elif isinstance(query, ValuesTouchedQuery):
             # Check if any of the query values are in any key moment's values_touched
-            query_values_lower = [v.lower() for v in query.values]
-            for moment in exp.key_moments:
-                moment_values_lower = [v.lower() for v in moment.values_touched]
-                if any(qv in moment_values_lower for qv in query_values_lower):
+            moments = self._read_all_key_moments()
+            for moment_id in exp.key_moment_ids:
+                moment = moments.get(moment_id)
+                if moment and any(qv in moment.values_touched for qv in query.values):
                     return True
             return False
 
         elif isinstance(query, DepthQuery):
             # Check if any key moment has the specified depth
-            return any(
-                moment.how_i_felt.depth.value == query.depth.lower() for moment in exp.key_moments
-            )
+            moments = self._read_all_key_moments()
+            for moment_id in exp.key_moment_ids:
+                moment = moments.get(moment_id)
+                if moment and moment.how_i_felt.depth.value == query.depth:
+                    return True
+            return False
 
         elif isinstance(query, DateRangeQuery):
             return query.start_date <= exp.timestamp <= query.end_date
+
+        elif isinstance(query, FactRefsContainsQuery):
+            # Check if any key moment contains the fact_id
+            moments = self._read_all_key_moments()
+            for moment_id in exp.key_moment_ids:
+                moment = moments.get(moment_id)
+                if moment and query.fact_id in moment.fact_refs:
+                    return True
+            return False
 
         return False
 
@@ -201,6 +263,41 @@ class JsonlExperienceStore(StateStore):
         results.sort(key=lambda r: r.experience.timestamp, reverse=True)
 
         return results[:limit]
+
+    def store_key_moments(self, session_id: UUID, moments: list[KeyMoment]) -> None:
+        """Store key moments for a session."""
+        all_moments = self._read_all_key_moments()
+        for moment in moments:
+            all_moments[moment.id] = moment
+        self._write_all_key_moments(all_moments)
+
+    def get_key_moment(self, moment_id: UUID) -> KeyMoment | None:
+        """Retrieve a key moment by its ID."""
+        moments = self._read_all_key_moments()
+        return moments.get(moment_id)
+
+    def get_key_moments_for_session(self, session_id: UUID) -> list[KeyMoment]:
+        """Retrieve all key moments for a session."""
+        # We need to scan experiences to find which moments belong to this session
+        experiences = self._read_all_experiences()
+        moments_dict = self._read_all_key_moments()
+
+        session_exp = None
+        for exp_record in experiences.values():
+            if exp_record.experience.session_id == session_id:
+                session_exp = exp_record.experience
+                break
+
+        if not session_exp:
+            return []
+
+        result = []
+        for moment_id in session_exp.key_moment_ids:
+            moment = moments_dict.get(moment_id)
+            if moment:
+                result.append(moment)
+
+        return result
 
     # Identity Store operations (not implemented - for compatibility)
 
@@ -243,3 +340,13 @@ class JsonlExperienceStore(StateStore):
     def load_latest_eigenstate(self, session_id=None, identity_id=None):  # type: ignore
         """Not implemented - use FileStateStore for eigenstate operations."""
         raise NotImplementedError("Eigenstate operations not supported in JsonlExperienceStore")
+
+    # KeyMoment operations (not implemented - for compatibility)
+
+    def create_key_moment(self, key_moment):  # type: ignore
+        """Not implemented - use FileStateStore for key moment operations."""
+        raise NotImplementedError("KeyMoment operations not supported in JsonlExperienceStore")
+
+    def list_key_moments(self, session_id=None):  # type: ignore
+        """Not implemented - use FileStateStore for key moment operations."""
+        raise NotImplementedError("KeyMoment operations not supported in JsonlExperienceStore")

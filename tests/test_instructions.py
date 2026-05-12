@@ -1,8 +1,9 @@
 """
-Tests for dynamic instructions builder.
+Tests for dynamic instructions builder and memory context builder.
 
 Covers:
-- Building instructions from full identity + narrative
+- build_instructions: behavioral rules only (identity-free)
+- build_memory_context: full memory bundle (identity + narrative + prev session)
 - Bootstrap instructions for empty identity
 - Text truncation for context limits
 - Selective rendering of identity components
@@ -13,6 +14,7 @@ from uuid import UUID, uuid4
 
 from atman.adapters.agent import build_instructions
 from atman.adapters.agent.deps import AtmanDeps
+from atman.adapters.agent.instructions import build_memory_context
 from atman.adapters.reflection.mock_reflection_model import MockReflectionModel
 from atman.adapters.storage import InMemoryExperienceStore, InMemoryStateStore
 from atman.adapters.storage.in_memory_reflection_store import InMemoryReflectionEventStore
@@ -131,22 +133,21 @@ class TestBuildInstructions:
         )
         deps.state_store.save_narrative(narrative)
 
-        instructions = build_instructions(deps)
+        # Memory content is in build_memory_context, not build_instructions
+        memory = build_memory_context(deps)
 
-        # Check all components are present
-        assert "Who I Am" in instructions
-        assert "helpful AI assistant" in instructions
-        assert "Core Values" in instructions
-        assert "honesty" in instructions
-        assert "curiosity" in instructions
-        assert "Guiding Principles" in instructions
-        assert "admit when I don't know" in instructions
-        assert "Current Goals" in instructions
-        assert "helpful responses" in instructions
-        assert "Core Narrative" in instructions
-        assert "core understanding" in instructions
-        assert "Recent Experience" in instructions
-        assert "coding questions" in instructions
+        assert "helpful AI assistant" in memory
+        assert "honesty" in memory
+        assert "curiosity" in memory
+        assert "admit when I don't know" in memory
+        assert "helpful responses" in memory
+        assert "core understanding" in memory
+        assert "coding questions" in memory
+
+        # build_instructions only has behavioral guide, not personal content
+        instructions = build_instructions(deps)
+        assert "helpful AI assistant" not in instructions
+        assert "Как я работаю" in instructions
 
     def test_truncation_long_narrative(self):
         """Test that long narratives are truncated properly."""
@@ -184,13 +185,12 @@ class TestBuildInstructions:
         )
         deps.state_store.save_narrative(narrative)
 
-        instructions = build_instructions(deps)
+        memory = build_memory_context(deps)
 
         # Check truncation happened
-        assert len(instructions) < len(long_text)
-        assert "..." in instructions
-        # Full text should not be present
-        assert long_text not in instructions
+        assert len(memory) < len(long_text)
+        assert "..." in memory
+        assert long_text not in memory
 
     def test_empty_narrative_layers(self):
         """Test instructions when narrative layers are empty."""
@@ -225,13 +225,13 @@ class TestBuildInstructions:
         )
         deps.state_store.save_narrative(narrative)
 
-        instructions = build_instructions(deps)
+        memory = build_memory_context(deps)
 
-        # Should not contain narrative sections
-        assert "Core Narrative" not in instructions
-        assert "Recent Experience" not in instructions
-        # But should have identity
-        assert "Who I Am" in instructions
+        # Empty narrative layers should not produce section headers
+        assert "Нарратив (основа)" not in memory
+        assert "Нарратив (недавнее)" not in memory
+        # But identity section should be present
+        assert "Кто я" in memory
 
     def test_selective_principles(self):
         """Test that only consciously chosen principles are included."""
@@ -259,10 +259,10 @@ class TestBuildInstructions:
         )
         deps.state_store.save_identity(identity)
 
-        instructions = build_instructions(deps)
+        memory = build_memory_context(deps)
 
-        assert "Conscious principle" in instructions
-        assert "Observed principle" not in instructions
+        assert "Conscious principle" in memory
+        assert "Observed principle" not in memory
 
     def test_active_goals_only(self):
         """Test that only active goals are included."""
@@ -290,10 +290,10 @@ class TestBuildInstructions:
         )
         deps.state_store.save_identity(identity)
 
-        instructions = build_instructions(deps)
+        memory = build_memory_context(deps)
 
-        assert "Active goal" in instructions
-        assert "Inactive goal" not in instructions
+        assert "Active goal" in memory
+        assert "Inactive goal" not in memory
 
     def test_skips_empty_principles_and_goals_headers(self):
         """No header should be emitted if every principle is unconscious or every goal inactive."""
@@ -322,10 +322,10 @@ class TestBuildInstructions:
         )
         deps.state_store.save_identity(identity)
 
-        instructions = build_instructions(deps)
+        memory = build_memory_context(deps)
 
-        assert "Guiding Principles" not in instructions
-        assert "Current Goals" not in instructions
-        assert "Observed but not chosen" not in instructions
-        assert "Old goal" not in instructions
-        assert "Inactive goal" not in instructions
+        assert "Принципы" not in memory
+        assert "Цели" not in memory
+        assert "Observed but not chosen" not in memory
+        assert "Old goal" not in memory
+        assert "Inactive goal" not in memory

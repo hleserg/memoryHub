@@ -281,7 +281,7 @@ class RestartScenarioRunner:
             if exp_rec:
                 results["experience_session_1"] = {
                     "id": str(exp_rec.experience.id),
-                    "key_moments_count": len(exp_rec.experience.key_moments),
+                    "key_moments_count": len(exp_rec.experience.key_moment_ids),
                     "fact_refs_count": len(exp_rec.experience.fact_refs),
                     "incomplete_coloring": exp_rec.experience.incomplete_coloring,
                 }

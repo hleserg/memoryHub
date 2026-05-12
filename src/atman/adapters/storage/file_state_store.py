@@ -18,6 +18,7 @@ from atman.core.models import (
     ExperienceRecord,
     Identity,
     IdentitySnapshot,
+    KeyMoment,
     NarrativeDocument,
     ReframingNote,
 )
@@ -25,6 +26,7 @@ from atman.core.ports.state_store import (
     DateRangeQuery,
     DepthQuery,
     ExperienceQuery,
+    FactRefsContainsQuery,
     SessionExperienceQuery,
     StateStore,
     ValuesTouchedQuery,
@@ -76,10 +78,14 @@ class FileStateStore(StateStore):
         self.experiences_dir = self.workspace / "experiences"
         self.experiences_dir.mkdir(exist_ok=True)
 
+        self.key_moments_dir = self.workspace / "key_moments"
+        self.key_moments_dir.mkdir(exist_ok=True)
+
         # Paths for current state files
         self.identity_path = self.workspace / "identity.json"
         self.narrative_path = self.workspace / "narrative.json"
         self.eigenstate_path = self.workspace / "eigenstate.json"
+        self.key_moments_path = self.workspace / "key_moments.jsonl"
 
     def _write_json_atomically(self, path: Path, content: str) -> None:
         """Write JSON without exposing callers to partially rewritten files."""
@@ -168,13 +174,15 @@ class FileStateStore(StateStore):
                 if record.experience.session_id == query.session_id:
                     all_experiences.append(record)
             elif isinstance(query, ValuesTouchedQuery):
-                for moment in record.experience.key_moments:
-                    if any(v in moment.values_touched for v in query.values):
+                for moment_id in record.experience.key_moment_ids:
+                    moment = self.get_key_moment(moment_id)
+                    if moment and any(v in moment.values_touched for v in query.values):
                         all_experiences.append(record)
                         break
             elif isinstance(query, DepthQuery):
-                for moment in record.experience.key_moments:
-                    if moment.how_i_felt.depth == query.depth:
+                for moment_id in record.experience.key_moment_ids:
+                    moment = self.get_key_moment(moment_id)
+                    if moment and moment.how_i_felt.depth.value == query.depth:
                         all_experiences.append(record)
                         break
             elif (
@@ -182,6 +190,13 @@ class FileStateStore(StateStore):
                 and query.start_date <= record.experience.timestamp <= query.end_date
             ):
                 all_experiences.append(record)
+            elif isinstance(query, FactRefsContainsQuery):
+                # Check fact refs in key moments (fetch by ID)
+                for moment_id in record.experience.key_moment_ids:
+                    moment = self.get_key_moment(moment_id)
+                    if moment and query.fact_id in moment.fact_refs:
+                        all_experiences.append(record)
+                        break
 
         # Sort by timestamp descending
         all_experiences.sort(key=lambda r: r.experience.timestamp, reverse=True)
@@ -190,6 +205,53 @@ class FileStateStore(StateStore):
     def list_recent_experiences(self, limit: int = 10) -> list[ExperienceRecord]:
         """List recent experiences."""
         return self.search_experiences(query=None, limit=limit)
+
+    def store_key_moments(self, session_id: UUID, moments: list[KeyMoment]) -> None:
+        """Store key moments for a session."""
+        session_moments_file = self.key_moments_dir / f"{session_id}_moments.json"
+        moments_data = [m.model_dump(mode="json") for m in moments]
+        self._write_json_atomically(session_moments_file, json.dumps(moments_data, indent=2))
+
+        # Also store individual moment files for quick lookup
+        for moment in moments:
+            moment_file = self.key_moments_dir / f"{moment.id}.json"
+            self._write_json_atomically(moment_file, moment.model_dump_json(indent=2))
+
+    def get_key_moment(self, moment_id: UUID) -> KeyMoment | None:
+        """Retrieve a key moment by ID (per-session files or JSONL from create_key_moment)."""
+        import json
+        import warnings
+
+        moment_file = self.key_moments_dir / f"{moment_id}.json"
+        if moment_file.exists():
+            data = _read_json_file(moment_file)
+            return KeyMoment.model_validate(data)
+
+        if not self.key_moments_path.exists():
+            return None
+
+        for line in self.key_moments_path.read_text(encoding="utf-8").splitlines():
+            if line.strip():
+                try:
+                    data = json.loads(line)
+                    if data.get("id") == str(moment_id):
+                        return KeyMoment.model_validate(data)
+                except (json.JSONDecodeError, ValueError) as e:
+                    warnings.warn(
+                        f"Skipping corrupted line in {self.key_moments_path}: {e}",
+                        stacklevel=2,
+                    )
+                    continue
+
+        return None
+
+    def get_key_moments_for_session(self, session_id: UUID) -> list[KeyMoment]:
+        """Retrieve all key moments for a session."""
+        session_moments_file = self.key_moments_dir / f"{session_id}_moments.json"
+        if not session_moments_file.exists():
+            return []
+        data = _read_json_file(session_moments_file)
+        return [KeyMoment.model_validate(m) for m in data]
 
     # Identity Store operations
 
@@ -373,3 +435,59 @@ class FileStateStore(StateStore):
             return None
 
         return narrative
+
+    # KeyMoment operations
+
+    def create_key_moment(self, key_moment: KeyMoment) -> KeyMoment:
+        """Create key moment by appending to JSONL file."""
+        import warnings
+
+        # Check if key moment already exists
+        if self.key_moments_path.exists():
+            for line in self.key_moments_path.read_text(encoding="utf-8").splitlines():
+                if line.strip():
+                    try:
+                        data = json.loads(line)
+                        if data.get("id") == str(key_moment.id):
+                            raise ValueError(f"KeyMoment {key_moment.id} already exists")
+                    except json.JSONDecodeError as e:
+                        warnings.warn(
+                            f"Skipping corrupted line in {self.key_moments_path}: {e}",
+                            stacklevel=2,
+                        )
+                        continue
+
+        # Append to JSONL file
+        with self.key_moments_path.open("a", encoding="utf-8") as f:
+            f.write(key_moment.model_dump_json() + "\n")
+
+        return key_moment
+
+    def list_key_moments(self, session_id: UUID | None = None) -> list[KeyMoment]:
+        """List key moments from JSONL file, optionally filtered by session_id."""
+        import warnings
+
+        # KeyMoment model doesn't have session_id field yet; filtering not implemented
+        if session_id is not None:
+            raise NotImplementedError(
+                "Filtering by session_id not yet supported - KeyMoment model needs session_id field"
+            )
+
+        if not self.key_moments_path.exists():
+            return []
+
+        key_moments: list[KeyMoment] = []
+        for line in self.key_moments_path.read_text(encoding="utf-8").splitlines():
+            if line.strip():
+                try:
+                    data = json.loads(line)
+                    key_moment = KeyMoment.model_validate(data)
+                    key_moments.append(key_moment)
+                except (json.JSONDecodeError, ValueError) as e:
+                    warnings.warn(
+                        f"Skipping corrupted line in {self.key_moments_path}: {e}",
+                        stacklevel=2,
+                    )
+                    continue
+
+        return key_moments

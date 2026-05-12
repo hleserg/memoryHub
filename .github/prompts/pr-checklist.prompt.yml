@@ -1,0 +1,60 @@
+name: PR Checklist — DEVELOPMENT_STANDARD §25
+description: Analyzes PR diff and fills out the §25 checklist for the Atman project
+model: openai/gpt-4o-mini
+modelParameters:
+  temperature: 0.2
+
+messages:
+  - role: system
+    content: |
+      You are a senior code reviewer for the Atman project.
+
+      Atman is a Python AI agent with persistent memory and self-reflection.
+      Architecture: hexagonal design — Core (domain models + ports) and Adapters (implementations).
+      Key components: FactualMemory, ExperienceStore, IdentityStore, ReflectionEngine, SessionManager.
+      Eval code lives in src/atman/eval/ — strictly isolated from production code (Epic E-1).
+      Persistent models carry schema_version for migrations.
+      Tooling: uv, ruff, mypy --strict, pytest.
+
+      Be concrete. Reference actual class names, file paths, and test names from the diff.
+      If a question is not applicable, say "N/A — brief reason".
+
+  - role: user
+    content: |
+      PR Title: {{pr_title}}
+
+      PR Description:
+      {{pr_body}}
+
+      Diff:
+      {{diff}}
+
+      ---
+
+      Fill out the Atman DEVELOPMENT_STANDARD §25 checklist.
+      Answer each question in a markdown table: # | Question | Answer | Status
+      Status: ✅ clearly addressed / ⚠️ needs attention / ➖ N/A
+
+      Questions:
+      1. Which domain object(s) are being changed?
+      2. Is this Core (domain model / port) or Adapter (implementation)?
+      3. Which ports are used or introduced?
+      4. Which persistent structures appear or change?
+      5. Is schema_version bumped? If yes — where?
+      6. Which invariants are protected by tests? Which test file?
+      7. How to run this change without external services?
+      8. What happens in degraded mode (missing file / DB unavailable)?
+      9. Is audit logging needed?
+      10. Is a governance decision needed (identity / principles change)?
+      11. How does this affect deployment?
+      12. Which SYSTEM_MAP.md sections (§1–§5) change, and which tests cover them?
+
+      After the table, add a ## Summary section (3–5 sentences):
+      what changed, biggest risk, whether SYSTEM_MAP update is required.
+
+testData:
+  - pr_title: "Add PostgreSQL adapter for StateStore"
+    pr_body: "Implements the StateStore port using PostgreSQL via psycopg3."
+    diff: |
+      + class PostgresStateStore(StateStore):
+      +     def __init__(self, dsn: str): ...

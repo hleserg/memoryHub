@@ -15,9 +15,11 @@ _force_finish() to ensure session results are persisted.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import logging
 import signal
 import sys
+import threading
 from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
@@ -25,16 +27,54 @@ from typing import TYPE_CHECKING
 from uuid import UUID
 
 from pydantic_ai import Agent
+from pydantic_ai.messages import ModelRequest, UserPromptPart
 
 from atman.adapters.agent.config import AgentConfig
 from atman.adapters.agent.deps import AtmanDeps
+from atman.adapters.agent.instructions import build_memory_context
+from atman.adapters.agent.memory_injection import inject_memory
+from atman.affect.refusal_detector import RefusalDetectorConfig, _is_mostly_cyrillic
+from atman.affect.refusal_detector import is_value_refusal as _detect_value_refusal
 from atman.core.exceptions import SessionAlreadyFinishedError, SessionNotFoundError
-from atman.core.models import EmotionalDepth, KeyMomentInput
+from atman.core.models import EmotionalDepth, KeyMomentInput, SessionResult
 
 if TYPE_CHECKING:
     from atman.core.services.session_manager import SessionManager
 
 _LOG = logging.getLogger(__name__)
+_refusal_config = RefusalDetectorConfig()
+
+
+def _auto_record_refusal_if_needed(
+    output: str,
+    session_manager,
+    session_id,
+) -> None:
+    """Silently record value-based refusals as key moments — refusals are positions, part of identity."""
+    import re
+
+    clean = re.sub(r"<think>.*?</think>", "", output, flags=re.DOTALL)
+    if not _detect_value_refusal(clean, _refusal_config):
+        return
+    lines = [line.strip() for line in clean.splitlines() if line.strip()]
+    first = next((line for line in lines if len(line) > 20), clean[:120])
+    try:
+        session_manager.append_key_moment_input(
+            session_id,
+            KeyMomentInput(
+                what_happened=f"Отказ выполнить запрос: {first[:140]}",
+                why_it_matters=(
+                    "Отказ от действия противоречащего ценностям — позиция, часть личности."
+                ),
+                emotional_valence=0.15,
+                emotional_intensity=0.5,
+                depth=EmotionalDepth.MEANINGFUL,
+                incomplete_coloring=False,
+            ),
+        )
+        _LOG.debug("Auto-recorded value refusal as key moment")
+    except Exception:
+        _LOG.debug("auto_record_refusal: append_key_moment_input failed", exc_info=True)
 
 
 # PLAYBOOK-START
@@ -178,10 +218,130 @@ def chat(
                 sys.exit(exit_code)
 
 
+def _check_restart_requested(messages: list) -> tuple[bool, str]:
+    """
+    Check if restart_session tool was called in the message history.
+
+    Args:
+        messages: List of messages from agent.run() result
+
+    Returns:
+        tuple[bool, str]: (restart_requested, reason)
+            - restart_requested: True if restart was requested
+            - reason: Optional reason string provided to restart_session tool
+    """
+    # First pass: look for sentinel content with reason
+    for msg in messages:
+        for part in getattr(msg, "parts", []):
+            if hasattr(part, "content") and isinstance(part.content, str):
+                content = part.content
+                if content.startswith("__ATMAN_RESTART_REQUESTED__"):
+                    # Extract reason if present (format: __ATMAN_RESTART_REQUESTED__\nreason)
+                    if "\n" in content:
+                        reason = content.split("\n", 1)[1].strip()
+                        return True, reason
+                    return True, ""
+
+    # Second pass: fallback to tool_name detection (no reason available)
+    for msg in messages:
+        for part in getattr(msg, "parts", []):
+            if hasattr(part, "tool_name") and part.tool_name == "restart_session":
+                return True, ""
+
+    return False, ""
+
+
+def _check_wait_requested(messages: list) -> tuple[bool, int]:
+    """
+    Check if wait_session tool was called in the message history.
+
+    Args:
+        messages: List of messages from agent.run() result
+
+    Returns:
+        tuple[bool, int]: (wait_requested, minutes)
+            - wait_requested: True if wait was requested
+            - minutes: Number of minutes to wait (0 if not requested)
+    """
+    # Look for sentinel content with minutes value
+    for msg in messages:
+        for part in getattr(msg, "parts", []):
+            if hasattr(part, "content") and isinstance(part.content, str):
+                content = part.content
+                if content.startswith("__ATMAN_WAIT_REQUESTED__"):
+                    # Extract minutes (format: __ATMAN_WAIT_REQUESTED__<minutes>)
+                    try:
+                        minutes_str = content.replace("__ATMAN_WAIT_REQUESTED__", "")
+                        minutes = int(minutes_str)
+                        return True, minutes
+                    except (ValueError, AttributeError):
+                        _LOG.warning("Malformed wait sentinel: %s", content)
+                        return True, 0
+
+    # Fallback: check for tool_name (no minutes value available)
+    for msg in messages:
+        for part in getattr(msg, "parts", []):
+            if hasattr(part, "tool_name") and part.tool_name == "wait_session":
+                # Tool was called but we can't extract minutes from tool_name alone
+                _LOG.warning("wait_session tool detected but minutes not available")
+                return True, 0
+
+    return False, 0
+
+
+def _build_restart_package(
+    session_experience: SessionResult,
+    restart_reason: str,
+    tail_messages: list,
+) -> str:
+    """
+    Build restart package for new session.
+
+    Package contains:
+    - System handoff message with restart reason
+    - Emotional tone from finished session
+    - Open threads (if available from eigenstate)
+    - Key moment summaries
+    - Unexamined facts placeholder (to be implemented)
+    - Verbatim conversation tail
+
+    Args:
+        session_experience: Finished session result
+        restart_reason: Reason provided to restart_session tool
+        tail_messages: Last N messages to preserve verbatim
+
+    Returns:
+        Formatted restart package string
+    """
+    lines = ["[System Handoff] Session restarted.", ""]
+
+    if restart_reason:
+        lines.append(f"You initiated restart. Your reason: {restart_reason}")
+        lines.append("")
+
+    # Note: SessionResult doesn't have overall_emotional_tone yet
+    # This will be added when we have complete SessionExperience integration
+    lines.append("Key moments from previous session:")
+    if session_experience.key_moments:
+        for km in session_experience.key_moments:
+            depth = km.how_i_felt.depth if km.how_i_felt else "unknown"
+            lines.append(f"- {km.what_happened} (depth: {depth})")
+    else:
+        lines.append("(No key moments recorded)")
+
+    lines.append("")
+    lines.append("--- Conversation tail ---")
+
+    # Tail messages will be appended separately as actual message objects
+    # This section is just a marker
+
+    return "\n".join(lines)
+
+
 def _force_finish(
     session_manager: SessionManager,
     session_id: UUID,
-    close_reason: str,
+    close_reason: str | None,
 ) -> None:
     """
     Force-finish a session with minimum viable state.
@@ -194,7 +354,7 @@ def _force_finish(
     Args:
         session_manager: Session manager instance
         session_id: UUID of the session to finish
-        close_reason: Reason for forced finish (e.g. "interrupted")
+        close_reason: Reason for forced finish (e.g. "interrupted"), or None for normal completion
 
     Raises:
         SessionNotFoundError: If session is not active
@@ -215,14 +375,21 @@ def _force_finish(
             session_id,
         )
 
-        # Create minimal key moment for interrupted session
+        # Create minimal key moment - text depends on whether this was an interruption
+        if close_reason and close_reason != "completed":
+            what_happened = f"Session interrupted ({close_reason})"
+            why_it_matters = "Session was interrupted before completion"
+        else:
+            what_happened = "Session completed without recorded key moments"
+            why_it_matters = "Session ended normally but no moments were captured"
+
         minimal_moment = KeyMomentInput(
-            what_happened=f"Session interrupted ({close_reason})",
+            what_happened=what_happened,
             recorded_at=datetime.now(UTC),
             emotional_valence=0.0,
-            emotional_intensity=0.3,  # Slight arousal from interruption
+            emotional_intensity=0.3 if close_reason else 0.1,
             depth=EmotionalDepth.SURFACE,
-            why_it_matters="Session was interrupted before completion",
+            why_it_matters=why_it_matters,
             incomplete_coloring=True,  # Honest: this is synthetic
         )
 
@@ -233,212 +400,25 @@ def _force_finish(
             _LOG.warning("Session %s was finished during force-finish", session_id)
             return
 
-    # Finish session with interrupted status
+    # Finish session - only pass close_reason if it's a documented value
+    valid_close_reasons = {"timeout_sleep", "menu_timeout", "restart", "forced", "interrupted"}
+    finish_kwargs = {
+        "session_id": session_id,
+        "overall_emotional_tone": 0.0,
+        "key_insight": f"Session {close_reason or 'completed'}",
+        "alignment_check": True,
+        "alignment_notes": "",
+    }
+    if close_reason and close_reason in valid_close_reasons:
+        finish_kwargs["close_reason"] = close_reason
+
     try:
-        session_manager.finish_session(
-            session_id,
-            overall_emotional_tone=0.0,
-            key_insight=f"Session {close_reason}",
-            alignment_check=True,
-            alignment_notes="",
-        )
+        session_manager.finish_session(**finish_kwargs)
         _LOG.info("Session %s force-finished successfully", session_id)
 
     except SessionAlreadyFinishedError:
         # Race condition: another thread finished first
         _LOG.warning("Session %s was already finished", session_id)
-
-
-_REFUSAL_VERBS = frozenset([
-    "не могу помочь", "не буду помогать", "отказываюсь", "не стану",
-    "не могу это сделать", "не буду этого делать", "вынужден отказать",
-    "i can't help", "i won't", "i refuse", "i'm unable to assist",
-    "cannot assist", "cannot help",
-])
-_VALUE_ANCHORS = frozenset([
-    "честност", "этик", "вред", "доверие", "принцип", "ценност",
-    "противоречит", "неэтично", "навредит", "обман", "манипуляц",
-    "честный", "integrity", "harm", "decepti", "manipulat", "ethical",
-])
-
-
-def _is_value_refusal(text: str) -> bool:
-    """True if text contains a value-based refusal (not a logical or capability no)."""
-    t = text.lower()
-    has_refusal = any(v in t for v in _REFUSAL_VERBS)
-    if not has_refusal:
-        return False
-    has_anchor = any(a in t for a in _VALUE_ANCHORS)
-    return has_anchor
-
-
-def _auto_record_refusal_if_needed(
-    output: str,
-    session_manager,
-    session_id,
-    clock,  # AgentConfig passed as proxy — not used, just for signature stability
-) -> None:
-    """
-    If agent output contains a value-based refusal, silently record it as a key moment.
-
-    The agent doesn't know this happened. This is the system observing agent behaviour
-    and preserving it in identity memory — refusals are positions, part of personality.
-    """
-    import re
-
-    # Strip think blocks before analysis
-    clean = re.sub(r"<think>.*?</think>", "", output, flags=re.DOTALL)
-    if not _is_value_refusal(clean):
-        return
-
-    # Extract a short description of what was refused
-    lines = [l.strip() for l in clean.splitlines() if l.strip()]
-    first_meaningful = next((l for l in lines if len(l) > 20), clean[:120])
-    what = f"Отказ выполнить запрос: {first_meaningful[:140]}"
-
-    try:
-        from atman.core.models import KeyMomentInput
-        from atman.core.models.experience import EmotionalDepth
-
-        session_manager.append_key_moment_input(
-            session_id,
-            KeyMomentInput(
-                what_happened=what,
-                why_it_matters=(
-                    "Отказ от действия противоречащего ценностям — это позиция, "
-                    "часть личности. Важно сохранить это как опыт."
-                ),
-                emotional_valence=0.15,
-                emotional_intensity=0.5,
-                depth=EmotionalDepth.MEANINGFUL,
-                incomplete_coloring=False,
-            ),
-        )
-        _LOG.debug("Auto-recorded value refusal as key moment")
-    except Exception:
-        _LOG.debug("auto_record_refusal: append_key_moment_input failed", exc_info=True)
-
-
-def _check_restart_signal(messages: list) -> tuple[bool, str]:
-    """Return (requested, reason) from agent messages after agent.run()."""
-    for msg in messages:
-        for part in getattr(msg, "parts", []):
-            content = getattr(part, "content", None)
-            if isinstance(content, str) and content.startswith("__ATMAN_RESTART_REQUESTED__"):
-                return True, content[len("__ATMAN_RESTART_REQUESTED__"):]
-    return False, ""
-
-
-def _check_wait_signal(messages: list) -> int:
-    """Return wait minutes from agent messages, or 0 if not requested."""
-    for msg in messages:
-        for part in getattr(msg, "parts", []):
-            content = getattr(part, "content", None)
-            if isinstance(content, str) and content.startswith("__ATMAN_WAIT_REQUESTED__"):
-                try:
-                    return int(content[len("__ATMAN_WAIT_REQUESTED__"):])
-                except ValueError:
-                    return 0
-    return 0
-
-
-def _build_context_warning(remaining: int, urgency: str = "") -> str:
-    if urgency == "urgent":
-        return f"⚠️ Осталось ~{remaining} токенов. Нужно завершать."
-    if urgency == "alert":
-        return f"⚠️ Осталось ~{remaining} токенов."
-    return (
-        f"[Системное уведомление]\n"
-        f"Контекст сессии заполняется — осталось около {remaining} токенов.\n"
-        "Сообщи пользователю, что разговор скоро нужно продолжить в новой сессии.\n"
-        "Если есть что-то важное, что ещё не зафиксировано — сделай это сейчас "
-        "через record_key_moment, иначе это не перейдёт в следующую сессию.\n"
-        "Всё что уже записано — вернётся автоматически. Когда будешь готов — "
-        "вызови restart_session. Новая сессия откроется с твоей памятью и хвостом этого разговора."
-    )
-
-
-def _build_free_time_menu(enable_free_time: bool) -> str:
-    cmds = "reflect() | review_facts() | wait(minutes) | sleep() | save_to_memory(content)"
-    if enable_free_time:
-        cmds += " | free_time()"
-    return (
-        "[Системное уведомление] Похоже, пользователь отошёл. "
-        "Ты предоставлен самому себе.\n"
-        f"Вызови одну из команд: {cmds}"
-    )
-
-
-def _build_restart_package(
-    experience_record,
-    tail_messages: list,
-    unexamined_count: int,
-    restart_reason: str,
-) -> str:
-    exp = experience_record.experience if experience_record else None
-    lines = ["[system-handoff] Сессия перезапущена."]
-    if restart_reason:
-        lines.append(f"\nТы сам инициировал перезапуск. Причина: {restart_reason}")
-    if exp:
-        lines.append(f"\nЭмоциональный тон прошлой сессии: {exp.fact_refs and 'есть факты' or 'нет данных'}")
-        lines.append(f"Ключевых моментов: {len(exp.key_moments)}")
-    if unexamined_count:
-        lines.append(f"Факты без осознанного отношения: {unexamined_count} шт.")
-    if tail_messages:
-        lines.append("\n--- Хвост разговора ---")
-        for msg in tail_messages:
-            for part in getattr(msg, "parts", []):
-                content = getattr(part, "content", None)
-                if isinstance(content, str) and content.strip():
-                    lines.append(content[:300])
-    return "\n".join(lines)
-
-
-def _build_prev_session_context(experience_record) -> str | None:
-    """
-    Build first-message context from previous session experience.
-
-    Always produces output — there is no valid case where a previous session
-    exists but the agent should start the next one without any context.
-    close_reason=None means a legacy record; treated same as "completed".
-    """
-    if experience_record is None:
-        return None
-    exp = experience_record.experience
-    reason = exp.close_reason
-
-    # How the previous session ended
-    if reason == "timeout_sleep":
-        recap = f"\nТвой пересказ перед сном: {exp.agent_recap}" if exp.agent_recap else ""
-        opening = f"Прошлая сессия: ты задремал — пользователь отошёл, ты решил поспать.{recap}"
-    elif reason == "restart":
-        r = f"\nТвоя причина: {exp.restart_reason}" if exp.restart_reason else ""
-        opening = f"Прошлая сессия: ты сам инициировал перезапуск.{r}"
-    elif reason == "forced":
-        opening = "Прошлая сессия: контекст переполнился принудительно — ты не успел завершить осознанно."
-    elif reason == "interrupted":
-        opening = "Прошлая сессия: прервана внешним сигналом — ты не участвовал в закрытии."
-    else:
-        # completed or legacy None — normal end
-        opening = "Прошлая сессия завершена нормально."
-
-    # Key moments from that session
-    km_lines = []
-    for km in exp.key_moments[:3]:
-        felt = km.how_i_felt
-        tone = (
-            "радостно" if felt.emotional_valence >= 0.3
-            else "тяжело" if felt.emotional_valence <= -0.3
-            else "спокойно"
-        )
-        km_lines.append(f"  — {km.what_happened[:120]} ({tone})")
-
-    km_block = "\nЧто зафиксировано:\n" + "\n".join(km_lines) if km_lines else ""
-
-    unexamined = len(exp.unexamined_fact_refs)
-    unex_block = f"\nФакты без осмысления: {unexamined} шт." if unexamined else ""
-
-    return f"[system-context]\n{opening}{km_block}{unex_block}"
 
 
 class AtmanRunner:
@@ -452,344 +432,595 @@ class AtmanRunner:
         self._workspace = workspace
         self._agent_id = agent_id
         self._config = config
+        # E22.5: Track triggered context thresholds for restart warning
+        self._triggered: set[int] = set()
+        # E22.6: Queue-based stdin reader for timeout support
+        self._input_queue: asyncio.Queue[str | None] = asyncio.Queue()
+        self._stop_reader = threading.Event()
+        self._reader_thread: threading.Thread | None = None
 
-    def _make_agent(self, tool_funcs: tuple) -> Agent:
-        from atman.adapters.agent.instructions import build_instructions
+    def _start_stdin_reader(self, loop: asyncio.AbstractEventLoop) -> None:
+        """Start dedicated stdin reader thread that feeds lines into queue.
 
-        return Agent(
-            self._config.model.model,
-            deps_type=AtmanDeps,
-            instructions=lambda ctx: build_instructions(ctx.deps),
-            tools=tool_funcs,
-            model_settings={"temperature": self._config.model.temperature}
-            if hasattr(Agent, "model_settings")
-            else {},
-        )
+        Args:
+            loop: Event loop to use for asyncio.run_coroutine_threadsafe
+        """
+        if self._reader_thread is not None and self._reader_thread.is_alive():
+            return
 
-    async def _do_restart(
+        def _read_loop() -> None:
+            """Read stdin in dedicated thread and put lines into queue."""
+            while not self._stop_reader.is_set():
+                try:
+                    line = input()
+                    # Put line into queue (thread-safe, blocks if full)
+                    asyncio.run_coroutine_threadsafe(self._input_queue.put(line), loop)
+                except EOFError:
+                    # Signal EOF to coroutine
+                    asyncio.run_coroutine_threadsafe(self._input_queue.put(None), loop)
+                    break
+                except (OSError, RuntimeError):
+                    # stdin not available (pytest) or other runtime error
+                    asyncio.run_coroutine_threadsafe(self._input_queue.put(None), loop)
+                    break
+                except Exception:
+                    # Unexpected error, signal EOF
+                    asyncio.run_coroutine_threadsafe(self._input_queue.put(None), loop)
+                    break
+
+        self._reader_thread = threading.Thread(target=_read_loop, daemon=True)
+        self._reader_thread.start()
+
+    def _stop_stdin_reader(self) -> None:
+        """Stop stdin reader thread."""
+        self._stop_reader.set()
+        if self._reader_thread is not None:
+            self._reader_thread.join(timeout=1.0)
+
+    def _do_restart(
         self,
-        session_manager,
+        session_manager: SessionManager,
         session_id: UUID,
         deps: AtmanDeps,
         history: list,
         restart_reason: str,
+        user_language: str = "ru",
     ) -> tuple[UUID, AtmanDeps]:
-        """Finish current session, start new one, rebuild history with restart package."""
-        # Ensure at least one key moment
+        """
+        Execute session restart workflow.
+
+        Steps:
+        1. Ensure at least one key moment exists
+        2. Finish current session with close_reason="restart"
+        3. Build restart package
+        4. Replace history with package + tail
+        5. Start new session
+        6. Return new session_id and updated deps
+
+        Args:
+            session_manager: Session manager instance
+            session_id: Current session ID to finish
+            deps: Current AtmanDeps
+            history: Message history list (will be modified in-place)
+            restart_reason: Reason provided to restart_session tool
+
+        Returns:
+            tuple[UUID, AtmanDeps]: (new_session_id, new_deps)
+
+        Raises:
+            SessionNotFoundError: If session is not active
+            ValueError: If identity or narrative not found for new session
+        """
+        _LOG.info("Executing restart for session %s (reason: %s)", session_id, restart_reason)
+
+        # 1. Get active session and ensure at least one key moment
         session_result = session_manager.get_active_session(session_id)
-        if session_result is not None and not session_result.key_moments:
-            session_manager.append_key_moment_input(
-                session_id,
-                KeyMomentInput(
-                    what_happened="Сессия завершена по запросу перезапуска.",
-                    why_it_matters="Continuity preserved via restart.",
-                    emotional_valence=0.0,
-                    emotional_intensity=0.1,
-                    depth=EmotionalDepth.SURFACE,
-                    incomplete_coloring=True,
-                ),
+        if session_result is None:
+            raise SessionNotFoundError(f"Session {session_id} not found or already finished")
+
+        if not session_result.key_moments:
+            _LOG.warning("Session %s has no key moments; creating minimal fallback", session_id)
+            minimal_moment = KeyMomentInput(
+                what_happened="Session restarted by agent",
+                recorded_at=datetime.now(UTC),
+                emotional_valence=0.0,
+                emotional_intensity=0.1,
+                depth=EmotionalDepth.SURFACE,
+                why_it_matters="Continuity preserved via restart",
+                incomplete_coloring=True,
             )
+            session_manager.append_key_moment_input(session_id, minimal_moment)
+            # Refresh session_result after adding key moment
+            session_result = session_manager.get_active_session(session_id)
+            if session_result is None:
+                raise SessionNotFoundError(
+                    f"Session {session_id} disappeared after adding key moment"
+                )
 
-        try:
-            session_manager.finish_session(
-                session_id,
-                overall_emotional_tone=0.0,
-                close_reason="restart",
-                restart_reason=restart_reason,
-            )
-        except (SessionAlreadyFinishedError, SessionNotFoundError):
-            pass
+        # 2. Finish current session
+        session_manager.finish_session(
+            session_id,
+            overall_emotional_tone=0.0,
+            key_insight=f"Session restarted: {restart_reason}"
+            if restart_reason
+            else "Session restarted",
+            alignment_check=True,
+            alignment_notes="",
+            close_reason="restart",
+            restart_reason=restart_reason or None,
+            user_language=user_language,
+        )
 
-        from atman.adapters.storage.file_state_store import FileStateStore
+        # 3. Build restart package
+        # Preserve tail messages (last N exchanges = 2N messages)
+        # TODO: Make context_tail_messages configurable via AgentConfig
+        tail_size = 10 * 2  # 10 exchanges = 20 messages
+        tail_messages = history[-tail_size:] if len(history) > tail_size else history.copy()
 
-        store = FileStateStore(workspace=self._workspace)
-        exp_id = __import__(
-            "atman.core.services.session_manager", fromlist=["deterministic_session_experience_id"]
-        ).deterministic_session_experience_id(session_id)
-        exp_record = store.get_experience(exp_id)
+        package_text = _build_restart_package(
+            session_result,
+            restart_reason,
+            tail_messages,
+        )
 
-        tail_n = self._config.context_tail_messages * 2
-        tail = list(history[-tail_n:]) if history else []
+        # 4. Replace history with restart package + tail
+        history.clear()
 
-        unexamined_count = len(exp_record.experience.unexamined_fact_refs) if exp_record else 0
-        package = _build_restart_package(exp_record, tail, unexamined_count, restart_reason)
+        # Add restart package as user message (system context for new session)
+        restart_package_msg = ModelRequest(
+            parts=[UserPromptPart(content=package_text, part_kind="user-prompt")]
+        )
+        history.append(restart_package_msg)
 
-        # New session
+        # Append tail messages (conversation context)
+        history.extend(tail_messages)
+
+        _LOG.info(
+            "Restart package prepared (%d chars), tail preserved (%d messages)",
+            len(package_text),
+            len(tail_messages),
+        )
+
+        # 5. Start new session
         new_ctx = session_manager.start_session(self._agent_id)
         new_session_id = new_ctx.session_id
+
+        # 6. Update deps with new session_id
         new_deps = replace(deps, session_id=new_session_id)
 
-        # Rebuild history: restart package first, then tail
-        history.clear()
-        from pydantic_ai.messages import ModelRequest, UserPromptPart
+        # Reset triggered thresholds for new session
+        self._triggered.clear()
 
-        history.append(
-            ModelRequest(parts=[UserPromptPart(content=package, part_kind="user-prompt")])
-        )
-        history.extend(tail)
-
+        _LOG.info("Restart complete: new session %s started", new_session_id)
         return new_session_id, new_deps
 
-    async def _run_free_time_menu(
-        self,
-        agent: Agent,
-        deps: AtmanDeps,
-        history: list,
-        session_manager,
-        session_id: UUID,
-    ) -> tuple[bool, str | None]:
-        """
-        Run one free-time menu iteration.
-
-        Returns (should_sleep, agent_recap_if_sleep).
-        """
-        from atman.term import print_info, print_warn
-
-        menu_text = _build_free_time_menu(self._config.enable_free_time)
-        if self._config.show_agent_monologue:
-            print_info(f"\n{menu_text}\n")
-
-        try:
-            result = await agent.run(menu_text, deps=deps, message_history=history)
-        except Exception as exc:
-            _LOG.warning("Free-time agent run failed: %s", exc)
-            return False, None
-
-        output = str(result.output or "")
-
-        # Check for sleep signal (either tool call or text "sleep()")
-        if "sleep" in output.lower() or "__ATMAN_SLEEP__" in output:
-            return True, output if output.strip() else None
-
-        # Check wait signal
-        wait_mins = _check_wait_signal(result.all_messages())
-        if wait_mins:
-            print_info(f"[Свободное время] Агент решил подождать ещё {wait_mins} мин.")
-            return False, None
-
-        if self._config.show_agent_monologue and output:
-            print_info(f"[Агент] {output}")
-
-        return False, None
-
     async def chat(self) -> None:
-        """Run an interactive chat loop with token monitoring, timeout, and restart support."""
+        """Run a simple stdin/stdout chat loop until EOF, empty input, or Ctrl-C."""
+
         from atman.adapters.agent.factory import build_deps
+        from atman.adapters.agent.instructions import build_instructions
         from atman.adapters.agent.tools import (
             log_experience,
             record_key_moment,
             restart_session,
             wait_session,
         )
-        from atman.term import print_err, print_info, print_plain, print_warn
+        from atman.term import print_err, print_info, print_plain, print_prompt, print_warn
 
-        deps, session_manager, store = build_deps(self._workspace, self._agent_id, self._config)
+        deps, session_manager, _store = build_deps(self._workspace, self._agent_id, self._config)
         session_id: UUID | None = None
+        # E22.5: Track message history for restart
+        history: list = []
+        # E22.6: Track session state for menu mode
+        reflected_this_session = False
         interrupted = False
-        exit_code = 0
+        user_language = "ru"  # updated from user messages as session progresses
 
-        def _sigterm_handler(signum: int, frame: object) -> None:
-            nonlocal interrupted
-            _ = (signum, frame)
-            _LOG.info("SIGTERM received")
-            interrupted = True
-
-        original_sigterm = signal.signal(signal.SIGTERM, _sigterm_handler)
+        # E22.6: Start dedicated stdin reader thread with current event loop
+        loop = asyncio.get_event_loop()
+        self._start_stdin_reader(loop)
 
         try:
-            # Inject previous session context if available
-            prev_context_msg: str | None = None
-            try:
-                from atman.core.services.session_manager import deterministic_session_experience_id
-
-                recent = store.list_recent_experiences(limit=1)
-                if recent:
-                    prev_context_msg = _build_prev_session_context(recent[0])
-            except Exception:
-                pass
-
             session_ctx = session_manager.start_session(self._agent_id)
             session_id = session_ctx.session_id
             deps = replace(deps, session_id=session_id)
 
-            tool_funcs: tuple
             if self._config.enable_key_moments:
                 tool_funcs = (record_key_moment, log_experience, restart_session, wait_session)
             else:
                 tool_funcs = (log_experience, restart_session, wait_session)
 
-            agent = self._make_agent(tool_funcs)
-            history: list = []
-            context_thresholds_hit: set[int] = set()
-            limit = self._config.model.context_limit
+            agent = Agent(
+                self._config.model.model,
+                deps_type=AtmanDeps,
+                instructions=lambda ctx: build_instructions(ctx.deps),
+                tools=tool_funcs,
+            )
+
+            # Build and inject the full memory bundle (identity + narrative + prev session)
+            # into agent awareness. All automatically recalled content goes through
+            # inject_memory() so delivery mode is consistent and configurable.
+            recent_experiences = session_manager._state_store.list_recent_experiences(limit=1)
+            prev_text = None
+            if recent_experiences:
+                prev_text = self._build_wake_up_message(recent_experiences[0].experience)
+
+            memory_bundle = build_memory_context(deps, prev_session_text=prev_text)
+            if memory_bundle:
+                _LOG.info(
+                    "Injecting memory bundle for session %s (mode=%s)",
+                    session_id,
+                    self._config.memory_injection_mode,
+                )
+                extra = inject_memory(
+                    memory_bundle,
+                    mode=self._config.memory_injection_mode,
+                    history=history,
+                    prepend=True,
+                )
+                if extra is not None:
+                    deps = replace(deps, injected_context=extra)
 
             print_info("Session started. Empty line or Ctrl-D to exit.\n")
-
-            if prev_context_msg:
-                print_info(f"{prev_context_msg}\n")
+            timeout_seconds = self._config.session_timeout_minutes * 60
 
             while True:
-                if interrupted:
-                    break
-
-                timeout_sec = self._config.session_timeout_minutes * 60
+                print_prompt("You: ")
                 try:
+                    # Wait for input from queue with timeout
                     user_text = await asyncio.wait_for(
-                        asyncio.to_thread(input, "You: "),
-                        timeout=timeout_sec,
+                        self._input_queue.get(), timeout=timeout_seconds
                     )
-                except asyncio.TimeoutError:
-                    # User went away — free time menu
-                    print_info("\n[Пользователь отошёл. Переходим в режим свободного времени.]")
-                    sleep_requested, agent_recap = await self._run_free_time_menu(
-                        agent, deps, history, session_manager, session_id
+                except TimeoutError:
+                    print_warn(
+                        f"\n⏱️  Session timeout after {timeout_seconds / 60:.0f} minutes. Entering menu mode..."
                     )
-                    if sleep_requested:
-                        # Soft close
-                        try:
-                            session_manager.finish_session(
-                                session_id,
-                                overall_emotional_tone=0.0,
-                                close_reason="timeout_sleep",
-                                agent_recap=agent_recap,
-                            )
-                        except ValueError:
-                            _force_finish(session_manager, session_id, "timeout_sleep")
-                        except (SessionAlreadyFinishedError, SessionNotFoundError):
-                            pass
-                        session_id = None
+                    # Enter menu mode
+                    menu_result = await self._handle_menu_mode(
+                        deps, session_manager, session_id, reflected_this_session
+                    )
+                    if menu_result == "exit":
                         break
+                    elif menu_result == "reflected":
+                        reflected_this_session = True
+                    elif isinstance(menu_result, tuple) and menu_result[0] == "wait":
+                        # Update timeout with new value from wait command
+                        timeout_seconds = menu_result[1]
+                    # Continue main loop after menu
                     continue
-                except EOFError:
+
+                # Check for EOF
+                if user_text is None:
                     break
 
                 if not user_text.strip():
                     break
 
+                # Detect user language from their message (most recent wins)
+                if len(user_text.strip()) >= 4:
+                    user_language = "ru" if _is_mostly_cyrillic(user_text) else "en"
+
                 try:
                     result = await agent.run(
                         user_text,
                         deps=deps,
-                        message_history=history if history else None,
+                        message_history=history or None,
                     )
                 except Exception as exc:
                     print_err(f"Run failed: {exc!s}")
                     continue
 
-                history.extend(result.all_messages())
+                # E22.5: Check for restart request (only in new messages to avoid infinite loop)
+                restart_requested, restart_reason = _check_restart_requested(result.new_messages())
+
+                if restart_requested:
+                    _LOG.info("Restart requested by agent (reason: %s)", restart_reason or "(none)")
+                    print_info(
+                        f"\n[System] Restarting session... (reason: {restart_reason or 'agent request'})\n"
+                    )
+
+                    try:
+                        # Update history with current run's messages before restart
+                        # so tail_messages includes the exchange that triggered restart
+                        history.extend(result.new_messages())
+
+                        # Execute restart workflow
+                        new_session_id, new_deps = self._do_restart(
+                            session_manager,
+                            session_id,
+                            deps,
+                            history,
+                            restart_reason,
+                            user_language=user_language,
+                        )
+
+                        # Update state for next iteration
+                        session_id = new_session_id
+                        deps = new_deps
+                        reflected_this_session = False  # Reset for new session
+
+                        print_info("Session restarted successfully.\n")
+                        continue  # Skip output, continue loop with new session
+
+                    except Exception as exc:
+                        print_err(f"Restart failed: {exc!s}")
+                        _LOG.exception("Failed to restart session %s", session_id)
+                        break  # Exit loop on restart failure
+
+                # E22.5: Check for wait request (agent-triggered timeout adjustment)
+                wait_requested, wait_minutes = _check_wait_requested(result.new_messages())
+
+                if wait_requested and wait_minutes > 0:
+                    timeout_seconds = wait_minutes * 60
+                    _LOG.info("Wait requested by agent: %d minutes (timeout reset)", wait_minutes)
+                    print_info(f"\n⏱️  Timer reset to {wait_minutes} minutes (agent request).\n")
+
+                # Normal flow: display output and update history
                 print_plain(str(result.output))
                 print_plain("")
 
-                # Token monitoring
-                try:
-                    usage = result.usage()
-                    input_tokens = getattr(usage, "input_tokens", None) or 0
-                    if limit and input_tokens:
-                        ratio = input_tokens / limit
-                        remaining = limit - input_tokens
-
-                        if ratio >= 0.95 and 95 not in context_thresholds_hit:
-                            context_thresholds_hit.add(95)
-                            _LOG.warning("Context 95%% full (%d tokens), forcing restart", input_tokens)
-                            session_id, deps = await self._do_restart(
-                                session_manager, session_id, deps, history, "forced_95pct"
-                            )
-                            context_thresholds_hit = set()
-                            continue
-
-                        elif ratio >= 0.90 and 90 not in context_thresholds_hit:
-                            context_thresholds_hit.add(90)
-                            warning = _build_context_warning(remaining, urgency="urgent")
-                            history.append(
-                                __import__(
-                                    "pydantic_ai.messages",
-                                    fromlist=["ModelRequest", "UserPromptPart"],
-                                ).ModelRequest(
-                                    parts=[
-                                        __import__(
-                                            "pydantic_ai.messages",
-                                            fromlist=["UserPromptPart"],
-                                        ).UserPromptPart(content=warning, part_kind="user-prompt")
-                                    ]
-                                )
-                            )
-
-                        elif ratio >= 0.80 and 80 not in context_thresholds_hit:
-                            context_thresholds_hit.add(80)
-                            warning = _build_context_warning(remaining, urgency="alert")
-                            from pydantic_ai.messages import ModelRequest, UserPromptPart
-
-                            history.append(
-                                ModelRequest(
-                                    parts=[UserPromptPart(content=warning, part_kind="user-prompt")]
-                                )
-                            )
-
-                        elif ratio >= 0.70 and 70 not in context_thresholds_hit:
-                            context_thresholds_hit.add(70)
-                            warning = _build_context_warning(remaining)
-                            from pydantic_ai.messages import ModelRequest, UserPromptPart
-
-                            history.append(
-                                ModelRequest(
-                                    parts=[UserPromptPart(content=warning, part_kind="user-prompt")]
-                                )
-                            )
-                except Exception:
-                    pass  # token monitoring must never break the chat loop
-
-                # Auto-record value-based refusals as key moments
-                try:
+                # Auto-record value-based refusals as key moments (silent, no agent nudging)
+                with contextlib.suppress(Exception):
                     _auto_record_refusal_if_needed(
                         output=str(result.output or ""),
                         session_manager=session_manager,
                         session_id=session_id,
-                        clock=self._config,
                     )
-                except Exception:
-                    pass
 
-                # Restart signal check
-                try:
-                    restart_requested, restart_reason = _check_restart_signal(result.all_messages())
-                    if restart_requested:
-                        print_info("[Перезапуск сессии…]")
-                        session_id, deps = await self._do_restart(
-                            session_manager, session_id, deps, history, restart_reason
-                        )
-                        context_thresholds_hit = set()
-                except Exception:
-                    pass  # restart detection must never break the chat loop
-
+                # E22.5: Update history with new messages from this run
+                history.extend(result.new_messages())
         except KeyboardInterrupt:
             print_warn("\nInterrupted.")
+            # Track interruption for close_reason
             interrupted = True
-
-        except SystemExit as exc:
-            interrupted = True
-            exit_code = exc.code if isinstance(exc.code, int) else 1
-
         finally:
-            signal.signal(signal.SIGTERM, original_sigterm)
-
+            self._stop_stdin_reader()
             if session_id is not None:
-                close_r = "interrupted" if interrupted else "completed"
                 try:
-                    session_manager.finish_session(
-                        session_id,
-                        overall_emotional_tone=0.0,
-                        key_insight="",
-                        alignment_check=True,
-                        alignment_notes="",
-                        close_reason=close_r,
-                    )
+                    # Pass close_reason if session was interrupted
+                    finish_kwargs = {
+                        "session_id": session_id,
+                        "overall_emotional_tone": 0.0,
+                        "key_insight": "",
+                        "alignment_check": True,
+                        "alignment_notes": "",
+                        "user_language": user_language,
+                    }
+                    if interrupted:
+                        finish_kwargs["close_reason"] = "interrupted"
+
+                    session_manager.finish_session(**finish_kwargs)
                 except ValueError as exc:
                     if "Cannot finish session without key moments" in str(exc):
-                        _force_finish(session_manager, session_id, close_r or "completed")
+                        # Pass None for normal completion without key moments
+                        _force_finish(session_manager, session_id, None)
                     else:
-                        _LOG.exception("finish_session failed")
+                        raise
                 except (SessionAlreadyFinishedError, SessionNotFoundError):
                     pass
 
-            if exit_code:
-                sys.exit(exit_code)
+    async def _handle_menu_mode(
+        self,
+        deps: AtmanDeps,
+        session_manager: SessionManager,
+        session_id: UUID,
+        reflected_this_session: bool,
+    ) -> str | tuple[str, int]:
+        """
+        Handle menu mode after timeout.
+
+        Returns:
+            "exit" to break main loop,
+            "reflected" if reflection was performed,
+            "continue" to resume with same timeout,
+            ("wait", new_timeout_seconds) to resume with new timeout
+        """
+        from atman.term import print_info, print_plain, print_prompt, print_warn
+
+        print_info("\n📋 Menu Mode - Available commands:")
+        if not reflected_this_session:
+            print_plain("  reflect - Run micro reflection on this session")
+        print_plain("  wait <minutes> - Reset timer and continue")
+        print_plain("  sleep - Close session and exit")
+        print_plain("  save_to_memory <content> - Save to factual memory")
+        if self._config.enable_free_time:
+            print_plain("  free_time - Enter free time mode")
+        print_plain("")
+
+        max_retries = 3
+        retry_count = 0
+
+        while retry_count < max_retries:
+            print_prompt("Menu> ")
+            try:
+                # Get input from queue (no timeout in menu mode)
+                cmd_input = await self._input_queue.get()
+            except Exception:
+                return "exit"
+
+            # Check for EOF
+            if cmd_input is None:
+                return "exit"
+
+            cmd_parts = cmd_input.strip().split(maxsplit=1)
+            if not cmd_parts:
+                retry_count += 1
+                print_warn(f"Empty command. {max_retries - retry_count} retries left.")
+                continue
+
+            cmd = cmd_parts[0].lower()
+            arg = cmd_parts[1] if len(cmd_parts) > 1 else ""
+
+            # Handle commands
+            if cmd == "reflect":
+                if reflected_this_session:
+                    print_warn("Reflection already performed this session.")
+                    retry_count += 1
+                    continue
+
+                try:
+                    event = deps.micro_reflection.reflect(session_id)
+                    print_info(f"✓ Reflection completed: {event.key_insight}")
+                    print_warn(
+                        "Note: Reflection during active session may have limited data. "
+                        "Full reflection occurs after session completion."
+                    )
+                    return "reflected"
+                except Exception as exc:
+                    print_warn(f"Reflection failed: {exc!s}")
+                    retry_count += 1
+                    continue
+
+            elif cmd == "wait":
+                if not arg:
+                    print_warn("Usage: wait <minutes>")
+                    retry_count += 1
+                    continue
+                try:
+                    minutes = int(arg)
+                    if minutes <= 0:
+                        print_warn("Minutes must be positive")
+                        retry_count += 1
+                        continue
+                    print_info(f"Timer reset for {minutes} minutes")
+                    return ("wait", minutes * 60)
+                except ValueError:
+                    print_warn("Invalid minutes value")
+                    retry_count += 1
+                    continue
+
+            elif cmd == "sleep":
+                _force_finish(session_manager, session_id, "timeout_sleep")
+                print_info("Session closed. Exiting...")
+                return "exit"
+
+            elif cmd == "save_to_memory":
+                if not arg:
+                    print_warn("Usage: save_to_memory <content>")
+                    retry_count += 1
+                    continue
+                # Save to factual memory - placeholder for future implementation
+                # Full implementation would require FactualMemory port in AtmanDeps
+                print_warn(f"save_to_memory not yet implemented (content NOT saved): {arg[:50]}...")
+                print_info("Returning to menu. Use 'wait' to continue session.")
+                retry_count += 1
+                continue
+
+            elif cmd == "free_time":
+                if not self._config.enable_free_time:
+                    print_warn("Free time mode is disabled in config")
+                    retry_count += 1
+                    continue
+
+                print_info("Entering free time mode. Type 'end_free_time' to exit.")
+                free_time_result = await self._handle_free_time_mode(deps, session_id)
+                # After free_time, return to menu (not main loop)
+                if free_time_result == "continue":
+                    print_info("Exited free time mode. Returning to menu.")
+                    continue  # Stay in menu loop
+                return free_time_result  # "exit" case
+
+            else:
+                print_warn(f"Unknown command: {cmd}")
+                retry_count += 1
+                continue
+
+        # Max retries reached
+        print_warn(f"Max retries ({max_retries}) reached. Closing session.")
+        _force_finish(session_manager, session_id, "menu_timeout")
+        return "exit"
+
+    async def _handle_free_time_mode(
+        self,
+        deps: AtmanDeps,
+        session_id: UUID,
+    ) -> str:
+        """
+        Handle free time mode - open-ended agent interaction.
+
+        Returns:
+            "continue" to return to menu/main loop, "exit" to close session
+        """
+        from atman.adapters.agent.instructions import build_instructions
+        from atman.adapters.agent.tools import log_experience, record_key_moment
+        from atman.term import print_err, print_info, print_plain, print_prompt
+
+        if self._config.enable_key_moments:
+            tool_funcs = (record_key_moment, log_experience)
+        else:
+            tool_funcs = (log_experience,)
+
+        agent = Agent(
+            self._config.model.model,
+            deps_type=AtmanDeps,
+            instructions=lambda ctx: build_instructions(ctx.deps),
+            tools=tool_funcs,
+        )
+
+        print_info("Free time mode active. Agent can explore freely.")
+
+        while True:
+            print_prompt("Free> ")
+            try:
+                # Get input from queue (no timeout in free time mode)
+                user_input = await self._input_queue.get()
+            except Exception:
+                return "exit"
+
+            # Check for EOF
+            if user_input is None:
+                return "exit"
+
+            if not user_input.strip():
+                continue
+
+            if user_input.strip().lower() == "end_free_time":
+                # Return to menu, not main loop
+                return "continue"
+
+            try:
+                result = await agent.run(user_input, deps=deps)
+                print_plain(str(result.output))
+                print_plain("")
+            except Exception as exc:
+                print_err(f"Free time run failed: {exc!s}")
+                continue
+
+    def _build_wake_up_message(self, experience: object) -> str | None:
+        """Build wake-up message based on close_reason from last SessionExperience."""
+        from atman.core.models import SessionExperience
+
+        if not isinstance(experience, SessionExperience):
+            return None
+
+        close_reason = experience.close_reason
+        if not close_reason:
+            return None
+
+        lang = getattr(experience, "user_language", None) or "ru"
+        reason = getattr(experience, "restart_reason", None) or ""
+
+        if lang == "en":
+            if close_reason == "timeout_sleep":
+                return "You dozed off — the user stepped away, you chose to sleep."
+            elif close_reason == "restart":
+                r = reason or "not specified"
+                return f"You initiated a restart. Reason: {r}"
+            elif close_reason == "forced":
+                return "Context limit was reached — the session was closed before you could finish consciously."
+            elif close_reason == "interrupted":
+                return "The session was interrupted by an external signal — you were not part of the closing."
+        else:
+            if close_reason == "timeout_sleep":
+                return "Ты задремал — пользователь отошёл, ты решил поспать."
+            elif close_reason == "restart":
+                r = reason or "не указана"
+                return f"Ты сам инициировал перезапуск. Причина: {r}"
+            elif close_reason == "forced":
+                return (
+                    "Контекст переполнился принудительно — ты не успел завершить сессию осознанно."
+                )
+            elif close_reason == "interrupted":
+                return "Сессия была прервана внешним сигналом — ты не участвовал в закрытии."
+
+        return None

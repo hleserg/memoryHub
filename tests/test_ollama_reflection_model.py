@@ -12,6 +12,7 @@ Covers:
 import json
 import os
 from unittest.mock import MagicMock, patch
+from uuid import uuid4
 
 import httpx
 import pytest
@@ -21,6 +22,25 @@ from pydantic import BaseModel
 from atman.adapters.reflection.exceptions import OllamaReflectionError
 from atman.adapters.reflection.ollama_reflection_model import OllamaReflectionModel
 from atman.adapters.reflection.prompts import OllamaMessage
+from atman.core.models.experience import EmotionalDepth, FeltSense, KeyMoment, SessionExperience
+
+
+def _dummy_session_experience() -> SessionExperience:
+    km = KeyMoment(
+        what_happened="x",
+        how_i_felt=FeltSense(
+            emotional_valence=0.0,
+            emotional_intensity=0.5,
+            depth=EmotionalDepth.SURFACE,
+        ),
+        why_it_matters="y",
+    )
+    return SessionExperience(
+        session_id=uuid4(),
+        key_moment_ids=[km.id],
+        avg_emotional_intensity=km.how_i_felt.emotional_intensity,
+        has_profound_moment=False,
+    )
 
 
 class MockOutput(BaseModel):
@@ -289,7 +309,7 @@ class TestReflectionMethods:
             OllamaReflectionModel() as model,
             patch.object(model._client, "post", return_value=mock_resp) as mock_post,
         ):
-            result = model.generate_reframing_note(MagicMock(), {})
+            result = model.generate_reframing_note(_dummy_session_experience(), {})
 
             assert result.reflection == "new insight"
             assert result.reflection_type == "insight"
@@ -364,7 +384,7 @@ class TestReflectionMethods:
             patch.object(model._client, "post", return_value=mock_resp),
             pytest.raises(OllamaReflectionError) as exc_info,
         ):
-            model.generate_reframing_note(MagicMock(), {})
+            model.generate_reframing_note(_dummy_session_experience(), {})
 
         assert exc_info.value.attempts == 2
 

@@ -50,12 +50,17 @@ def _experience_record(
     ts = timestamp or datetime.now(UTC)
     exp = SessionExperience(
         session_id=sid,
-        key_moments=[moment],
+        key_moment_ids=[moment.id],
+        avg_emotional_intensity=0.5,
+        has_profound_moment=False,
         importance=0.5,
         salience=0.5,
         timestamp=ts,
     )
-    return ExperienceRecord(experience=exp)
+    rec = ExperienceRecord(experience=exp)
+    # Attach moment for tests that need it
+    rec._test_moment = moment  # type: ignore[attr-defined]
+    return rec
 
 
 def test_experience_round_trip_and_get_missing() -> None:
@@ -109,12 +114,13 @@ def test_search_experiences_filters_and_limit() -> None:
         store = FileStateStore(Path(tmp))
         sid = uuid4()
         t0 = datetime(2026, 1, 10, 12, 0, 0, tzinfo=UTC)
-        store.create_experience(
-            _experience_record(session_id=sid, timestamp=t0, depth=EmotionalDepth.PROFOUND)
-        )
-        store.create_experience(
-            _experience_record(session_id=uuid4(), timestamp=t0 + timedelta(days=1))
-        )
+        rec1 = _experience_record(session_id=sid, timestamp=t0, depth=EmotionalDepth.PROFOUND)
+        store.create_experience(rec1)
+        store.store_key_moments(sid, [rec1._test_moment])  # type: ignore[attr-defined]
+
+        rec2 = _experience_record(session_id=uuid4(), timestamp=t0 + timedelta(days=1))
+        store.create_experience(rec2)
+        store.store_key_moments(rec2.experience.session_id, [rec2._test_moment])  # type: ignore[attr-defined]
 
         all_recent = store.search_experiences(query=None, limit=10)
         assert len(all_recent) == 2

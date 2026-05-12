@@ -358,7 +358,7 @@ def _check_restart_requested(messages) -> bool:
 
 **Часть 1 — модели и unexamined:**
 1. Разделить `KeyMoment` и `SessionExperience` в моделях: убрать `key_moments: list`, добавить `key_moment_ids: list[UUID]`
-2. Добавить новые поля `SessionExperience`: `unexamined_fact_refs`, `close_reason`, `agent_recap`, `restart_reason`
+2. Добавить новые поля `SessionExperience`: `unexamined_fact_refs`, `close_reason`, `user_language`, `restart_reason`
 3. Расширить StateStore порт: `create_key_moment`, `list_key_moments`, `get_key_moment`
 4. Реализовать новые методы в InMemoryStateStore, FileStateStore, PostgresStateStore
 5. `finish_session()` — вычисление `unexamined_fact_refs`, сохранение key_moments отдельно
@@ -451,14 +451,14 @@ def _check_restart_requested(messages) -> bool:
 
 | `close_reason` | Когда | Сообщение агенту при пробуждении |
 |---|---|---|
-| `timeout_sleep` | Таймаут → агент решил поспать | "Ты задремал — пользователь отошёл, ты решил поспать. [agent_recap если есть]" |
+| `timeout_sleep` | Таймаут → агент решил поспать | "Ты задремал — пользователь отошёл, ты решил поспать. " |
 | `restart` | Агент вызвал `restart_session` | "Ты сам инициировал перезапуск. Причина: {restart_reason}" |
 | `forced` | Контекст достиг 95% | "Контекст переполнился принудительно — ты не успел завершить сессию осознанно." |
 | `interrupted` | Ctrl+C / EOF / SIGTERM | "Сессия была прервана внешним сигналом — ты не участвовал в закрытии." |
 
 После контекста закрытия — стандартный пакет: нарратив + слепок личности + (при restart) хвост разговора.
 
-`agent_recap: str | None = None` — субъективный пересказ агента перед сном (LLM-генерация, свободная форма), поле `SessionExperience`. Агент пишет его добровольно, принуждения нет.
+`user_language: str | None = None — язык пользователя для контекста пробуждения, поле `SessionExperience`. Фиксируется автоматически при finish_session().
 `restart_reason: str = ""` — причина перезапуска со слов агента, поле `SessionExperience`.
 
 ---
@@ -490,7 +490,7 @@ def list_by_fact(self, fact_id: UUID, limit: int = 1) -> list[ExperienceRecord]:
 Сейчас `SessionExperience` хранит `key_moments: list[KeyMoment]` внутри одной записи. При семантическом поиске тащится вся сессия целиком.
 
 ### Решение
-- `SessionExperience` → только заголовок: метаданные, `fact_refs`, `unexamined_fact_refs`, `close_reason`, `agent_recap`, `restart_reason`. Без `key_moments` внутри.
+- `SessionExperience` → только заголовок: метаданные, `fact_refs`, `unexamined_fact_refs`, `close_reason`, `user_language`, `restart_reason`. Без `key_moments` внутри.
 - `KeyMoment` → отдельные записи в StateStore с `session_id` как ссылкой.
 
 ### Изменения

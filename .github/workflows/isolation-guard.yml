@@ -1,0 +1,48 @@
+name: 🛡️ Prod/Eval Isolation Guard
+
+on:
+  pull_request:
+    paths:
+      - "src/**/*.py"
+      - "pyproject.toml"
+
+permissions:
+  contents: read
+
+jobs:
+  isolation-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check for atman.eval imports in production code
+        run: |
+          violations=$(grep -rn \
+            "from atman\.eval\|import atman\.eval" \
+            src/atman/ \
+            --include="*.py" \
+            | grep -v "^src/atman/eval/" || true)
+
+          if [ -n "$violations" ]; then
+            echo "❌ ISOLATION VIOLATION: production code imports from atman.eval"
+            echo "$violations"
+            echo "Ref: docs/architecture/PROD_EVAL_BOUNDARY.md / Epic E-1"
+            exit 1
+          fi
+          echo "✅ No isolation violations"
+
+      - name: Check pyproject.toml eval deps placement
+        run: |
+          EVAL_PKGS="datasets|evaluate|huggingface-hub|transformers|psycopg2|psycopg|sqlalchemy|alembic|mem0ai|chromadb|qdrant-client"
+
+          # Extract only [project.dependencies] block (until next section)
+          violations=$(awk '/^\[project\.dependencies\]/{found=1; next} /^\[/{found=0} found' pyproject.toml \
+            | grep -E "$EVAL_PKGS" || true)
+
+          if [ -n "$violations" ]; then
+            echo "❌ Eval-only packages in [project.dependencies]:"
+            echo "$violations"
+            echo "Move to [project.optional-dependencies] eval"
+            exit 1
+          fi
+          echo "✅ pyproject.toml isolation OK"

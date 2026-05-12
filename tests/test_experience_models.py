@@ -127,7 +127,9 @@ class TestSessionExperience:
 
         return SessionExperience(
             session_id=uuid4(),
-            key_moments=[moment],
+            key_moment_ids=[moment.id],
+            avg_emotional_intensity=0.7,
+            has_profound_moment=False,
             importance=0.6,
             salience=0.8,
         )
@@ -137,7 +139,7 @@ class TestSessionExperience:
         exp = self._create_test_experience()
 
         assert exp.id is not None
-        assert len(exp.key_moments) == 1
+        assert len(exp.key_moment_ids) == 1
         assert exp.importance == 0.6
         assert exp.salience == 0.8
         assert exp.access_count == 0
@@ -161,25 +163,21 @@ class TestSessionExperience:
         assert len(exp.reframing_notes) == 2
         assert exp.reframing_notes[1].reflection == "Second reflection"
 
-        # Original key_moments should be unchanged
-        assert len(exp.key_moments) == 1
-        assert exp.key_moments[0].what_happened == "Test moment"
+        # Original key_moment_ids should be unchanged
+        assert len(exp.key_moment_ids) == 1
 
     def test_reframing_notes_do_not_modify_original(self):
         """Test that reframing notes don't modify the original experience."""
         exp = self._create_test_experience()
 
-        original_moment = exp.key_moments[0]
-        original_what = original_moment.what_happened
-        original_why = original_moment.why_it_matters
+        original_moment_ids = exp.key_moment_ids.copy()
 
         # Add reframing note
         note = ReframingNote(reflection="Looking back, this was actually very important")
         exp.add_reframing_note(note)
 
-        # Original moment should be unchanged
-        assert exp.key_moments[0].what_happened == original_what
-        assert exp.key_moments[0].why_it_matters == original_why
+        # Original moment IDs should be unchanged
+        assert exp.key_moment_ids == original_moment_ids
 
     def test_mark_accessed(self):
         """Test marking an experience as accessed."""
@@ -249,7 +247,11 @@ class TestSessionExperience:
             why_it_matters="Changed everything",
         )
         exp_profound = SessionExperience(
-            session_id=uuid4(), key_moments=[moment_profound], salience=0.8
+            session_id=uuid4(),
+            key_moment_ids=[moment_profound.id],
+            avg_emotional_intensity=0.9,
+            has_profound_moment=True,
+            salience=0.8,
         )
 
         # Create surface experience
@@ -260,7 +262,11 @@ class TestSessionExperience:
             what_happened="Surface moment", how_i_felt=felt_surface, why_it_matters="Just noting"
         )
         exp_surface = SessionExperience(
-            session_id=uuid4(), key_moments=[moment_surface], salience=0.8
+            session_id=uuid4(),
+            key_moment_ids=[moment_surface.id],
+            avg_emotional_intensity=0.3,
+            has_profound_moment=False,
+            salience=0.8,
         )
 
         # Check salience after 30 days
@@ -279,14 +285,38 @@ class TestSessionExperience:
         moment = KeyMoment(what_happened="Test", how_i_felt=felt, why_it_matters="Test")
 
         # Valid boundaries
-        SessionExperience(session_id=uuid4(), key_moments=[moment], importance=0.0)
-        SessionExperience(session_id=uuid4(), key_moments=[moment], importance=1.0)
+        SessionExperience(
+            session_id=uuid4(),
+            key_moment_ids=[moment.id],
+            avg_emotional_intensity=0.5,
+            has_profound_moment=False,
+            importance=0.0,
+        )
+        SessionExperience(
+            session_id=uuid4(),
+            key_moment_ids=[moment.id],
+            avg_emotional_intensity=0.5,
+            has_profound_moment=False,
+            importance=1.0,
+        )
 
         # Invalid
         with pytest.raises(ValueError):
-            SessionExperience(session_id=uuid4(), key_moments=[moment], importance=-0.1)
+            SessionExperience(
+                session_id=uuid4(),
+                key_moment_ids=[moment.id],
+                avg_emotional_intensity=0.5,
+                has_profound_moment=False,
+                importance=-0.1,
+            )
         with pytest.raises(ValueError):
-            SessionExperience(session_id=uuid4(), key_moments=[moment], importance=1.1)
+            SessionExperience(
+                session_id=uuid4(),
+                key_moment_ids=[moment.id],
+                avg_emotional_intensity=0.5,
+                has_profound_moment=False,
+                importance=1.1,
+            )
 
 
 class TestExperienceRecord:
@@ -298,7 +328,12 @@ class TestExperienceRecord:
             emotional_valence=0.0, emotional_intensity=0.5, depth=EmotionalDepth.SURFACE
         )
         moment = KeyMoment(what_happened="Test", how_i_felt=felt, why_it_matters="Test")
-        experience = SessionExperience(session_id=uuid4(), key_moments=[moment])
+        experience = SessionExperience(
+            session_id=uuid4(),
+            key_moment_ids=[moment.id],
+            avg_emotional_intensity=0.5,
+            has_profound_moment=False,
+        )
 
         record = ExperienceRecord(experience=experience)
 
@@ -311,7 +346,12 @@ class TestExperienceRecord:
             emotional_valence=0.0, emotional_intensity=0.5, depth=EmotionalDepth.SURFACE
         )
         moment = KeyMoment(what_happened="Test", how_i_felt=felt, why_it_matters="Test")
-        experience = SessionExperience(session_id=uuid4(), key_moments=[moment])
+        experience = SessionExperience(
+            session_id=uuid4(),
+            key_moment_ids=[moment.id],
+            avg_emotional_intensity=0.5,
+            has_profound_moment=False,
+        )
 
         record = ExperienceRecord(schema_version="2.0.0", experience=experience)
 
@@ -354,7 +394,13 @@ class TestIncompleteColoring:
         moment = KeyMoment(what_happened="Test", how_i_felt=felt, why_it_matters="Test")
 
         # Can create with incomplete coloring
-        exp = SessionExperience(session_id=uuid4(), key_moments=[moment], incomplete_coloring=True)
+        exp = SessionExperience(
+            session_id=uuid4(),
+            key_moment_ids=[moment.id],
+            avg_emotional_intensity=0.5,
+            has_profound_moment=False,
+            incomplete_coloring=True,
+        )
 
         assert exp.incomplete_coloring is True
 
@@ -366,7 +412,12 @@ class TestIncompleteColoring:
         moment = KeyMoment(what_happened="Test", how_i_felt=felt, why_it_matters="Test")
 
         # Default should be False
-        exp = SessionExperience(session_id=uuid4(), key_moments=[moment])
+        exp = SessionExperience(
+            session_id=uuid4(),
+            key_moment_ids=[moment.id],
+            avg_emotional_intensity=0.5,
+            has_profound_moment=False,
+        )
         assert exp.incomplete_coloring is False
 
 
@@ -375,5 +426,10 @@ class TestIncompleteColoring:
 
 def test_session_experience_rejects_empty_key_moments():
     """SYSTEM_MAP §4.5: ``SessionExperience`` requires at least one ``KeyMoment``."""
-    with pytest.raises(ValidationError, match="key_moments"):
-        SessionExperience(session_id=uuid4(), key_moments=[])
+    with pytest.raises(ValidationError, match="key_moment_ids"):
+        SessionExperience(
+            session_id=uuid4(),
+            key_moment_ids=[],
+            avg_emotional_intensity=0.5,
+            has_profound_moment=False,
+        )

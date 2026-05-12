@@ -13,6 +13,7 @@ from atman.core.models import (
     ExperienceRecord,
     Identity,
     IdentitySnapshot,
+    KeyMoment,
     NarrativeDocument,
     ReframingNote,
 )
@@ -20,6 +21,7 @@ from atman.core.ports.state_store import (
     DateRangeQuery,
     DepthQuery,
     ExperienceQuery,
+    FactRefsContainsQuery,
     SessionExperienceQuery,
     StateStore,
     ValuesTouchedQuery,
@@ -32,11 +34,14 @@ class InMemoryStateStore(StateStore):
     def __init__(self) -> None:
         """Initialize empty in-memory storage."""
         self._experiences: dict[UUID, ExperienceRecord] = {}
+        self._key_moments: dict[UUID, KeyMoment] = {}  # moment_id -> KeyMoment
+        self._session_moments: dict[UUID, list[UUID]] = {}  # session_id -> [moment_ids]
         self._identities: dict[UUID, Identity] = {}
         self._identity_snapshots: dict[UUID, IdentitySnapshot] = {}
         self._narratives: dict[UUID, NarrativeDocument] = {}
         self._archived_narratives: dict[UUID, list[tuple[NarrativeDocument, str, datetime]]] = {}
         self._eigenstates: list[Eigenstate] = []
+        self._key_moments: dict[UUID, KeyMoment] = {}
 
     def create_experience(self, record: ExperienceRecord) -> ExperienceRecord:
         """Store experience in memory."""
@@ -98,7 +103,8 @@ class InMemoryStateStore(StateStore):
                 for r in results
                 if any(
                     value in moment.values_touched
-                    for moment in r.experience.key_moments
+                    for moment_id in r.experience.key_moment_ids
+                    if (moment := self._key_moments.get(moment_id)) is not None
                     for value in query.values
                 )
             ]
@@ -108,12 +114,23 @@ class InMemoryStateStore(StateStore):
                 for r in results
                 if any(
                     moment.how_i_felt.depth.value == query.depth
-                    for moment in r.experience.key_moments
+                    for moment_id in r.experience.key_moment_ids
+                    if (moment := self._key_moments.get(moment_id)) is not None
                 )
             ]
         elif isinstance(query, DateRangeQuery):
             results = [
                 r for r in results if query.start_date <= r.experience.timestamp <= query.end_date
+            ]
+        elif isinstance(query, FactRefsContainsQuery):
+            results = [
+                r
+                for r in results
+                if any(
+                    query.fact_id in moment.fact_refs
+                    for moment_id in r.experience.key_moment_ids
+                    if (moment := self._key_moments.get(moment_id)) is not None
+                )
             ]
 
         results.sort(key=lambda r: r.experience.timestamp, reverse=True)
@@ -124,6 +141,29 @@ class InMemoryStateStore(StateStore):
         results = list(self._experiences.values())
         results.sort(key=lambda r: r.experience.timestamp, reverse=True)
         return [r.model_copy(deep=True) for r in results[:limit]]
+
+    def store_key_moments(self, session_id: UUID, moments: list[KeyMoment]) -> None:
+        """Store key moments for a session."""
+        moment_ids = []
+        for moment in moments:
+            self._key_moments[moment.id] = moment.model_copy(deep=True)
+            moment_ids.append(moment.id)
+        self._session_moments[session_id] = moment_ids
+
+    def get_key_moment(self, moment_id: UUID) -> KeyMoment | None:
+        """Retrieve a key moment by its ID."""
+        moment = self._key_moments.get(moment_id)
+        return moment.model_copy(deep=True) if moment else None
+
+    def get_key_moments_for_session(self, session_id: UUID) -> list[KeyMoment]:
+        """Retrieve all key moments for a session."""
+        moment_ids = self._session_moments.get(session_id, [])
+        moments = []
+        for moment_id in moment_ids:
+            moment = self._key_moments.get(moment_id)
+            if moment:
+                moments.append(moment.model_copy(deep=True))
+        return moments
 
     def load_identity(self, agent_id: UUID) -> Identity | None:
         """Load identity by agent ID."""
@@ -200,8 +240,10 @@ class InMemoryStateStore(StateStore):
         identity_id = narrative.identity_id
         if identity_id not in self._archived_narratives:
             self._archived_narratives[identity_id] = []
+        from datetime import UTC
+
         self._archived_narratives[identity_id].append(
-            (narrative.model_copy(deep=True), reason, datetime.utcnow())
+            (narrative.model_copy(deep=True), reason, datetime.now(UTC))
         )
 
     def list_archived_narratives(
@@ -239,3 +281,19 @@ class InMemoryStateStore(StateStore):
         # Return most recent by timestamp
         latest = max(candidates, key=lambda e: e.timestamp)
         return latest.model_copy(deep=True)
+
+    def create_key_moment(self, key_moment: KeyMoment) -> KeyMoment:
+        """Store key moment in memory."""
+        if key_moment.id in self._key_moments:
+            raise ValueError(f"KeyMoment {key_moment.id} already exists")
+        self._key_moments[key_moment.id] = key_moment.model_copy(deep=True)
+        return key_moment
+
+    def list_key_moments(self, session_id: UUID | None = None) -> list[KeyMoment]:
+        """List key moments, optionally filtered by session_id."""
+        # KeyMoment model doesn't have session_id field yet; filtering not implemented
+        if session_id is not None:
+            raise NotImplementedError(
+                "Filtering by session_id not yet supported - KeyMoment model needs session_id field"
+            )
+        return [km.model_copy(deep=True) for km in self._key_moments.values()]

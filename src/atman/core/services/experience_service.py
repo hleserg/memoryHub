@@ -12,6 +12,7 @@ from atman.core.models import ExperienceRecord, ReframingNote, SessionExperience
 from atman.core.ports import (
     DateRangeQuery,
     DepthQuery,
+    FactRefsContainsQuery,
     SessionExperienceQuery,
     StateStore,
     ValuesTouchedQuery,
@@ -231,20 +232,17 @@ class ExperienceService:
 
     def list_by_fact(self, fact_id: UUID, limit: int = 1) -> list[ExperienceRecord]:
         """
-        Return experiences where fact_id appears in fact_refs, newest first.
+        List experiences that reference a specific fact.
 
-        Used for building restart packages: shows agent the last session where
-        an unexamined fact was accessed.
+        Returns experiences where the fact_id appears in any key_moment.fact_refs,
+        ordered by timestamp descending (most recent first).
 
         Args:
             fact_id: UUID of the fact to search for
-            limit: Maximum number of results
+            limit: Maximum number of results (default 1 for most recent)
 
         Returns:
             list[ExperienceRecord]: Matching experiences, newest first
         """
-        all_recent = self.store.list_recent_experiences(limit=1000)
-        matching = [
-            r for r in all_recent if fact_id in r.experience.fact_refs
-        ]
-        return matching[:limit]
+        query = FactRefsContainsQuery(fact_id=fact_id)
+        return self.store.search_experiences(query=query, limit=limit)

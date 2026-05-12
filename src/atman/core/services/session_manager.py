@@ -21,9 +21,8 @@ import asyncio
 import json
 import logging
 import threading
-from datetime import UTC, datetime
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal, cast
 from uuid import UUID, uuid5
 
 from atman.core.clock_impl import SystemClock
@@ -99,6 +98,7 @@ class SessionManager:
             clock: Clock for reproducible timestamps (defaults to SystemClock)
             affect_workspace: Optional workspace directory for affect baseline JSONL
             affect_config: Optional :class:`AffectDetectorConfig` (requires ``affect_workspace``)
+            workspace: Optional workspace directory for session journals
         """
         self._state_store = state_store
         self._max_active_sessions = max_active_sessions
@@ -116,127 +116,147 @@ class SessionManager:
                 append_moment=self.append_key_moment,
             )
 
-    # ------------------------------------------------------------------
-    # Session journal helpers (durable JSONL draft)
-    # ------------------------------------------------------------------
+    @property
+    def affect_detector(self) -> AffectDetector | None:
+        """Optional behavioural detector wired to :meth:`append_key_moment`."""
+        return self._affect_detector
 
     def _journal_path(self, agent_id: UUID, session_id: UUID) -> Path | None:
+        """Return journal path for a session, or None if workspace not configured."""
         if self._workspace is None:
             return None
-        return self._workspace / str(agent_id) / "sessions" / f"active_{session_id}.jsonl"
+        sessions_dir = self._workspace / str(agent_id) / "sessions"
+        sessions_dir.mkdir(parents=True, exist_ok=True)
+        return sessions_dir / f"active_{session_id}.jsonl"
 
-    def _journal_append(self, path: Path, event_type: str, data: dict) -> None:
-        path.parent.mkdir(parents=True, exist_ok=True)
-        line = json.dumps(
-            {"type": event_type, "recorded_at": datetime.now(UTC).isoformat(), **data},
-            default=str,
-        )
-        with open(path, "a", encoding="utf-8") as fh:
-            fh.write(line + "\n")
+    def _write_journal_entry(
+        self, agent_id: UUID, session_id: UUID, entry: dict[str, object]
+    ) -> None:
+        """Append journal entry to session journal (if workspace configured)."""
+        journal_path = self._journal_path(agent_id, session_id)
+        if journal_path is None:
+            return
+        try:
+            with journal_path.open("a", encoding="utf-8") as f:
+                json.dump(entry, f, default=str)
+                f.write("\n")
+        except (OSError, ValueError) as exc:
+            _LOG.warning("Failed to write journal entry for session %s: %s", session_id, exc)
 
-    def _recover_orphan_journals(self, agent_id: UUID) -> None:
-        """Recover journals left by previous crashed processes."""
+    def _recover_orphaned_sessions(self, agent_id: UUID) -> None:
+        """
+        Scan for orphaned session journals and convert to SessionExperience.
+
+        Orphaned journals are from interrupted sessions that didn't complete finish_session.
+        Each orphan is converted to a SessionExperience with close_reason="interrupted".
+        """
         if self._workspace is None:
             return
         sessions_dir = self._workspace / str(agent_id) / "sessions"
         if not sessions_dir.exists():
             return
-        for jpath in sessions_dir.glob("active_*.jsonl"):
-            stem = jpath.stem  # "active_<uuid>"
+
+        for journal_file in sessions_dir.glob("active_*.jsonl"):
             try:
-                crashed_session_id = UUID(stem[len("active_"):])
-            except ValueError:
-                continue
-            if crashed_session_id in self._active_sessions:
-                continue  # still running
-            exp_id = deterministic_session_experience_id(crashed_session_id)
-            if self._state_store.get_experience(exp_id) is not None:
-                jpath.unlink(missing_ok=True)
-                _LOG.info("Journal cleanup: experience already saved for %s", crashed_session_id)
-                continue
-            _LOG.warning("Recovering orphaned journal for session %s", crashed_session_id)
-            self._recover_from_journal(agent_id, crashed_session_id, jpath)
+                # Extract session_id from filename: active_{session_id}.jsonl
+                session_id_str = journal_file.stem.replace("active_", "")
+                session_id = UUID(session_id_str)
 
-    def _recover_from_journal(self, agent_id: UUID, session_id: UUID, jpath: Path) -> None:
-        """Replay a JSONL journal and save a SessionExperience with close_reason=interrupted."""
-        from atman.core.models.experience import SessionExperience as _SE
+                # Skip journals for currently active sessions (not orphans)
+                with self._lock:
+                    if session_id in self._active_sessions:
+                        continue
 
-        key_moments: list = []
-        facts_read: set[UUID] = set()
+                # Compute deterministic experience_id
+                experience_id = deterministic_session_experience_id(session_id)
 
-        for raw in jpath.read_text(encoding="utf-8").splitlines():
-            try:
-                evt = json.loads(raw)
-            except json.JSONDecodeError:
-                continue
-            if evt.get("type") == "key_moment":
-                from atman.core.models import KeyMomentInput
-                from atman.core.models.experience import EmotionalDepth
+                # Check if experience already exists in StateStore
+                existing_exp = self._state_store.get_experience(experience_id)
+                if existing_exp is not None:
+                    # Already saved - journal is stale, just delete it
+                    journal_file.unlink()
+                    _LOG.info("Deleted stale journal for session %s", session_id)
+                    continue
 
-                try:
-                    km_input = KeyMomentInput(
-                        what_happened=evt.get("what_happened", "Recovered moment"),
-                        why_it_matters=evt.get("why_it_matters", "Recovered from journal"),
-                        emotional_valence=float(evt.get("emotional_valence", 0.0)),
-                        emotional_intensity=float(evt.get("emotional_intensity", 0.3)),
-                        depth=EmotionalDepth(evt.get("depth", "surface")),
-                        incomplete_coloring=bool(evt.get("incomplete_coloring", True)),
+                # Parse journal to extract key moments and facts
+                key_moment_ids: list[UUID] = []
+                fact_refs_set: set[UUID] = set()
+
+                with journal_file.open("r", encoding="utf-8") as f:
+                    for line in f:
+                        line = line.strip()
+                        if not line:
+                            continue
+                        try:
+                            entry = json.loads(line)
+                            if entry.get("type") == "key_moment":
+                                moment_id = UUID(entry["moment_id"])
+                                key_moment_ids.append(moment_id)
+                                # Extract fact_refs if present
+                                for fact_id_str in entry.get("fact_refs", []):
+                                    fact_refs_set.add(UUID(fact_id_str))
+                            elif entry.get("type") == "facts_read":
+                                for fact_id_str in entry.get("fact_ids", []):
+                                    fact_refs_set.add(UUID(fact_id_str))
+                        except (json.JSONDecodeError, KeyError, ValueError) as exc:
+                            _LOG.warning(
+                                "Skipping malformed journal line in %s: %s", journal_file, exc
+                            )
+                            continue
+
+                # If we have key moments, create SessionExperience
+                if key_moment_ids:
+                    # Try to load actual KeyMoment objects from storage for better metadata
+                    loaded_moments: list[KeyMoment] = []
+                    for moment_id in key_moment_ids:
+                        loaded_moment = self._state_store.get_key_moment(moment_id)
+                        if loaded_moment is not None:
+                            loaded_moments.append(loaded_moment)
+
+                    # Compute better metadata if we have loaded moments
+                    avg_emotional_intensity = 0.5
+                    has_profound_moment = False
+                    if loaded_moments:
+                        from atman.core.models.experience import EmotionalDepth
+
+                        avg_emotional_intensity = sum(
+                            m.how_i_felt.emotional_intensity for m in loaded_moments
+                        ) / len(loaded_moments)
+                        has_profound_moment = any(
+                            m.how_i_felt.depth == EmotionalDepth.PROFOUND for m in loaded_moments
+                        )
+
+                    experience = SessionExperience(
+                        id=experience_id,
+                        session_id=session_id,
+                        timestamp=self._clock.now(),
+                        key_moment_ids=key_moment_ids,
+                        recorded_by="session_manager_recovery",
+                        identity_snapshot_id=None,  # Unknown for orphaned sessions
+                        importance=0.5,
+                        salience=0.5,
+                        avg_emotional_intensity=avg_emotional_intensity,
+                        has_profound_moment=has_profound_moment,
+                        incomplete_coloring=True,  # Orphaned sessions didn't complete proper coloring
+                        fact_refs=list(fact_refs_set),
+                        close_reason="interrupted",
+                        restart_reason="",
                     )
-                    key_moments.append(km_input.to_key_moment())
-                except Exception:
-                    pass
-            elif evt.get("type") == "facts_read":
-                for fid in evt.get("fact_ids", []):
-                    try:
-                        facts_read.add(UUID(fid))
-                    except ValueError:
-                        pass
+                    experience_record = ExperienceRecord(experience=experience)
+                    self._state_store.create_experience(experience_record)
+                    _LOG.info(
+                        "Recovered orphaned session %s with %d key moments (%d loaded from storage)",
+                        session_id,
+                        len(key_moment_ids),
+                        len(loaded_moments),
+                    )
 
-        if not key_moments:
-            from atman.core.models import KeyMomentInput
-            from atman.core.models.experience import EmotionalDepth
+                # Delete journal after successful recovery (or if no key moments)
+                journal_file.unlink()
 
-            km = KeyMomentInput(
-                what_happened="Session interrupted (crash recovery)",
-                why_it_matters="Recovered from journal after process crash",
-                emotional_valence=0.0,
-                emotional_intensity=0.3,
-                depth=EmotionalDepth.SURFACE,
-                incomplete_coloring=True,
-            )
-            key_moments = [km.to_key_moment()]
-
-        exp_id = deterministic_session_experience_id(session_id)
-        fact_refs_set = facts_read | {fid for km in key_moments for fid in km.fact_refs}
-        colored = {fid for km in key_moments for fid in km.fact_refs}
-        unexamined = list(facts_read - colored)
-
-        from atman.core.models import ExperienceRecord
-
-        exp = _SE(
-            id=exp_id,
-            session_id=session_id,
-            key_moments=key_moments,
-            recorded_by="session_manager_recovery",
-            importance=0.3,
-            salience=0.3,
-            incomplete_coloring=True,
-            fact_refs=list(fact_refs_set),
-            unexamined_fact_refs=unexamined,
-            close_reason="interrupted",
-        )
-        try:
-            self._state_store.create_experience(ExperienceRecord(experience=exp))
-        except Exception:
-            _LOG.exception("Failed to save recovered experience for session %s", session_id)
-            return
-        jpath.unlink(missing_ok=True)
-        _LOG.info("Recovered session %s → experience saved, journal deleted", session_id)
-
-    @property
-    def affect_detector(self) -> AffectDetector | None:
-        """Optional behavioural detector wired to :meth:`append_key_moment`."""
-        return self._affect_detector
+            except Exception as exc:
+                _LOG.error("Failed to recover orphaned journal %s: %s", journal_file, exc)
+                continue
 
     def start_session(self, agent_id: UUID) -> SessionContext:
         """
@@ -249,6 +269,9 @@ class SessionManager:
         4. Emotional baseline from identity
         5. Last eigenstate (if exists)
         6. Recent reflections summary (placeholder for now)
+
+        Also scans for orphaned session journals (from interrupted sessions)
+        and converts them to SessionExperience with close_reason="interrupted".
 
         The identity snapshot establishes provenance chain: later Reflection/Identity
         can link session experience to the specific identity state that was active
@@ -264,7 +287,8 @@ class SessionManager:
             ValueError: If identity or narrative not found
             TooManyActiveSessionsError: If active session limit is exceeded
         """
-        self._recover_orphan_journals(agent_id)
+        # Recover orphaned sessions before starting new one
+        self._recover_orphaned_sessions(agent_id)
 
         identity = self._state_store.load_identity(agent_id)
         if identity is None:
@@ -386,6 +410,23 @@ class SessionManager:
                 raise SessionAlreadyFinishedError(f"Session {session_id} already finished")
             session_result.key_moments.append(moment)
 
+            # Get agent_id for journal
+            agent_id = session_result.identity_id
+
+        # Write to journal after releasing lock
+        if agent_id is not None:
+            self._write_journal_entry(
+                agent_id,
+                session_id,
+                {
+                    "type": "key_moment",
+                    "moment_id": str(moment.id),
+                    "timestamp": self._clock.now().isoformat(),
+                    "what_happened": moment.what_happened,
+                    "fact_refs": [str(fid) for fid in moment.fact_refs],
+                },
+            )
+
     def append_key_moment_input(self, session_id: UUID, moment: KeyMomentInput) -> None:
         """
         Validate :class:`KeyMomentInput` and append the resulting :class:`KeyMoment`.
@@ -417,19 +458,22 @@ class SessionManager:
 
             session_result.key_moments.append(key_moment)
 
-            # Durable journal write
-            if session_result.identity_id is not None:
-                jpath = self._journal_path(session_result.identity_id, session_id)
-                if jpath is not None:
-                    self._journal_append(jpath, "key_moment", {
-                        "what_happened": key_moment.what_happened,
-                        "why_it_matters": key_moment.why_it_matters,
-                        "emotional_valence": key_moment.how_i_felt.emotional_valence,
-                        "emotional_intensity": key_moment.how_i_felt.emotional_intensity,
-                        "depth": key_moment.how_i_felt.depth,
-                        "incomplete_coloring": session_result.incomplete_coloring,
-                        "fact_refs": [str(f) for f in key_moment.fact_refs],
-                    })
+            # Write journal entry (outside lock to avoid blocking)
+            agent_id = session_result.identity_id
+
+        # Write to journal after releasing lock
+        if agent_id is not None:
+            self._write_journal_entry(
+                agent_id,
+                session_id,
+                {
+                    "type": "key_moment",
+                    "moment_id": str(key_moment.id),
+                    "timestamp": self._clock.now().isoformat(),
+                    "what_happened": key_moment.what_happened,
+                    "fact_refs": [str(fid) for fid in key_moment.fact_refs],
+                },
+            )
 
     def record_key_moment(self, session_id: UUID, moment: KeyMomentInput) -> None:
         """
@@ -468,13 +512,20 @@ class SessionManager:
             # Store fact IDs in the SessionResult PrivateAttr for aggregation at finish.
             session_result._facts_read.update(fact_ids)
 
-            # Durable journal write
-            if session_result.identity_id is not None:
-                jpath = self._journal_path(session_result.identity_id, session_id)
-                if jpath is not None:
-                    self._journal_append(jpath, "facts_read", {
-                        "fact_ids": [str(f) for f in fact_ids],
-                    })
+            # Get agent_id for journal
+            agent_id = session_result.identity_id
+
+        # Write to journal after releasing lock
+        if agent_id is not None and fact_ids:
+            self._write_journal_entry(
+                agent_id,
+                session_id,
+                {
+                    "type": "facts_read",
+                    "timestamp": self._clock.now().isoformat(),
+                    "fact_ids": [str(fid) for fid in fact_ids],
+                },
+            )
 
     def finish_session(
         self,
@@ -484,8 +535,8 @@ class SessionManager:
         alignment_check: bool = True,
         alignment_notes: str = "",
         close_reason: str | None = None,
-        agent_recap: str | None = None,
-        restart_reason: str = "",
+        restart_reason: str | None = None,
+        user_language: str = "ru",
     ) -> SessionResult:
         """
         Finish session and create SessionExperience + Eigenstate + update Narrative.
@@ -509,6 +560,9 @@ class SessionManager:
             key_insight: Main insight from session
             alignment_check: Did experience match identity?
             alignment_notes: Notes about alignment or drift
+            close_reason: Reason for session closure (timeout_sleep | restart | forced | interrupted)
+            restart_reason: Human-readable reason when close_reason=restart
+            user_language: Detected language of the user ('ru' or 'en')
 
         Returns:
             SessionResult: Complete session result with experience and eigenstate
@@ -550,39 +604,86 @@ class SessionManager:
         try:
             existing_record = self._state_store.get_experience(experience_id)
             if existing_record is None:
-                # Aggregate fact_refs from all key moments and _note_facts_read
-                fact_refs_set: set[UUID] = set()
-                for moment in session_result.key_moments:
-                    fact_refs_set.update(moment.fact_refs)
-                # Also include any facts noted via _note_facts_read
-                fact_refs_set.update(session_result._facts_read)
-
-                # Facts perceived but never consciously colored (no key_moment references them)
+                # Compute colored_fact_ids (facts referenced in key moments)
                 colored_fact_ids: set[UUID] = set()
                 for moment in session_result.key_moments:
                     colored_fact_ids.update(moment.fact_refs)
-                unexamined = list(session_result._facts_read - colored_fact_ids)
 
-                from atman.core.models.experience import SessionExperience as _SE
+                # Compute unexamined facts (read but not colored)
+                unexamined_fact_refs = list(session_result._facts_read - colored_fact_ids)
 
-                _valid_reasons = {"completed", "timeout_sleep", "restart", "forced", "interrupted"}
-                _close_reason = close_reason if close_reason in _valid_reasons else "completed"
+                # Aggregate all fact_refs (union of colored and unexamined)
+                fact_refs_set: set[UUID] = set()
+                fact_refs_set.update(colored_fact_ids)
+                fact_refs_set.update(session_result._facts_read)
+
+                # Save each KeyMoment via create_key_moment and collect IDs
+                # Idempotent: skip if moment already exists (for retry scenarios)
+                key_moment_ids: list[UUID] = []
+                for moment in session_result.key_moments:
+                    if self._state_store.get_key_moment(moment.id) is None:
+                        self._state_store.create_key_moment(moment)
+                    key_moment_ids.append(moment.id)
+
+                # Also store session association for backward compatibility
+                self._state_store.store_key_moments(session_id, session_result.key_moments)
+
+                # Compute avg_emotional_intensity and has_profound_moment
+                avg_emotional_intensity = 0.5  # default
+                has_profound_moment = False
+                if session_result.key_moments:
+                    from atman.core.models.experience import EmotionalDepth
+
+                    avg_emotional_intensity = sum(
+                        m.how_i_felt.emotional_intensity for m in session_result.key_moments
+                    ) / len(session_result.key_moments)
+                    has_profound_moment = any(
+                        m.how_i_felt.depth == EmotionalDepth.PROFOUND
+                        for m in session_result.key_moments
+                    )
+
+                _allowed_close_reasons = (
+                    "timeout_sleep",
+                    "menu_timeout",
+                    "restart",
+                    "forced",
+                    "interrupted",
+                )
+                safe_close_reason: (
+                    Literal["timeout_sleep", "menu_timeout", "restart", "forced", "interrupted"]
+                    | None
+                ) = (
+                    cast(
+                        Literal[
+                            "timeout_sleep",
+                            "menu_timeout",
+                            "restart",
+                            "forced",
+                            "interrupted",
+                        ],
+                        close_reason,
+                    )
+                    if close_reason in _allowed_close_reasons
+                    else None
+                )
 
                 experience = SessionExperience(
                     id=experience_id,
                     session_id=session_id,
                     timestamp=session_result.finished_at,
-                    key_moments=session_result.key_moments,
+                    key_moment_ids=key_moment_ids,
+                    unexamined_fact_refs=unexamined_fact_refs,
                     recorded_by="session_manager",
                     identity_snapshot_id=session_result.identity_snapshot_id,
                     importance=0.5,
                     salience=0.5,
+                    avg_emotional_intensity=avg_emotional_intensity,
+                    has_profound_moment=has_profound_moment,
                     incomplete_coloring=session_result.incomplete_coloring,
                     fact_refs=list(fact_refs_set),
-                    unexamined_fact_refs=unexamined,
-                    close_reason=_close_reason,
-                    agent_recap=agent_recap,
-                    restart_reason=restart_reason,
+                    close_reason=safe_close_reason,
+                    restart_reason=restart_reason or "",
+                    user_language=user_language,
                 )
                 experience_record = ExperienceRecord(experience=experience)
                 self._state_store.create_experience(experience_record)
@@ -609,11 +710,15 @@ class SessionManager:
         with self._lock:
             self._active_sessions.pop(session_id, None)
 
-        # Delete durable journal after successful persistence
+        # Delete journal after successful persistence
         if session_result.identity_id is not None:
-            jpath = self._journal_path(session_result.identity_id, session_id)
-            if jpath is not None:
-                jpath.unlink(missing_ok=True)
+            journal_path = self._journal_path(session_result.identity_id, session_id)
+            if journal_path is not None and journal_path.exists():
+                try:
+                    journal_path.unlink()
+                    _LOG.debug("Deleted journal for completed session %s", session_id)
+                except OSError as exc:
+                    _LOG.warning("Failed to delete journal for session %s: %s", session_id, exc)
 
         return session_result.model_copy(deep=True)
 
@@ -657,37 +762,47 @@ class SessionManager:
             "Narrative concurrent update: exceeded retries; resolve conflict outside SessionManager."
         ) from last_err
 
-    @staticmethod
-    def _valence_word(v: float) -> str:
-        if v >= 0.5:
-            return "радостно"
-        if v >= 0.2:
-            return "тепло"
-        if v <= -0.5:
-            return "тяжело"
-        if v <= -0.2:
-            return "тревожно"
-        return "спокойно"
-
-    @staticmethod
-    def _depth_word(depth: str) -> str:
-        return {"surface": "поверхностно", "meaningful": "значимо", "profound": "глубоко"}.get(
-            depth, depth
-        )
-
     def _build_narrative_update(self, session_result: SessionResult) -> str:
-        """Build narrative update from key moment text and emotional data."""
-        if not session_result.key_moments:
-            return "Завершена сессия без зафиксированных моментов."
+        """
+        Build narrative update from session result.
 
-        lines = []
-        for km in session_result.key_moments[:3]:
-            felt = km.how_i_felt
-            tone = self._valence_word(felt.emotional_valence)
-            depth = self._depth_word(felt.depth)
-            lines.append(f"— {km.what_happened[:140]} ({tone}, {depth})")
+        Creates a brief summary of the session for the recent narrative layer.
+        This ensures the agent's self-narrative reflects recent lived experience.
 
-        return "\n".join(lines)
+        Args:
+            session_result: Finished session result
+
+        Returns:
+            str: Narrative update text
+        """
+        # Extract key themes from session
+        themes = set()
+        for moment in session_result.key_moments:
+            themes.update(moment.values_touched)
+
+        # Build summary
+        parts = []
+
+        if session_result.key_insight:
+            parts.append(f"Recently: {session_result.key_insight}")
+
+        if themes:
+            themes_str = ", ".join(sorted(themes)[:5])  # Limit to 5 themes
+            parts.append(f"This engaged my values around {themes_str}.")
+
+        if session_result.key_moments:
+            num_moments = len(session_result.key_moments)
+            tone = session_result.overall_emotional_tone
+            tone_desc = "positive" if tone > 0.2 else "negative" if tone < -0.2 else "neutral"
+            parts.append(
+                f"Experienced {num_moments} significant moment{'s' if num_moments > 1 else ''} "
+                f"with an overall {tone_desc} emotional tone."
+            )
+
+        if not parts:
+            parts.append("Recently completed a session.")
+
+        return " ".join(parts)
 
     def _create_eigenstate(self, session_result: SessionResult) -> Eigenstate:
         """
@@ -719,9 +834,8 @@ class SessionManager:
         ]
         open_threads = list(dict.fromkeys(open_threads_raw))
 
-        # Use what_happened text as themes — not AffectDetector system tags from values_touched
         dominant_flat = [
-            km.what_happened[:80] for km in session_result.key_moments
+            value for moment in session_result.key_moments for value in moment.values_touched
         ]
         dominant_themes = list(dict.fromkeys(dominant_flat))
 

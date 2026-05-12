@@ -35,21 +35,22 @@ from atman.core.models.reflection import (
 
 def _make_experience(summary: str = "Test event") -> SessionExperience:
     """Create a minimal valid SessionExperience for integration probes."""
+    km = KeyMoment(
+        what_happened=summary,
+        how_i_felt=FeltSense(
+            emotional_valence=0.4,
+            emotional_intensity=0.5,
+            depth=EmotionalDepth.MEANINGFUL,
+        ),
+        why_it_matters="Integration test significance",
+        values_touched=["curiosity"],
+    )
     return SessionExperience(
         session_id=uuid4(),
         timestamp=datetime.now(UTC),
-        key_moments=[
-            KeyMoment(
-                what_happened=summary,
-                how_i_felt=FeltSense(
-                    emotional_valence=0.4,
-                    emotional_intensity=0.5,
-                    depth=EmotionalDepth.MEANINGFUL,
-                ),
-                why_it_matters="Integration test significance",
-                values_touched=["curiosity"],
-            ),
-        ],
+        key_moment_ids=[km.id],
+        avg_emotional_intensity=km.how_i_felt.emotional_intensity,
+        has_profound_moment=km.how_i_felt.depth == EmotionalDepth.PROFOUND,
     )
 
 

@@ -41,6 +41,7 @@ from atman.core.models.reflection import (
     ReframingNoteOutput,
 )
 from atman.core.ports.reflection import ReflectionModel
+from atman.core.ports.state_store import StateStore
 
 
 class MockReflectionModel(ReflectionModel):
@@ -50,6 +51,16 @@ class MockReflectionModel(ReflectionModel):
     Generates deterministic, template-based outputs for testing.
     Does NOT use an actual LLM.
     """
+
+    def __init__(self, state_store: StateStore | None = None):
+        """
+        Initialize mock reflection model.
+
+        Args:
+            state_store: Optional state store for fetching KeyMoments by ID.
+                        If not provided, will use SessionExperience metadata only.
+        """
+        self._state_store = state_store
 
     def generate_reframing_note(
         self,
@@ -88,11 +99,15 @@ class MockReflectionModel(ReflectionModel):
 
         emotional_valences = []
         for exp in experiences:
-            if exp.key_moments:
-                avg_valence = sum(m.how_i_felt.emotional_valence for m in exp.key_moments) / len(
-                    exp.key_moments
-                )
-                emotional_valences.append(avg_valence)
+            # Use metadata instead of accessing key moments
+            # avg_emotional_intensity is between 0-1, convert to -1 to 1 valence estimate
+            # This is a rough approximation for pattern detection
+            if exp.has_profound_moment:
+                # Profound moments tend to have stronger emotional charge
+                valence_estimate = (exp.avg_emotional_intensity - 0.5) * 2
+            else:
+                valence_estimate = (exp.avg_emotional_intensity - 0.5) * 1.5
+            emotional_valences.append(valence_estimate)
 
         if not emotional_valences:
             return PatternDetectionOutput()
@@ -132,12 +147,15 @@ class MockReflectionModel(ReflectionModel):
         if reflection_level == ReflectionLevel.MICRO:
             if exp_count == 1:
                 exp = recent_experiences[0]
-                if exp.key_moments:
-                    body = (
-                        f"Just finished a session where {exp.key_moments[0].what_happened}. "
-                        f"{exp.key_moments[0].why_it_matters}"
-                    )
-                    return NarrativeUpdateOutput(body=body)
+                # Try to get the first key moment if state_store is available
+                if exp.key_moment_ids and self._state_store:
+                    first_moment = self._state_store.get_key_moment(exp.key_moment_ids[0])
+                    if first_moment:
+                        body = (
+                            f"Just finished a session where {first_moment.what_happened}. "
+                            f"{first_moment.why_it_matters}"
+                        )
+                        return NarrativeUpdateOutput(body=body)
             body = f"Just finished a session with {exp_count} key experiences."
             return NarrativeUpdateOutput(body=body)
 

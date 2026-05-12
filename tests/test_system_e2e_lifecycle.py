@@ -182,21 +182,22 @@ def _build_session_experience(
     depth: EmotionalDepth,
     value_label: str,
 ) -> SessionExperience:
+    km = KeyMoment(
+        what_happened=f"E2E test event for {value_label}",
+        how_i_felt=FeltSense(
+            emotional_valence=valence,
+            emotional_intensity=intensity,
+            depth=depth,
+        ),
+        why_it_matters=f"Tests integration around {value_label}",
+        values_touched=[value_label, "competence"],
+    )
     return SessionExperience(
         session_id=session_id,
         timestamp=when,
-        key_moments=[
-            KeyMoment(
-                what_happened=f"E2E test event for {value_label}",
-                how_i_felt=FeltSense(
-                    emotional_valence=valence,
-                    emotional_intensity=intensity,
-                    depth=depth,
-                ),
-                why_it_matters=f"Tests integration around {value_label}",
-                values_touched=[value_label, "competence"],
-            )
-        ],
+        key_moment_ids=[km.id],
+        avg_emotional_intensity=km.how_i_felt.emotional_intensity,
+        has_profound_moment=km.how_i_felt.depth == EmotionalDepth.PROFOUND,
     )
 
 

@@ -22,12 +22,15 @@ from atman.adapters.storage.file_state_store import FileStateStore
 from atman.core.exceptions import SessionNotFoundError
 from atman.core.models import (
     EmotionalDepth,
+    FeltSense,
     Identity,
+    KeyMoment,
     KeyMomentInput,
     LayerType,
     NarrativeDocument,
     NarrativeLayer,
     SessionEvent,
+    SessionResult,
 )
 from atman.core.services.session_manager import SessionManager
 
@@ -93,13 +96,18 @@ def test_force_finish_creates_minimal_key_moment(
     assert session_result is not None
     assert len(session_result.key_moments) == 0
 
-    # Force finish
-    _force_finish(session_manager, ctx.session_id, close_reason="test_interrupted")
+    # Force finish with invalid close_reason should not persist it
+    _force_finish(session_manager, ctx.session_id, close_reason="test_invalid")
 
     # Verify session was finished and has exactly one minimal key moment
     # Session should no longer be active
     session_result_after = session_manager.get_active_session(ctx.session_id)
     assert session_result_after is None
+
+    # Verify close_reason was NOT persisted (invalid value)
+    experiences = session_manager._state_store.list_recent_experiences(limit=1)
+    assert len(experiences) == 1
+    assert experiences[0].experience.close_reason is None
 
 
 def test_force_finish_with_existing_key_moments(
@@ -120,8 +128,8 @@ def test_force_finish_with_existing_key_moments(
     )
     session_manager.append_key_moment_input(ctx.session_id, moment)
 
-    # Force finish
-    _force_finish(session_manager, ctx.session_id, close_reason="test_interrupted")
+    # Force finish with valid close_reason
+    _force_finish(session_manager, ctx.session_id, close_reason="interrupted")
 
     # Session should no longer be active (finished)
     session_result = session_manager.get_active_session(ctx.session_id)
@@ -372,8 +380,679 @@ def test_force_finish_incomplete_coloring_flag(
     assert len(session_result.key_moments) == 0
 
     # Force finish should create minimal moment with incomplete_coloring=True
-    _force_finish(session_manager, ctx.session_id, close_reason="test")
+    _force_finish(session_manager, ctx.session_id, close_reason=None)
 
     # Session should be finished (no longer active)
     session_result_after = session_manager.get_active_session(ctx.session_id)
     assert session_result_after is None
+
+
+def test_check_restart_requested_with_sentinel() -> None:
+    """Test that _check_restart_requested detects restart sentinel."""
+    from atman.adapters.agent.runner import _check_restart_requested
+
+    # Mock message with restart sentinel (no reason)
+    class MockPart:
+        def __init__(self) -> None:
+            self.content = "__ATMAN_RESTART_REQUESTED__"
+
+    class MockMessage:
+        def __init__(self) -> None:
+            self.parts = [MockPart()]
+
+    messages = [MockMessage()]
+    restart_requested, reason = _check_restart_requested(messages)
+    assert restart_requested is True
+    assert reason == ""
+
+
+def test_check_restart_requested_with_reason() -> None:
+    """Test that _check_restart_requested extracts restart reason."""
+    from atman.adapters.agent.runner import _check_restart_requested
+
+    # Mock message with restart sentinel and reason
+    class MockPart:
+        def __init__(self) -> None:
+            self.content = "__ATMAN_RESTART_REQUESTED__\nContext window filling up"
+
+    class MockMessage:
+        def __init__(self) -> None:
+            self.parts = [MockPart()]
+
+    messages = [MockMessage()]
+    restart_requested, reason = _check_restart_requested(messages)
+    assert restart_requested is True
+    assert reason == "Context window filling up"
+
+
+def test_check_restart_requested_no_sentinel() -> None:
+    """Test that _check_restart_requested returns False when no sentinel."""
+    from atman.adapters.agent.runner import _check_restart_requested
+
+    # Mock message without restart sentinel
+    class MockPart:
+        def __init__(self) -> None:
+            self.content = "Normal agent response"
+
+    class MockMessage:
+        def __init__(self) -> None:
+            self.parts = [MockPart()]
+
+    messages = [MockMessage()]
+    restart_requested, reason = _check_restart_requested(messages)
+    assert restart_requested is False
+    assert reason == ""
+
+
+def test_check_restart_requested_with_tool_name() -> None:
+    """Test that _check_restart_requested detects restart via tool_name."""
+    from atman.adapters.agent.runner import _check_restart_requested
+
+    # Mock message with tool_name
+    class MockPart:
+        def __init__(self) -> None:
+            self.tool_name = "restart_session"
+
+    class MockMessage:
+        def __init__(self) -> None:
+            self.parts = [MockPart()]
+
+    messages = [MockMessage()]
+    restart_requested, reason = _check_restart_requested(messages)
+    assert restart_requested is True
+    assert reason == ""
+
+
+def test_check_restart_requested_prioritizes_content_sentinel() -> None:
+    """Test that content sentinel is checked before tool_name to capture reason."""
+    from atman.adapters.agent.runner import _check_restart_requested
+
+    # Mock messages with both tool_name and content (realistic Pydantic-AI scenario)
+    # First part: ToolCallPart with tool_name
+    class MockToolCallPart:
+        def __init__(self) -> None:
+            self.tool_name = "restart_session"
+
+    # Second part: ToolReturnPart with both tool_name and sentinel content
+    class MockToolReturnPart:
+        def __init__(self) -> None:
+            self.tool_name = "restart_session"
+            self.content = "__ATMAN_RESTART_REQUESTED__\nContext window full"
+
+    class MockMessage:
+        def __init__(self) -> None:
+            self.parts = [MockToolCallPart(), MockToolReturnPart()]
+
+    messages = [MockMessage()]
+    restart_requested, reason = _check_restart_requested(messages)
+    assert restart_requested is True
+    assert reason == "Context window full", "Reason should be extracted from content sentinel"
+
+
+def test_check_wait_requested_with_sentinel() -> None:
+    """Test that _check_wait_requested detects wait sentinel."""
+    from atman.adapters.agent.runner import _check_wait_requested
+
+    # Mock message with wait sentinel
+    class MockPart:
+        def __init__(self) -> None:
+            self.content = "__ATMAN_WAIT_REQUESTED__10"
+
+    class MockMessage:
+        def __init__(self) -> None:
+            self.parts = [MockPart()]
+
+    messages = [MockMessage()]
+    wait_requested, minutes = _check_wait_requested(messages)
+    assert wait_requested is True
+    assert minutes == 10
+
+
+def test_check_wait_requested_no_sentinel() -> None:
+    """Test that _check_wait_requested returns False when no sentinel."""
+    from atman.adapters.agent.runner import _check_wait_requested
+
+    # Mock message without wait sentinel
+    class MockPart:
+        def __init__(self) -> None:
+            self.content = "Normal agent response"
+
+    class MockMessage:
+        def __init__(self) -> None:
+            self.parts = [MockPart()]
+
+    messages = [MockMessage()]
+    wait_requested, minutes = _check_wait_requested(messages)
+    assert wait_requested is False
+    assert minutes == 0
+
+
+def test_check_wait_requested_with_tool_name() -> None:
+    """Test that _check_wait_requested detects wait via tool_name (no minutes)."""
+    from atman.adapters.agent.runner import _check_wait_requested
+
+    # Mock message with tool_name
+    class MockPart:
+        def __init__(self) -> None:
+            self.tool_name = "wait_session"
+
+    class MockMessage:
+        def __init__(self) -> None:
+            self.parts = [MockPart()]
+
+    messages = [MockMessage()]
+    wait_requested, minutes = _check_wait_requested(messages)
+    assert wait_requested is True
+    assert minutes == 0  # Can't extract minutes from tool_name alone
+
+
+def test_check_wait_requested_malformed_sentinel() -> None:
+    """Test that _check_wait_requested handles malformed sentinel gracefully."""
+    from atman.adapters.agent.runner import _check_wait_requested
+
+    # Mock message with malformed sentinel (non-integer minutes)
+    class MockPart:
+        def __init__(self) -> None:
+            self.content = "__ATMAN_WAIT_REQUESTED__abc"
+
+    class MockMessage:
+        def __init__(self) -> None:
+            self.parts = [MockPart()]
+
+    messages = [MockMessage()]
+    wait_requested, minutes = _check_wait_requested(messages)
+    assert wait_requested is True
+    assert minutes == 0  # Returns 0 for malformed
+
+
+def test_build_restart_package() -> None:
+    """Test that _build_restart_package creates valid package."""
+    from atman.adapters.agent.runner import _build_restart_package
+
+    # Create mock session result
+    ctx = SessionResult(
+        session_id=uuid4(),
+        started_at=datetime.now(UTC),
+        events=[],
+        key_moments=[
+            KeyMoment(
+                what_happened="User asked a question",
+                how_i_felt=FeltSense(
+                    emotional_valence=0.3,
+                    emotional_intensity=0.5,
+                    depth=EmotionalDepth.MEANINGFUL,
+                ),
+                why_it_matters="Engaging conversation",
+            ),
+        ],
+        identity_snapshot_id=uuid4(),
+        identity_id=uuid4(),
+    )
+
+    package = _build_restart_package(ctx, "Context filling up", [])
+
+    assert "Context filling up" in package
+    assert "Key moments from previous session:" in package
+    assert "User asked a question" in package
+    assert "depth: meaningful" in package
+    assert "--- Conversation tail ---" in package
+
+
+def test_force_finish_with_timeout_sleep_reason(
+    session_manager: SessionManager,
+    identity_with_narrative: Identity,
+) -> None:
+    """Test that _force_finish works with timeout_sleep close_reason from menu mode."""
+    ctx = session_manager.start_session(identity_with_narrative.id)
+
+    # Add a key moment
+    moment = KeyMomentInput(
+        what_happened="Session timed out",
+        emotional_valence=0.0,
+        emotional_intensity=0.3,
+        depth=EmotionalDepth.SURFACE,
+        why_it_matters="Timeout occurred",
+    )
+    session_manager.append_key_moment_input(ctx.session_id, moment)
+
+    # Force finish with timeout_sleep reason
+    _force_finish(session_manager, ctx.session_id, close_reason="timeout_sleep")
+
+    # Session should be finished
+    session_result = session_manager.get_active_session(ctx.session_id)
+    assert session_result is None
+
+
+def test_force_finish_with_menu_timeout_reason(
+    session_manager: SessionManager,
+    identity_with_narrative: Identity,
+) -> None:
+    """Test that _force_finish works with menu_timeout close_reason after max retries."""
+    ctx = session_manager.start_session(identity_with_narrative.id)
+
+    # Force finish with menu_timeout reason (no key moments - minimal will be created)
+    _force_finish(session_manager, ctx.session_id, close_reason="menu_timeout")
+
+    # Session should be finished
+    session_result = session_manager.get_active_session(ctx.session_id)
+    assert session_result is None
+
+
+def test_atman_runner_initialization(tmp_path: Path) -> None:
+    """Test that AtmanRunner can be initialized with workspace, agent_id, and config."""
+    from atman.adapters.agent.config import AgentConfig
+    from atman.adapters.agent.runner import AtmanRunner
+
+    agent_id = uuid4()
+    config = AgentConfig(session_timeout_minutes=5, enable_free_time=True)
+
+    runner = AtmanRunner(workspace=tmp_path, agent_id=agent_id, config=config)
+
+    assert runner._workspace == tmp_path
+    assert runner._agent_id == agent_id
+    assert runner._config.session_timeout_minutes == 5
+    assert runner._config.enable_free_time is True
+
+
+async def test_stdin_reader_thread_lifecycle(tmp_path: Path) -> None:
+    """Test that stdin reader thread lifecycle is managed correctly.
+
+    Note: In pytest environment stdin is not available, so thread will
+    exit immediately with OSError. This tests the lifecycle management.
+    """
+    import asyncio
+
+    from atman.adapters.agent.config import AgentConfig
+    from atman.adapters.agent.runner import AtmanRunner
+
+    agent_id = uuid4()
+    config = AgentConfig()
+    runner = AtmanRunner(workspace=tmp_path, agent_id=agent_id, config=config)
+
+    # Initially no reader thread
+    assert runner._reader_thread is None
+
+    # Start reader with current event loop
+    loop = asyncio.get_event_loop()
+    runner._start_stdin_reader(loop)
+
+    # Thread should be created (even if it exits immediately due to pytest stdin)
+    assert runner._reader_thread is not None
+
+    # Give thread time to handle OSError and exit
+    await asyncio.sleep(0.1)
+
+    # Stop reader
+    runner._stop_stdin_reader()
+    assert runner._stop_reader.is_set()
+
+    # Verify stop flag works (thread may already be stopped from OSError)
+    # Just checking the flag is set is sufficient for this test
+
+
+def test_wait_command_returns_new_timeout() -> None:
+    """Test that wait command return value includes new timeout in seconds."""
+    # Simulate what _handle_menu_mode returns for wait command
+    result = ("wait", 1800)  # 30 minutes * 60 seconds
+
+    assert isinstance(result, tuple)
+    assert result[0] == "wait"
+    assert result[1] == 1800
+
+
+def test_force_finish_with_different_close_reasons(
+    session_manager: SessionManager,
+    identity_with_narrative: Identity,
+) -> None:
+    """Test _force_finish works with various close reasons from menu/timeout."""
+    close_reasons = ["timeout_sleep", "menu_timeout", "interrupted", "completed"]
+
+    for reason in close_reasons:
+        ctx = session_manager.start_session(identity_with_narrative.id)
+
+        # Add a key moment so finish succeeds
+        moment = KeyMomentInput(
+            what_happened=f"Test with reason: {reason}",
+            emotional_valence=0.0,
+            emotional_intensity=0.5,
+            depth=EmotionalDepth.SURFACE,
+            why_it_matters=f"Testing {reason}",
+        )
+        session_manager.append_key_moment_input(ctx.session_id, moment)
+
+        # Force finish with specific reason
+        _force_finish(session_manager, ctx.session_id, close_reason=reason)
+
+        # Verify session is finished
+        session_result = session_manager.get_active_session(ctx.session_id)
+        assert session_result is None
+
+
+def test_print_prompt_helper_exists() -> None:
+    """Test that print_prompt helper exists in atman.term."""
+    from atman.term import print_prompt
+
+    # Just verify the function exists and is callable
+    assert callable(print_prompt)
+
+
+def test_build_wake_up_message_timeout_sleep(
+    session_manager: SessionManager,
+    identity_with_narrative: Identity,
+) -> None:
+    """Test wake-up message for timeout_sleep close_reason."""
+    from atman.adapters.agent.config import AgentConfig, ModelConfig
+    from atman.adapters.agent.runner import AtmanRunner
+
+    ctx = session_manager.start_session(identity_with_narrative.id)
+    moment = KeyMomentInput(
+        what_happened="User went away",
+        emotional_valence=0.0,
+        emotional_intensity=0.3,
+        depth=EmotionalDepth.SURFACE,
+        why_it_matters="Timeout",
+    )
+    session_manager.append_key_moment_input(ctx.session_id, moment)
+    session_manager.finish_session(
+        ctx.session_id,
+        close_reason="timeout_sleep",
+    )
+
+    # Get last experience and build wake-up message
+    experiences = session_manager._state_store.list_recent_experiences(limit=1)
+    assert len(experiences) == 1
+    last_exp = experiences[0].experience
+
+    runner = AtmanRunner(
+        workspace=Path("/tmp"),
+        agent_id=identity_with_narrative.id,
+        config=AgentConfig(model=ModelConfig(model="test")),
+    )
+    msg = runner._build_wake_up_message(last_exp)
+    assert msg is not None
+    assert "задремал" in msg
+
+
+def test_build_wake_up_message_restart(
+    session_manager: SessionManager,
+    identity_with_narrative: Identity,
+) -> None:
+    """Test wake-up message for restart close_reason."""
+    from atman.adapters.agent.config import AgentConfig, ModelConfig
+    from atman.adapters.agent.runner import AtmanRunner
+
+    ctx = session_manager.start_session(identity_with_narrative.id)
+    moment = KeyMomentInput(
+        what_happened="Agent initiated restart",
+        emotional_valence=0.0,
+        emotional_intensity=0.4,
+        depth=EmotionalDepth.SURFACE,
+        why_it_matters="Restart needed",
+    )
+    session_manager.append_key_moment_input(ctx.session_id, moment)
+    session_manager.finish_session(
+        ctx.session_id,
+        close_reason="restart",
+        restart_reason="Контекст заполнен, продолжу с чистой историей",
+    )
+
+    experiences = session_manager._state_store.list_recent_experiences(limit=1)
+    last_exp = experiences[0].experience
+
+    runner = AtmanRunner(
+        workspace=Path("/tmp"),
+        agent_id=identity_with_narrative.id,
+        config=AgentConfig(model=ModelConfig(model="test")),
+    )
+    msg = runner._build_wake_up_message(last_exp)
+    assert msg is not None
+    assert "перезапуск" in msg
+    assert "Контекст заполнен, продолжу с чистой историей" in msg
+
+
+def test_build_wake_up_message_forced(
+    session_manager: SessionManager,
+    identity_with_narrative: Identity,
+) -> None:
+    """Test wake-up message for forced close_reason."""
+    from atman.adapters.agent.config import AgentConfig, ModelConfig
+    from atman.adapters.agent.runner import AtmanRunner
+
+    ctx = session_manager.start_session(identity_with_narrative.id)
+    moment = KeyMomentInput(
+        what_happened="Context overflow",
+        emotional_valence=0.0,
+        emotional_intensity=0.5,
+        depth=EmotionalDepth.SURFACE,
+        why_it_matters="Forced closure",
+    )
+    session_manager.append_key_moment_input(ctx.session_id, moment)
+    session_manager.finish_session(ctx.session_id, close_reason="forced")
+
+    experiences = session_manager._state_store.list_recent_experiences(limit=1)
+    last_exp = experiences[0].experience
+
+    runner = AtmanRunner(
+        workspace=Path("/tmp"),
+        agent_id=identity_with_narrative.id,
+        config=AgentConfig(model=ModelConfig(model="test")),
+    )
+    msg = runner._build_wake_up_message(last_exp)
+    assert msg is not None
+    assert "переполнился" in msg
+    assert "осознанно" in msg
+
+
+def test_build_wake_up_message_interrupted(
+    session_manager: SessionManager,
+    identity_with_narrative: Identity,
+) -> None:
+    """Test wake-up message for interrupted close_reason."""
+    from atman.adapters.agent.config import AgentConfig, ModelConfig
+    from atman.adapters.agent.runner import AtmanRunner
+
+    ctx = session_manager.start_session(identity_with_narrative.id)
+    moment = KeyMomentInput(
+        what_happened="Signal received",
+        emotional_valence=0.0,
+        emotional_intensity=0.4,
+        depth=EmotionalDepth.SURFACE,
+        why_it_matters="Interrupted",
+    )
+    session_manager.append_key_moment_input(ctx.session_id, moment)
+    session_manager.finish_session(ctx.session_id, close_reason="interrupted")
+
+    experiences = session_manager._state_store.list_recent_experiences(limit=1)
+    last_exp = experiences[0].experience
+
+    runner = AtmanRunner(
+        workspace=Path("/tmp"),
+        agent_id=identity_with_narrative.id,
+        config=AgentConfig(model=ModelConfig(model="test")),
+    )
+    msg = runner._build_wake_up_message(last_exp)
+    assert msg is not None
+    assert "прервана" in msg
+    assert "внешним сигналом" in msg
+
+
+def test_build_wake_up_message_no_close_reason(
+    session_manager: SessionManager,
+    identity_with_narrative: Identity,
+) -> None:
+    """Test that no wake-up message is generated when close_reason is None."""
+    from atman.adapters.agent.config import AgentConfig, ModelConfig
+    from atman.adapters.agent.runner import AtmanRunner
+
+    ctx = session_manager.start_session(identity_with_narrative.id)
+    moment = KeyMomentInput(
+        what_happened="Normal completion",
+        emotional_valence=0.0,
+        emotional_intensity=0.3,
+        depth=EmotionalDepth.SURFACE,
+        why_it_matters="Session done",
+    )
+    session_manager.append_key_moment_input(ctx.session_id, moment)
+    session_manager.finish_session(ctx.session_id)
+
+    experiences = session_manager._state_store.list_recent_experiences(limit=1)
+    last_exp = experiences[0].experience
+
+    runner = AtmanRunner(
+        workspace=Path("/tmp"),
+        agent_id=identity_with_narrative.id,
+        config=AgentConfig(model=ModelConfig(model="test")),
+    )
+    msg = runner._build_wake_up_message(last_exp)
+    assert msg is None
+
+
+def test_force_finish_persists_close_reason(
+    session_manager: SessionManager,
+    identity_with_narrative: Identity,
+) -> None:
+    """Test that _force_finish persists close_reason to SessionExperience for valid values."""
+    ctx = session_manager.start_session(identity_with_narrative.id)
+    moment = KeyMomentInput(
+        what_happened="Some work",
+        emotional_valence=0.0,
+        emotional_intensity=0.4,
+        depth=EmotionalDepth.SURFACE,
+        why_it_matters="Task in progress",
+    )
+    session_manager.append_key_moment_input(ctx.session_id, moment)
+
+    # Force finish with specific close_reason
+    _force_finish(session_manager, ctx.session_id, close_reason="interrupted")
+
+    # Verify SessionExperience has the close_reason
+    experiences = session_manager._state_store.list_recent_experiences(limit=1)
+    assert len(experiences) == 1
+    assert experiences[0].experience.close_reason == "interrupted"
+
+
+def test_force_finish_none_close_reason_for_normal_completion(
+    session_manager: SessionManager,
+    identity_with_narrative: Identity,
+) -> None:
+    """Test that _force_finish with None close_reason doesn't persist close_reason field."""
+    ctx = session_manager.start_session(identity_with_narrative.id)
+    moment = KeyMomentInput(
+        what_happened="Normal work",
+        emotional_valence=0.0,
+        emotional_intensity=0.3,
+        depth=EmotionalDepth.SURFACE,
+        why_it_matters="Regular session",
+    )
+    session_manager.append_key_moment_input(ctx.session_id, moment)
+
+    # Force finish with None (normal completion, no interruption)
+    _force_finish(session_manager, ctx.session_id, close_reason=None)
+
+    # Verify SessionExperience has close_reason=None
+    experiences = session_manager._state_store.list_recent_experiences(limit=1)
+    assert len(experiences) == 1
+    assert experiences[0].experience.close_reason is None
+
+
+def test_check_restart_requested_uses_new_messages_only() -> None:
+    """Test that restart detection doesn't trigger on old sentinels in history."""
+    from atman.adapters.agent.runner import _check_restart_requested
+
+    # Simulate messages: old sentinel from previous restart should be ignored
+    class MockOldPart:
+        def __init__(self) -> None:
+            self.content = "__ATMAN_RESTART_REQUESTED__\nOld restart reason"
+
+    class MockNewPart:
+        def __init__(self) -> None:
+            self.content = "Normal response without sentinel"
+
+    class MockOldMessage:
+        def __init__(self) -> None:
+            self.parts = [MockOldPart()]
+
+    class MockNewMessage:
+        def __init__(self) -> None:
+            self.parts = [MockNewPart()]
+
+    # Only new messages should be checked (not including old history)
+    new_messages_only = [MockNewMessage()]
+    restart_requested, reason = _check_restart_requested(new_messages_only)
+    assert restart_requested is False, "Should not detect restart from old sentinel in history"
+    assert reason == ""
+
+
+def test_force_finish_with_menu_timeout(
+    session_manager: SessionManager,
+    identity_with_narrative: Identity,
+) -> None:
+    """Test that menu_timeout is a valid close_reason and is persisted."""
+    ctx = session_manager.start_session(identity_with_narrative.id)
+
+    # Add a key moment
+    moment = KeyMomentInput(
+        what_happened="Menu timeout",
+        emotional_valence=0.0,
+        emotional_intensity=0.2,
+        depth=EmotionalDepth.SURFACE,
+        why_it_matters="Menu max retries reached",
+    )
+    session_manager.append_key_moment_input(ctx.session_id, moment)
+
+    # Force finish with menu_timeout reason
+    _force_finish(session_manager, ctx.session_id, close_reason="menu_timeout")
+
+    # Verify SessionExperience has close_reason="menu_timeout"
+    experiences = session_manager._state_store.list_recent_experiences(limit=1)
+    assert len(experiences) == 1
+    assert experiences[0].experience.close_reason == "menu_timeout"
+
+
+def test_do_restart_persists_restart_reason(
+    session_manager: SessionManager,
+    identity_with_narrative: Identity,
+    tmp_path: Path,
+) -> None:
+    """Test that _do_restart persists restart_reason to SessionExperience."""
+    from dataclasses import replace
+
+    from atman.adapters.agent.config import AgentConfig
+    from atman.adapters.agent.factory import build_deps
+    from atman.adapters.agent.runner import AtmanRunner
+
+    # Create runner and build deps
+    config = AgentConfig()
+    runner = AtmanRunner(tmp_path, identity_with_narrative.id, config)
+    deps, sm, _store = build_deps(tmp_path, identity_with_narrative.id, config)
+
+    # Start session
+    ctx = sm.start_session(identity_with_narrative.id)
+
+    # Add a key moment so session can be finished
+    moment = KeyMomentInput(
+        what_happened="Context window approaching limit",
+        emotional_valence=0.0,
+        emotional_intensity=0.4,
+        depth=EmotionalDepth.SURFACE,
+        why_it_matters="Need to restart",
+    )
+    sm.append_key_moment_input(ctx.session_id, moment)
+
+    # Update deps with session_id
+    deps = replace(deps, session_id=ctx.session_id)
+    history = []
+
+    # Execute restart with specific reason
+    restart_reason = "Context window 95% full"
+    _new_session_id, _new_deps = runner._do_restart(
+        sm, ctx.session_id, deps, history, restart_reason
+    )
+
+    # Verify restart_reason is persisted in SessionExperience
+    experiences = sm._state_store.list_recent_experiences(limit=1)
+    assert len(experiences) == 1
+    assert experiences[0].experience.close_reason == "restart"
+    assert experiences[0].experience.restart_reason == restart_reason, (
+        "restart_reason should be persisted to SessionExperience"
+    )

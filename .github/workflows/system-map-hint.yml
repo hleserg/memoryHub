@@ -1,0 +1,112 @@
+name: 🗺️ SYSTEM_MAP Update Hints
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    paths:
+      - "src/atman/**/*.py"
+      - "tests/**/*.py"
+
+concurrency:
+  group: sysmap-hint-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions:
+  models: read
+  pull-requests: write
+  contents: read
+
+jobs:
+  sysmap-hint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Build prompt and call GitHub Models
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          git diff origin/${{ github.base_ref }}...HEAD | head -c 8000 > diff.txt
+
+          SRC_FILES=$(git diff --name-only origin/${{ github.base_ref }}...HEAD \
+            | grep "^src/atman/.*\.py$" | head -20 | tr '\n' ' ')
+          TEST_FILES=$(git diff --name-only origin/${{ github.base_ref }}...HEAD \
+            | grep "^tests/.*\.py$" | head -10 | tr '\n' ' ')
+
+          echo "SRC_FILES=$SRC_FILES" >> $GITHUB_ENV
+
+          python3 - <<'EOF'
+          import os, re, subprocess, textwrap
+
+          src   = os.environ.get("SRC_FILES", "").strip() or "(none)"
+          test  = os.environ.get("TEST_FILES", "").strip() or "(none)"
+          with open("diff.txt") as f:
+              diff = f.read()
+          try:
+              with open("docs/architecture/SYSTEM_MAP.md") as f:
+                  sysmap = f.read()[:4000]
+          except FileNotFoundError:
+              sysmap = "(SYSTEM_MAP.md not found yet)"
+
+          with open(".github/prompts/sysmap-hint.prompt.yml") as f:
+              raw = f.read()
+
+          sys_match  = re.search(r"- role: system\n\s+content: \|(.*?)(?=\n\s+- role:)", raw, re.DOTALL)
+          user_match = re.search(r"- role: user\n\s+content: \|(.*?)(?=\ntestData:|\Z)", raw, re.DOTALL)
+
+          system_prompt = textwrap.dedent(sys_match.group(1)).strip()
+          user_prompt = (textwrap.dedent(user_match.group(1)).strip()
+              .replace("{{src_files}}", src)
+              .replace("{{test_files}}", test)
+              .replace("{{diff}}", diff)
+              .replace("{{sysmap}}", sysmap))
+
+          result = subprocess.run(
+              ["gh", "models", "run", "openai/gpt-4o-mini",
+               "--system-prompt", system_prompt, user_prompt],
+              capture_output=True, text=True
+          )
+
+          ai_text = result.stdout.strip() if result.returncode == 0 \
+              else "⚠️ AI analysis unavailable — ensure GitHub Copilot is enabled for this repo."
+
+          src_badge = os.environ.get("SRC_FILES", "").strip() or "(tests only)"
+          standard_url = (
+              "${{ github.server_url }}/${{ github.repository }}"
+              "/blob/${{ github.base_ref }}/docs/development/DEVELOPMENT_STANDARD.md"
+          )
+
+          lines = [
+              "<!-- atman-sysmap-hint -->",
+              "## 🗺️ SYSTEM_MAP Update Hints",
+              "",
+              f"Changed files: `{src_badge}`",
+              "",
+              ai_text,
+              "",
+              "> **Reminder (§26.1):** update SYSTEM_MAP in the **same PR** as the code. Then sync `SYSTEM_MAP-ru.md`.",
+              "",
+              "---",
+              f"*Auto-generated · [standard §26]({standard_url})*",
+          ]
+          with open("comment.md", "w") as f:
+              f.write("\n".join(lines))
+          EOF
+
+      - name: Find existing comment
+        uses: peter-evans/find-comment@v3
+        id: find
+        with:
+          issue-number: ${{ github.event.pull_request.number }}
+          comment-author: github-actions[bot]
+          body-includes: "<!-- atman-sysmap-hint -->"
+
+      - name: Post or update comment
+        uses: peter-evans/create-or-update-comment@v4
+        with:
+          comment-id: ${{ steps.find.outputs.comment-id }}
+          issue-number: ${{ github.event.pull_request.number }}
+          body-path: comment.md
+          edit-mode: replace

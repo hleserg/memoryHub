@@ -19,22 +19,38 @@ _SID = UUID("123e4567-e89b-12d3-a456-426614174000")
 _SID2 = UUID("223e4567-e89b-12d3-a456-426614174000")
 
 
+def _exp(session_id: UUID, km: KeyMoment) -> SessionExperience:
+    return SessionExperience(
+        session_id=session_id,
+        key_moment_ids=[km.id],
+        avg_emotional_intensity=km.how_i_felt.emotional_intensity,
+        has_profound_moment=km.how_i_felt.depth == EmotionalDepth.PROFOUND,
+    )
+
+
+def _km(
+    what: str = "Test",
+    *,
+    valence: float = 0.3,
+    intensity: float = 0.6,
+    depth: EmotionalDepth = EmotionalDepth.MEANINGFUL,
+    why: str = "Test",
+) -> KeyMoment:
+    return KeyMoment(
+        what_happened=what,
+        how_i_felt=FeltSense(
+            emotional_valence=valence,
+            emotional_intensity=intensity,
+            depth=depth,
+        ),
+        why_it_matters=why,
+    )
+
+
 def test_generate_reframing_note_with_patterns() -> None:
     """Test generating reframing note with patterns."""
     model = MockReflectionModel()
-    exp = SessionExperience(
-        session_id=_SID,
-        key_moments=[
-            KeyMoment(
-                what_happened="Test",
-                how_i_felt=FeltSense(
-                    emotional_valence=0.3, emotional_intensity=0.6, depth=EmotionalDepth.MEANINGFUL
-                ),
-                why_it_matters="Test",
-            )
-        ],
-    )
-
+    exp = _exp(_SID, _km())
     out = model.generate_reframing_note(exp, {"patterns": "test pattern"})
     assert "pattern" in out.reflection.lower()
 
@@ -42,19 +58,7 @@ def test_generate_reframing_note_with_patterns() -> None:
 def test_generate_reframing_note_without_patterns() -> None:
     """Test generating reframing note without patterns."""
     model = MockReflectionModel()
-    exp = SessionExperience(
-        session_id=_SID,
-        key_moments=[
-            KeyMoment(
-                what_happened="Test",
-                how_i_felt=FeltSense(
-                    emotional_valence=0.3, emotional_intensity=0.6, depth=EmotionalDepth.MEANINGFUL
-                ),
-                why_it_matters="Test",
-            )
-        ],
-    )
-
+    exp = _exp(_SID, _km())
     out = model.generate_reframing_note(exp, {})
     assert len(out.reflection) > 0
 
@@ -64,34 +68,8 @@ def test_detect_pattern_positive() -> None:
     model = MockReflectionModel()
 
     experiences = [
-        SessionExperience(
-            session_id=_SID,
-            key_moments=[
-                KeyMoment(
-                    what_happened="Test",
-                    how_i_felt=FeltSense(
-                        emotional_valence=0.5,
-                        emotional_intensity=0.6,
-                        depth=EmotionalDepth.MEANINGFUL,
-                    ),
-                    why_it_matters="Test",
-                )
-            ],
-        ),
-        SessionExperience(
-            session_id=_SID2,
-            key_moments=[
-                KeyMoment(
-                    what_happened="Test 2",
-                    how_i_felt=FeltSense(
-                        emotional_valence=0.6,
-                        emotional_intensity=0.7,
-                        depth=EmotionalDepth.MEANINGFUL,
-                    ),
-                    why_it_matters="Test",
-                )
-            ],
-        ),
+        _exp(_SID, _km(valence=0.5, intensity=0.9, depth=EmotionalDepth.PROFOUND)),
+        _exp(_SID2, _km(what="Test 2", valence=0.6, intensity=0.95, depth=EmotionalDepth.PROFOUND)),
     ]
 
     detection = model.detect_pattern(experiences, {})
@@ -100,37 +78,13 @@ def test_detect_pattern_positive() -> None:
 
 
 def test_detect_pattern_negative() -> None:
-    """Test detecting negative pattern."""
+    """Test detecting negative pattern (low arousal → negative valence estimate in mock)."""
     model = MockReflectionModel()
 
     experiences = [
-        SessionExperience(
-            session_id=_SID,
-            key_moments=[
-                KeyMoment(
-                    what_happened="Test",
-                    how_i_felt=FeltSense(
-                        emotional_valence=-0.5,
-                        emotional_intensity=0.6,
-                        depth=EmotionalDepth.MEANINGFUL,
-                    ),
-                    why_it_matters="Test",
-                )
-            ],
-        ),
-        SessionExperience(
-            session_id=_SID2,
-            key_moments=[
-                KeyMoment(
-                    what_happened="Test 2",
-                    how_i_felt=FeltSense(
-                        emotional_valence=-0.6,
-                        emotional_intensity=0.7,
-                        depth=EmotionalDepth.MEANINGFUL,
-                    ),
-                    why_it_matters="Test",
-                )
-            ],
+        _exp(_SID, _km(valence=-0.5, intensity=0.2, depth=EmotionalDepth.PROFOUND)),
+        _exp(
+            _SID2, _km(what="Test 2", valence=-0.6, intensity=0.15, depth=EmotionalDepth.PROFOUND)
         ),
     ]
 
@@ -143,19 +97,7 @@ def test_detect_pattern_single_experience() -> None:
     """Test that pattern detection requires multiple experiences."""
     model = MockReflectionModel()
 
-    exp = SessionExperience(
-        session_id=_SID,
-        key_moments=[
-            KeyMoment(
-                what_happened="Test",
-                how_i_felt=FeltSense(
-                    emotional_valence=0.5, emotional_intensity=0.6, depth=EmotionalDepth.MEANINGFUL
-                ),
-                why_it_matters="Test",
-            )
-        ],
-    )
-
+    exp = _exp(_SID, _km(valence=0.5, intensity=0.6))
     detection = model.detect_pattern([exp], {})
     assert detection.description == ""
 
@@ -171,17 +113,9 @@ def test_propose_narrative_update_micro() -> None:
         recent_layer=NarrativeLayer(layer_type=LayerType.RECENT, content="Recent"),
     )
 
-    exp = SessionExperience(
-        session_id=_SID,
-        key_moments=[
-            KeyMoment(
-                what_happened="Test event",
-                how_i_felt=FeltSense(
-                    emotional_valence=0.5, emotional_intensity=0.6, depth=EmotionalDepth.MEANINGFUL
-                ),
-                why_it_matters="Test importance",
-            )
-        ],
+    exp = _exp(
+        _SID,
+        _km(what="Test event", why="Test importance"),
     )
 
     proposed = model.propose_narrative_update(narrative, [exp], ReflectionLevel.MICRO)
@@ -199,22 +133,7 @@ def test_assess_health_all_criteria() -> None:
         habits=[Habit(statement="Test habit", helpfulness=HelpfulnessLevel.HELPFUL)],
     )
 
-    experiences = [
-        SessionExperience(
-            session_id=_SID,
-            key_moments=[
-                KeyMoment(
-                    what_happened="Test",
-                    how_i_felt=FeltSense(
-                        emotional_valence=0.5,
-                        emotional_intensity=0.6,
-                        depth=EmotionalDepth.MEANINGFUL,
-                    ),
-                    why_it_matters="Test",
-                )
-            ],
-        )
-    ]
+    experiences = [_exp(_SID, _km(valence=0.5, intensity=0.6))]
 
     for criterion in JahodaCriterion:
         hc = model.assess_health_criterion(identity, experiences, criterion)

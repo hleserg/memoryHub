@@ -198,6 +198,15 @@ def test_experience_add_creates_file_and_search_finds_it(tmp_path: Path) -> None
     )
     assert r_add.returncode == 0, r_add.stderr
     assert "Experience created" in r_add.stdout
+    import re
+
+    match = re.search(
+        r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}",
+        r_add.stdout,
+        re.IGNORECASE,
+    )
+    assert match, f"No experience UUID in add output: {r_add.stdout}"
+    exp_id = match.group(0)
 
     storage = tmp_path / ".atman" / "experiences.jsonl"
     assert storage.exists(), "experiences.jsonl must exist after add"
@@ -213,7 +222,8 @@ def test_experience_add_creates_file_and_search_finds_it(tmp_path: Path) -> None
         env=env,
     )
     assert r_search.returncode == 0, r_search.stderr
-    assert "CLI round-trip test" in r_search.stdout
+    assert "Found" in r_search.stdout
+    assert exp_id in r_search.stdout
 
 
 # ---------------------------------------------------------------------------

@@ -31,23 +31,9 @@ _GOLDEN_EXPERIENCE = """{
     "id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
     "session_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
     "timestamp": "2025-01-15T09:00:00+00:00",
-    "key_moments": [
-      {
-        "id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
-        "what_happened": "golden schema test moment",
-        "how_i_felt": {
-          "emotional_valence": 0.3,
-          "emotional_intensity": 0.7,
-          "depth": "meaningful",
-          "physical_sensation": null,
-          "cognitive_state": null
-        },
-        "why_it_matters": "schema stability",
-        "values_touched": ["honesty"],
-        "reframing_notes": [],
-        "fact_refs": ["33333333-3333-4333-8333-333333333333"]
-      }
-    ],
+    "key_moment_ids": ["cccccccc-cccc-4ccc-8ccc-cccccccccccc"],
+    "avg_emotional_intensity": 0.7,
+    "has_profound_moment": false,
     "reframing_notes": [],
     "salience": 1.0,
     "access_count": 0,
@@ -60,14 +46,13 @@ _GOLDEN_EXPERIENCE = """{
 def test_golden_experience_record_deserializes() -> None:
     record = ExperienceRecord.model_validate_json(_GOLDEN_EXPERIENCE)
     assert str(record.experience.id) == "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
-    assert record.experience.key_moments[0].what_happened == "golden schema test moment"
-    assert record.experience.key_moments[0].how_i_felt.depth.value == "meaningful"
+    assert len(record.experience.key_moment_ids) == 1
+    assert str(record.experience.key_moment_ids[0]) == "cccccccc-cccc-4ccc-8ccc-cccccccccccc"
     assert record.experience.salience == 1.0
     assert record.experience.access_count == 0
+    assert record.experience.avg_emotional_intensity == 0.7
+    assert record.experience.has_profound_moment is False
     # E24.2: fact_refs lift back-links from facts -> experiences.
-    assert str(record.experience.key_moments[0].fact_refs[0]) == (
-        "33333333-3333-4333-8333-333333333333"
-    )
     assert str(record.experience.fact_refs[0]) == "33333333-3333-4333-8333-333333333333"
 
 
@@ -266,7 +251,8 @@ def test_experience_double_roundtrip_is_stable() -> None:
     j = r1.model_dump_json()
     r2 = ExperienceRecord.model_validate_json(j)
     assert r2.experience.id == r1.experience.id
-    assert r2.experience.key_moments[0].what_happened == r1.experience.key_moments[0].what_happened
+    assert r2.experience.key_moment_ids == r1.experience.key_moment_ids
+    assert r2.experience.avg_emotional_intensity == r1.experience.avg_emotional_intensity
 
 
 def test_narrative_double_roundtrip_is_stable() -> None:

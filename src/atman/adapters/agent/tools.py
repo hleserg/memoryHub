@@ -191,3 +191,50 @@ def log_experience(
         "Experience logging is handled automatically at session end. "
         f"Use record_key_moment (AffectDetector-backed) to capture significant moments: {summary}"
     )
+
+
+def restart_session(ctx: RunContext[AtmanDeps], reason: str = "") -> str:
+    """
+    Request immediate session restart.
+
+    Args:
+        ctx: Run context with AtmanDeps
+        reason: Optional reason for restart
+
+    Returns:
+        Sentinel string indicating restart was requested
+
+    This tool returns a sentinel string that the session runner will detect
+    and use to trigger session restart logic. The runner is responsible for
+    handling the actual restart workflow (E22.5).
+
+    The sentinel format uses newline as delimiter when reason is provided
+    to ensure unambiguous parsing.
+    """
+    _ = ctx  # Unused; reserved for future validation
+    if reason:
+        return f"__ATMAN_RESTART_REQUESTED__\n{reason}"
+    return "__ATMAN_RESTART_REQUESTED__"
+
+
+def wait_session(ctx: RunContext[AtmanDeps], minutes: int) -> str:
+    """
+    Request session pause for specified minutes.
+
+    Args:
+        ctx: Run context with AtmanDeps
+        minutes: Number of minutes to wait (must be > 0)
+
+    Returns:
+        Sentinel string indicating wait was requested, or error message
+
+    This tool returns a sentinel string that the session runner will detect
+    and use to trigger wait/pause logic. The runner is responsible for
+    handling the actual wait workflow (E22.5).
+    """
+    _ = ctx  # Unused; reserved for future validation
+
+    if minutes <= 0:
+        return f"Error: minutes must be positive, got {minutes}"
+
+    return f"__ATMAN_WAIT_REQUESTED__{minutes}"

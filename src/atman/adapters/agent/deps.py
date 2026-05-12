@@ -19,7 +19,7 @@ from typing import TYPE_CHECKING
 from uuid import UUID
 
 if TYPE_CHECKING:
-    from atman.adapters.agent.config import AgentConfig
+    from atman.adapters.agent.config import AgentConfig, ModelConfig
     from atman.core.ports.state_store import StateStore
     from atman.core.services.experience_service import ExperienceService
     from atman.core.services.identity_service import IdentityService
@@ -64,6 +64,13 @@ class AtmanDeps:
     truncate_narrative_core: int = 1000
     """Max chars for narrative core_layer (risk mitigation E26-R2)"""
 
+    model_config: ModelConfig | None = None
+    """Model configuration for agent (context limits, temperature, etc.) - E22.3"""
+
+    injected_context: str | None = None
+    """Pending memory context for system_prompt injection mode.
+    Set via replace(deps, injected_context=...) and consumed by build_instructions()."""
+
     @classmethod
     def from_config(
         cls,
@@ -97,4 +104,5 @@ class AtmanDeps:
             max_tool_calls=config.max_tool_calls,
             truncate_narrative_recent=config.truncate_narrative_recent,
             truncate_narrative_core=config.truncate_narrative_core,
+            model_config=config.model,
         )

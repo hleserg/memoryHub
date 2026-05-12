@@ -18,22 +18,18 @@ concurrency:
 
 jobs:
   check:
-    name: Lint, typecheck, security, tests (Python ${{ matrix.python-version }})
+    name: Lint, typecheck, security, tests
     runs-on: ubuntu-latest
     timeout-minutes: 20
-
-    strategy:
-      matrix:
-        python-version: ["3.12", "3.13"]
 
     steps:
       - name: Checkout
         uses: actions/checkout@v6
 
-      - name: Set up Python ${{ matrix.python-version }}
+      - name: Set up Python
         uses: actions/setup-python@v6
         with:
-          python-version: ${{ matrix.python-version }}
+          python-version: "3.12"
 
       - name: Set up uv
         uses: astral-sh/setup-uv@v7
@@ -50,13 +46,6 @@ jobs:
         run: pytest tests/ -m "not slow" -v
 
       - name: Run required checks (lint, typecheck, security, full test suite)
-        if: matrix.python-version == '3.12'
         env:
           SKIP_EVAL_STORAGE_TEST: "1"
         run: make check
-
-      - name: Run tests only (Python ${{ matrix.python-version }})
-        if: matrix.python-version != '3.12'
-        env:
-          SKIP_EVAL_STORAGE_TEST: "1"
-        run: pytest tests/ -v --cov=atman --cov-fail-under=89

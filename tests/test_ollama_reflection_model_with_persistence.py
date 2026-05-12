@@ -146,7 +146,12 @@ class TestPersistedReflectionMethods:
             how_i_felt=felt,
             why_it_matters="for testing",
         )
-        return SessionExperience(session_id=uuid4(), key_moments=[moment])
+        return SessionExperience(
+            session_id=uuid4(),
+            key_moment_ids=[moment.id],
+            avg_emotional_intensity=moment.how_i_felt.emotional_intensity,
+            has_profound_moment=moment.how_i_felt.depth == EmotionalDepth.PROFOUND,
+        )
 
     def test_generate_reframing_note_persists_with_valid_agent_id(self) -> None:
         from uuid import uuid4
