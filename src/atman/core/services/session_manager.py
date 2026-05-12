@@ -143,6 +143,7 @@ class SessionManager:
         if lock_path is None:
             return None
 
+        lock_file: IO[str] | None = None
         try:
             import fcntl
 
@@ -150,7 +151,8 @@ class SessionManager:
             fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
             return lock_file
         except BlockingIOError:
-            lock_file.close()
+            if lock_file is not None:
+                lock_file.close()
             return None
         except (ImportError, OSError) as exc:
             _LOG.warning("Failed to lock journal for session %s: %s", session_id, exc)
