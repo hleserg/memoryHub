@@ -326,8 +326,8 @@ def is_value_refusal(
     ):
         try:
             return cfg.llm_classifier(text)
-        except Exception:
-            pass  # LLM unavailable — decide by text
+        except Exception:  # nosec B110
+            pass  # LLM unavailable — decide by text only
 
     return result.confidence >= cfg.min_confidence
 
