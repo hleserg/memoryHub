@@ -213,6 +213,44 @@ def _check_restart_requested(messages: list) -> tuple[bool, str]:
     return False, ""
 
 
+def _check_wait_requested(messages: list) -> tuple[bool, int]:
+    """
+    Check if wait_session tool was called in the message history.
+
+    Args:
+        messages: List of messages from agent.run() result
+
+    Returns:
+        tuple[bool, int]: (wait_requested, minutes)
+            - wait_requested: True if wait was requested
+            - minutes: Number of minutes to wait (0 if not requested)
+    """
+    # Look for sentinel content with minutes value
+    for msg in messages:
+        for part in getattr(msg, "parts", []):
+            if hasattr(part, "content") and isinstance(part.content, str):
+                content = part.content
+                if content.startswith("__ATMAN_WAIT_REQUESTED__"):
+                    # Extract minutes (format: __ATMAN_WAIT_REQUESTED__<minutes>)
+                    try:
+                        minutes_str = content.replace("__ATMAN_WAIT_REQUESTED__", "")
+                        minutes = int(minutes_str)
+                        return True, minutes
+                    except (ValueError, AttributeError):
+                        _LOG.warning("Malformed wait sentinel: %s", content)
+                        return True, 0
+
+    # Fallback: check for tool_name (no minutes value available)
+    for msg in messages:
+        for part in getattr(msg, "parts", []):
+            if hasattr(part, "tool_name") and part.tool_name == "wait_session":
+                # Tool was called but we can't extract minutes from tool_name alone
+                _LOG.warning("wait_session tool detected but minutes not available")
+                return True, 0
+
+    return False, 0
+
+
 def _build_restart_package(
     session_experience: SessionResult,
     restart_reason: str,
@@ -661,6 +699,14 @@ class AtmanRunner:
                         print_err(f"Restart failed: {exc!s}")
                         _LOG.exception("Failed to restart session %s", session_id)
                         break  # Exit loop on restart failure
+
+                # E22.5: Check for wait request (agent-triggered timeout adjustment)
+                wait_requested, wait_minutes = _check_wait_requested(result.new_messages())
+
+                if wait_requested and wait_minutes > 0:
+                    timeout_seconds = wait_minutes * 60
+                    _LOG.info("Wait requested by agent: %d minutes (timeout reset)", wait_minutes)
+                    print_info(f"\n⏱️  Timer reset to {wait_minutes} minutes (agent request).\n")
 
                 # Normal flow: display output and update history
                 print_plain(str(result.output))

@@ -489,6 +489,82 @@ def test_check_restart_requested_prioritizes_content_sentinel() -> None:
     assert reason == "Context window full", "Reason should be extracted from content sentinel"
 
 
+def test_check_wait_requested_with_sentinel() -> None:
+    """Test that _check_wait_requested detects wait sentinel."""
+    from atman.adapters.agent.runner import _check_wait_requested
+
+    # Mock message with wait sentinel
+    class MockPart:
+        def __init__(self) -> None:
+            self.content = "__ATMAN_WAIT_REQUESTED__10"
+
+    class MockMessage:
+        def __init__(self) -> None:
+            self.parts = [MockPart()]
+
+    messages = [MockMessage()]
+    wait_requested, minutes = _check_wait_requested(messages)
+    assert wait_requested is True
+    assert minutes == 10
+
+
+def test_check_wait_requested_no_sentinel() -> None:
+    """Test that _check_wait_requested returns False when no sentinel."""
+    from atman.adapters.agent.runner import _check_wait_requested
+
+    # Mock message without wait sentinel
+    class MockPart:
+        def __init__(self) -> None:
+            self.content = "Normal agent response"
+
+    class MockMessage:
+        def __init__(self) -> None:
+            self.parts = [MockPart()]
+
+    messages = [MockMessage()]
+    wait_requested, minutes = _check_wait_requested(messages)
+    assert wait_requested is False
+    assert minutes == 0
+
+
+def test_check_wait_requested_with_tool_name() -> None:
+    """Test that _check_wait_requested detects wait via tool_name (no minutes)."""
+    from atman.adapters.agent.runner import _check_wait_requested
+
+    # Mock message with tool_name
+    class MockPart:
+        def __init__(self) -> None:
+            self.tool_name = "wait_session"
+
+    class MockMessage:
+        def __init__(self) -> None:
+            self.parts = [MockPart()]
+
+    messages = [MockMessage()]
+    wait_requested, minutes = _check_wait_requested(messages)
+    assert wait_requested is True
+    assert minutes == 0  # Can't extract minutes from tool_name alone
+
+
+def test_check_wait_requested_malformed_sentinel() -> None:
+    """Test that _check_wait_requested handles malformed sentinel gracefully."""
+    from atman.adapters.agent.runner import _check_wait_requested
+
+    # Mock message with malformed sentinel (non-integer minutes)
+    class MockPart:
+        def __init__(self) -> None:
+            self.content = "__ATMAN_WAIT_REQUESTED__abc"
+
+    class MockMessage:
+        def __init__(self) -> None:
+            self.parts = [MockPart()]
+
+    messages = [MockMessage()]
+    wait_requested, minutes = _check_wait_requested(messages)
+    assert wait_requested is True
+    assert minutes == 0  # Returns 0 for malformed
+
+
 def test_build_restart_package() -> None:
     """Test that _build_restart_package creates valid package."""
     from atman.adapters.agent.runner import _build_restart_package
@@ -979,6 +1055,6 @@ def test_do_restart_persists_restart_reason(
     experiences = sm._state_store.list_recent_experiences(limit=1)
     assert len(experiences) == 1
     assert experiences[0].experience.close_reason == "restart"
-    assert (
-        experiences[0].experience.restart_reason == restart_reason
-    ), "restart_reason should be persisted to SessionExperience"
+    assert experiences[0].experience.restart_reason == restart_reason, (
+        "restart_reason should be persisted to SessionExperience"
+    )
