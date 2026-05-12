@@ -49,7 +49,7 @@ All paths are absolute relative to the repository root.
 | `core/services/identity_service.py` | Identity lifecycle: bootstrap, update, snapshot | `IdentityService` |
 | `core/services/narrative_service.py` | Narrative document: create, update, archive, validate | `NarrativeService` |
 | `core/services/narrative_revision.py` | Narrative updates during reflection with concurrency control | `NarrativeRevisionService` |
-| `core/services/session_manager.py` | Session runtime: start, `record_event` (optional async **AffectDetector** hook), `append_key_moment` / `append_key_moment_input`, finish with eigenstate (thread-safe registry, optional `max_active_sessions`, optional `affect_workspace` + `AffectDetectorConfig`) | `SessionManager`, `MAX_EIGENSTATE_ITEMS`; session errors live in `core/exceptions.py` |
+| `core/services/session_manager.py` | Session runtime: start, `record_event` (optional async **AffectDetector** hook), `append_key_moment` / `append_key_moment_input`, finish with eigenstate (thread-safe registry, optional `max_active_sessions`, optional `affect_workspace` + `AffectDetectorConfig`, **optional `workspace` for JSONL session journals & orphan recovery**) | `SessionManager`, `MAX_EIGENSTATE_ITEMS`; session errors live in `core/exceptions.py` |
 | `core/services/reflection_service.py` | Three reflection levels: micro, daily, deep | `MicroReflectionService`, `DailyReflectionService`, `DeepReflectionService` |
 | `core/services/principle_advisor.py` | Distinguish habit vs principle; advise on principle revision | `PrincipleRevisionAdvisor` |
 | `core/services/conflict_detector.py` (E24.5) | Detect contradictions between active facts; produces small cognitive tension signals | `ConflictDetector`, `FactConflict` |

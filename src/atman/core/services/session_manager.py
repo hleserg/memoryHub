@@ -255,7 +255,7 @@ class SessionManager:
                 # Delete journal after successful recovery (or if no key moments)
                 journal_file.unlink()
 
-            except (ValueError, OSError) as exc:
+            except Exception as exc:
                 _LOG.error("Failed to recover orphaned journal %s: %s", journal_file, exc)
                 continue
 

@@ -52,7 +52,7 @@
 | `core/services/identity_service.py` | Жизненный цикл identity: bootstrap, update, snapshot | `IdentityService` |
 | `core/services/narrative_service.py` | Документ нарратива: создание, обновление, архивация, валидация | `NarrativeService` |
 | `core/services/narrative_revision.py` | Обновления нарратива во время рефлексии с контролем конкуренции | `NarrativeRevisionService` |
-| `core/services/session_manager.py` | Сессионный runtime: старт, `record_event` (опциональный async **AffectDetector**), `append_key_moment` / `append_key_moment_input`, завершение с eigenstate (потокобезопасный реестр, опциональный `max_active_sessions`, опционально `affect_workspace` + `AffectDetectorConfig`) | `SessionManager`, `MAX_EIGENSTATE_ITEMS`; ошибки сессий в `core/exceptions.py` |
+| `core/services/session_manager.py` | Сессионный runtime: старт, `record_event` (опциональный async **AffectDetector**), `append_key_moment` / `append_key_moment_input`, завершение с eigenstate (потокобезопасный реестр, опциональный `max_active_sessions`, опционально `affect_workspace` + `AffectDetectorConfig`, **опционально `workspace` для JSONL-журналов сессий и orphan recovery**) | `SessionManager`, `MAX_EIGENSTATE_ITEMS`; ошибки сессий в `core/exceptions.py` |
 | `core/services/reflection_service.py` | Три уровня рефлексии: micro, daily, deep | `MicroReflectionService`, `DailyReflectionService`, `DeepReflectionService` |
 | `core/services/principle_advisor.py` | Различение привычки и принципа; советник пересмотра принципов | `PrincipleRevisionAdvisor` |
 | `core/services/session_working_memory.py` | In-session кэш для предотвращения повторных поисков | `SessionWorkingMemory`, `CachedItem` |
