@@ -33,7 +33,7 @@ class EmbeddingPort(ABC):
 
 ### Ключевые архитектурные решения
 
-1. **Согласованность размерности**: Все адаптеры возвращают векторы заданной размерности (2560 для qwen3-embedding:4b)
+1. **Согласованность размерности**: Все адаптеры возвращают векторы заданной размерности (1024 для bge-m3)
 2. **Детерминизм**: Mock-адаптер использует сид `hash(text) % 2^31` для воспроизводимых результатов
 3. **Отслеживаемость**: `model_name()` позволяет отслеживать, какая модель сгенерировала каждый эмбеддинг
 
@@ -43,10 +43,10 @@ class EmbeddingPort(ABC):
 
 | Переменная | Значение по умолчанию | Описание |
 |------------|----------------------|----------|
-| `EMBEDDING_BACKEND` | `mock` | Бэкенд: `ollama` или `mock` |
-| `EMBEDDING_MODEL` | `qwen3-embedding:4b` | Название модели Ollama |
-| `EMBEDDING_DIMENSION` | `768` | Ожидаемая размерность вектора |
-| `EMBEDDING_OLLAMA_HOST` | `http://localhost:11434` | Эндпоинт API Ollama |
+| `EMBEDDING_BACKEND` | `ollama` | Бэкенд: `ollama` или `mock` |
+| `EMBEDDING_MODEL` | `bge-m3` | Название модели Ollama |
+| `EMBEDDING_DIMENSION` | `1024` | Ожидаемая размерность вектора |
+| `EMBEDDING_OLLAMA_HOST` | `http://localhost:11434` | Эндпоинт API Ollama (устаревшая: `OLLAMA_HOST`) |
 | `EMBEDDING_TIMEOUT` | `30.0` | Таймаут запроса в секундах |
 
 Конфигурация загружается через Pydantic Settings (`src/atman/config.py`) с поддержкой `.env` файлов.
@@ -69,18 +69,18 @@ from atman.adapters.memory.ollama_embedding import OllamaEmbeddingAdapter
 
 adapter = OllamaEmbeddingAdapter(
     base_url="http://localhost:11434",
-    model="qwen3-embedding:4b",
+    model="bge-m3",
     timeout=30.0,
 )
 
 embedding = adapter.embed("семантический поисковый запрос")
-assert len(embedding) == 2560
-assert adapter.model_name() == "qwen3-embedding:4b"
+assert len(embedding) == 1024
+assert adapter.model_name() == "bge-m3"
 ```
 
 **Требования:**
 - Запущенный экземпляр Ollama
-- Загруженная модель: `ollama pull qwen3-embedding:4b`
+- Загруженная модель: `ollama pull bge-m3`
 
 ### MockEmbeddingAdapter
 
@@ -89,7 +89,7 @@ assert adapter.model_name() == "qwen3-embedding:4b"
 **Возможности:**
 - Одинаковый текст всегда дает одинаковый эмбеддинг
 - Разные тексты дают разные эмбеддинги
-- 2560-мерные единичные векторы
+- 1024-мерные единичные векторы
 - Детерминированная генерация на основе LCG
 
 **Использование:**
@@ -101,19 +101,19 @@ adapter = MockEmbeddingAdapter()
 embedding1 = adapter.embed("привет мир")
 embedding2 = adapter.embed("привет мир")
 assert embedding1 == embedding2  # Детерминизм
-assert adapter.dimension() == 2560
-assert adapter.model_name() == "mock-embedding:768d"
+assert adapter.dimension() == 1024
+assert adapter.model_name() == "mock-embedding:1024d"
 ```
 
-## Выбор модели: qwen3-embedding:4b
+## Выбор модели: BGE-M3
 
-Модель по умолчанию — `qwen3-embedding:4b` по следующим причинам:
+Модель по умолчанию — `bge-m3` по следующим причинам:
 
-| Критерий | qwen3-embedding:4b |
-|----------|---------------------|
-| **Размерность** | 2560 |
-| **Качество** | Хорошая производительность на бенчмарках MTEB |
-| **Скорость** | ~50 мс на запрос на потребительском GPU |
+| Критерий | bge-m3 |
+|----------|--------|
+| **Размерность** | 1024 |
+| **Качество** | Отличная многоязычная производительность на бенчмарках MTEB |
+| **Скорость** | ~40 мс на запрос на потребительском GPU |
 | **Размер** | 1.5B параметров, ~600 МБ |
 | **Лицензия** | Apache 2.0 (коммерческое использование OK) |
 | **Мультиязычность** | Сильная поддержка CJK + английский |
@@ -284,7 +284,7 @@ RuntimeError: Empty embedding received from Ollama
 
 **Решение:** Загрузить модель:
 ```bash
-ollama pull qwen3-embedding:4b
+ollama pull bge-m3
 ```
 
 ### Несоответствие размерности
@@ -298,5 +298,5 @@ ValueError: Vectors must have same dimension
 ## Ссылки
 
 - Issue: [#391](https://github.com/hleserg/atman/issues/391) - Epic E25
-- Модель: [qwen3-embedding:4b](https://ollama.com/library/qwen3-embedding)
+- Модель: [bge-m3](https://ollama.com/library/bge-m3)
 - Ollama API: [embed endpoint](https://github.com/ollama/ollama/blob/main/docs/api.md#generate-embeddings)
