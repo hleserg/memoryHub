@@ -7,7 +7,7 @@ Not persistent - all data is lost when the process exits.
 
 from uuid import UUID
 
-from atman.core.models import ExperienceRecord, ReframingNote
+from atman.core.models import ExperienceRecord, KeyMoment, ReframingNote
 from atman.core.ports import (
     DateRangeQuery,
     DepthQuery,
@@ -29,6 +29,7 @@ class InMemoryExperienceStore(StateStore):
     def __init__(self):
         """Initialize in-memory experience store."""
         self._experiences: dict[UUID, ExperienceRecord] = {}
+        self._key_moments: dict[UUID, KeyMoment] = {}
 
     def create_experience(self, record: ExperienceRecord) -> ExperienceRecord:
         """Create a new experience in storage."""
@@ -105,16 +106,20 @@ class InMemoryExperienceStore(StateStore):
 
         elif isinstance(query, ValuesTouchedQuery):
             query_values_lower = [v.lower() for v in query.values]
-            for moment in exp.key_moments:
-                moment_values_lower = [v.lower() for v in moment.values_touched]
-                if any(qv in moment_values_lower for qv in query_values_lower):
-                    return True
+            for moment_id in exp.key_moment_ids:
+                moment = self._key_moments.get(moment_id)
+                if moment:
+                    moment_values_lower = [v.lower() for v in moment.values_touched]
+                    if any(qv in moment_values_lower for qv in query_values_lower):
+                        return True
             return False
 
         elif isinstance(query, DepthQuery):
-            return any(
-                moment.how_i_felt.depth.value == query.depth.lower() for moment in exp.key_moments
-            )
+            for moment_id in exp.key_moment_ids:
+                moment = self._key_moments.get(moment_id)
+                if moment and moment.how_i_felt.depth.value == query.depth.lower():
+                    return True
+            return False
 
         elif isinstance(query, DateRangeQuery):
             return query.start_date <= exp.timestamp <= query.end_date
@@ -128,9 +133,32 @@ class InMemoryExperienceStore(StateStore):
 
         return results[:limit]
 
+    def store_key_moments(self, session_id: UUID, moments: list[KeyMoment]) -> None:
+        """Store key moments for a session."""
+        for moment in moments:
+            self._key_moments[moment.id] = moment
+
+    def get_key_moment(self, moment_id: UUID) -> KeyMoment | None:
+        """Retrieve a key moment by its ID."""
+        return self._key_moments.get(moment_id)
+
+    def get_key_moments_for_session(self, session_id: UUID) -> list[KeyMoment]:
+        """Retrieve all key moments for a session."""
+        # Find the experience for this session
+        for exp_record in self._experiences.values():
+            if exp_record.experience.session_id == session_id:
+                result = []
+                for moment_id in exp_record.experience.key_moment_ids:
+                    moment = self._key_moments.get(moment_id)
+                    if moment:
+                        result.append(moment)
+                return result
+        return []
+
     def clear(self) -> None:
         """Clear all experiences from storage (useful for testing)."""
         self._experiences.clear()
+        self._key_moments.clear()
 
     def count(self) -> int:
         """Return the number of experiences in storage."""
