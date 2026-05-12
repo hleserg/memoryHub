@@ -9,11 +9,11 @@ dependencies = [
     "pymorphy3>=2.0.2,<3",
     "pydantic>=2.0.0",
     "pydantic-settings>=2.0.0",
-    "pydantic-ai-slim>=1.88.0,<2.0",
+    "pydantic-ai-slim[openai,anthropic,google,groq]>=1.88.0,<2.0",
     "rich>=13.7.0",
     "textual>=0.86.0",
     "httpx>=0.28.0",
-    "psycopg[binary]>=3.1",
+    "psycopg-binary>=3.1",
 ]
 
 [project.optional-dependencies]
