@@ -130,19 +130,20 @@ def _minimal_narrative() -> NarrativeDocument:
 
 
 def _sample_experience() -> SessionExperience:
+    km = KeyMoment(
+        what_happened="Happened",
+        how_i_felt=FeltSense(
+            emotional_valence=0.2,
+            emotional_intensity=0.5,
+            depth=EmotionalDepth.MEANINGFUL,
+        ),
+        why_it_matters="Matters",
+    )
     return SessionExperience(
         session_id=uuid4(),
-        key_moments=[
-            KeyMoment(
-                what_happened="Happened",
-                how_i_felt=FeltSense(
-                    emotional_valence=0.2,
-                    emotional_intensity=0.5,
-                    depth=EmotionalDepth.MEANINGFUL,
-                ),
-                why_it_matters="Matters",
-            )
-        ],
+        key_moment_ids=[km.id],
+        avg_emotional_intensity=km.how_i_felt.emotional_intensity,
+        has_profound_moment=km.how_i_felt.depth == EmotionalDepth.PROFOUND,
     )
 
 

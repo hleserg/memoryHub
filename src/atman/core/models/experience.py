@@ -7,10 +7,10 @@ All experiences are immutable after recording - only reframing notes can be adde
 
 from datetime import UTC, datetime
 from enum import StrEnum
-from typing import Any
+from typing import Any, Literal
 from uuid import UUID, uuid4
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, ValidationInfo, field_validator, model_validator
 
 
 class ReframingNoteAppendResult(StrEnum):
@@ -56,7 +56,7 @@ class FeltSense(BaseModel):
 
     @field_validator("emotional_valence", "emotional_intensity")
     @classmethod
-    def validate_float_range(cls, v: float, info) -> float:
+    def validate_float_range(cls, v: float, info: ValidationInfo) -> float:
         """Ensure float values are in valid range."""
         field_name = info.field_name
         if field_name == "emotional_valence":
@@ -234,6 +234,30 @@ class SessionExperience(BaseModel):
     Only reframing_notes can be added over time.
     """
 
+    @model_validator(mode="before")
+    @classmethod
+    def _migrate_legacy_key_moments(cls, data: Any) -> Any:
+        """Accept legacy payloads with embedded ``key_moments`` (fixtures, old JSON)."""
+        if not isinstance(data, dict):
+            return data
+        legacy = data.get("key_moments")
+        if legacy is None:
+            return data
+        if data.get("key_moment_ids") is not None:
+            return {k: v for k, v in data.items() if k != "key_moments"}
+        if not legacy:
+            return data
+        moments = [KeyMoment.model_validate(m) for m in legacy]
+        out = {k: v for k, v in data.items() if k != "key_moments"}
+        out["key_moment_ids"] = [m.id for m in moments]
+        out["avg_emotional_intensity"] = sum(
+            m.how_i_felt.emotional_intensity for m in moments
+        ) / len(moments)
+        out["has_profound_moment"] = any(
+            m.how_i_felt.depth == EmotionalDepth.PROFOUND for m in moments
+        )
+        return out
+
     id: UUID = Field(default_factory=uuid4)
     session_id: UUID = Field(description="ID of the session this experience is from")
     timestamp: datetime = Field(
@@ -241,8 +265,31 @@ class SessionExperience(BaseModel):
     )
 
     # IMMUTABLE ORIGINAL EXPERIENCE
-    key_moments: list[KeyMoment] = Field(
-        min_length=1, description="The moments that made up this experience - IMMUTABLE"
+    key_moment_ids: list[UUID] = Field(
+        min_length=1,
+        description="IDs of key moments that made up this experience - IMMUTABLE references",
+    )
+
+    # UNEXAMINED FACTS
+    unexamined_fact_refs: list[UUID] = Field(
+        default_factory=list,
+        description="IDs of facts that were present but not examined during this session",
+    )
+
+    # SESSION CLOSE METADATA
+    close_reason: (
+        Literal["timeout_sleep", "menu_timeout", "restart", "forced", "interrupted"] | None
+    ) = Field(
+        default=None,
+        description="Reason why the session ended",
+    )
+    agent_recap: str | None = Field(
+        default=None,
+        description="Agent's own summary of the session upon close",
+    )
+    restart_reason: str = Field(
+        default="",
+        description="Reason for session restart if close_reason is 'restart'",
     )
 
     # METADATA
@@ -272,6 +319,18 @@ class SessionExperience(BaseModel):
         default=0, ge=0, description="How many times this experience has been accessed"
     )
 
+    # SALIENCE METADATA (derived from key moments at creation time)
+    avg_emotional_intensity: float = Field(
+        default=0.5,
+        ge=0.0,
+        le=1.0,
+        description="Average emotional intensity across key moments",
+    )
+    has_profound_moment: bool = Field(
+        default=False,
+        description="Whether any key moment had profound emotional depth",
+    )
+
     # HONEST FALLBACK
     incomplete_coloring: bool = Field(
         default=False,
@@ -288,20 +347,6 @@ class SessionExperience(BaseModel):
     fact_refs: list[UUID] = Field(
         default_factory=list,
         description="IDs of all facts accessed during this session (deduplicated)",
-    )
-
-    # SESSION CLOSURE METADATA (E22.7)
-    close_reason: str | None = Field(
-        default=None,
-        description="Reason for session closure: timeout_sleep | restart | forced | interrupted | None",
-    )
-    restart_reason: str | None = Field(
-        default=None,
-        description="Human-readable reason when close_reason=restart (agent's own words)",
-    )
-    agent_recap: str | None = Field(
-        default=None,
-        description="Agent's recap before timeout_sleep (optional, agent-authored)",
     )
 
     @field_validator("importance", "salience")
@@ -364,22 +409,16 @@ class SessionExperience(BaseModel):
 
         days_since_access = (current_time - self.last_accessed_at).total_seconds() / 86400
 
-        # Adjust decay rate based on emotional intensity and depth
-        if self.key_moments:
-            avg_intensity = sum(m.how_i_felt.emotional_intensity for m in self.key_moments) / len(
-                self.key_moments
-            )
-            has_profound = any(
-                m.how_i_felt.depth == EmotionalDepth.PROFOUND for m in self.key_moments
-            )
+        # Adjust decay rate based on emotional intensity and depth metadata
+        adjusted_lambda = decay_lambda
 
-            # Profound or intense experiences decay more slowly
-            if has_profound:
-                decay_lambda *= 0.5
-            elif avg_intensity > 0.7:
-                decay_lambda *= 0.7
+        # Profound or intense experiences decay more slowly
+        if self.has_profound_moment:
+            adjusted_lambda *= 0.5
+        elif self.avg_emotional_intensity > 0.7:
+            adjusted_lambda *= 0.7
 
-        effective_salience = self.salience * math.exp(-decay_lambda * days_since_access)
+        effective_salience = self.salience * math.exp(-adjusted_lambda * days_since_access)
         return max(0.0, min(1.0, effective_salience))
 
     model_config = ConfigDict(
@@ -388,20 +427,18 @@ class SessionExperience(BaseModel):
             "example": {
                 "session_id": "123e4567-e89b-12d3-a456-426614174000",
                 "timestamp": "2026-04-30T10:00:00Z",
-                "key_moments": [
-                    {
-                        "what_happened": "User presented a complex problem",
-                        "how_i_felt": {
-                            "emotional_valence": 0.2,
-                            "emotional_intensity": 0.6,
-                            "depth": "meaningful",
-                        },
-                        "why_it_matters": "Tests my ability to handle complexity",
-                        "values_touched": ["competence", "service"],
-                    }
+                "key_moment_ids": [
+                    "223e4567-e89b-12d3-a456-426614174001",
+                    "323e4567-e89b-12d3-a456-426614174002",
                 ],
+                "unexamined_fact_refs": ["423e4567-e89b-12d3-a456-426614174003"],
+                "close_reason": "timeout_sleep",
+                "agent_recap": "Complex problem-solving session with breakthrough insights",
+                "restart_reason": "",
                 "importance": 0.7,
                 "salience": 0.7,
+                "avg_emotional_intensity": 0.6,
+                "has_profound_moment": True,
                 "incomplete_coloring": False,
             }
         },

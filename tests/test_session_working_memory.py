@@ -25,7 +25,12 @@ def _experience() -> SessionExperience:
         ),
         why_it_matters="it shaped my view",
     )
-    return SessionExperience(session_id=uuid4(), key_moments=[moment])
+    return SessionExperience(
+        session_id=uuid4(),
+        key_moment_ids=[moment.id],
+        avg_emotional_intensity=moment.how_i_felt.emotional_intensity,
+        has_profound_moment=moment.how_i_felt.depth == EmotionalDepth.PROFOUND,
+    )
 
 
 def test_add_fact_then_has_and_get():
@@ -54,7 +59,8 @@ def test_add_experience_records_summary():
     cached = wm.get(exp.id)
     assert cached is not None
     assert cached.item_type == "experience"
-    assert "something significant" in cached.content
+    assert "key moments" in cached.content.lower()
+    assert "avg_intensity" in cached.content
 
 
 def test_add_experience_is_idempotent():

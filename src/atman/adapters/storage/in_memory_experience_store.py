@@ -7,7 +7,7 @@ Not persistent - all data is lost when the process exits.
 
 from uuid import UUID
 
-from atman.core.models import ExperienceRecord, ReframingNote
+from atman.core.models import ExperienceRecord, KeyMoment, ReframingNote
 from atman.core.ports import (
     DateRangeQuery,
     DepthQuery,
@@ -30,6 +30,7 @@ class InMemoryExperienceStore(StateStore):
     def __init__(self):
         """Initialize in-memory experience store."""
         self._experiences: dict[UUID, ExperienceRecord] = {}
+        self._key_moments: dict[UUID, KeyMoment] = {}
 
     def create_experience(self, record: ExperienceRecord) -> ExperienceRecord:
         """Create a new experience in storage."""
@@ -105,19 +106,29 @@ class InMemoryExperienceStore(StateStore):
             return exp.session_id == query.session_id
 
         elif isinstance(query, ValuesTouchedQuery):
-            for moment in exp.key_moments:
-                if any(qv in moment.values_touched for qv in query.values):
+            for moment_id in exp.key_moment_ids:
+                moment = self._key_moments.get(moment_id)
+                if moment and any(qv in moment.values_touched for qv in query.values):
                     return True
             return False
 
         elif isinstance(query, DepthQuery):
-            return any(moment.how_i_felt.depth == query.depth for moment in exp.key_moments)
+            for moment_id in exp.key_moment_ids:
+                moment = self._key_moments.get(moment_id)
+                if moment and moment.how_i_felt.depth.value == query.depth:
+                    return True
+            return False
 
         elif isinstance(query, DateRangeQuery):
             return query.start_date <= exp.timestamp <= query.end_date
 
         elif isinstance(query, FactRefsContainsQuery):
-            return any(query.fact_id in moment.fact_refs for moment in exp.key_moments)
+            # Fetch key moments and check fact_refs
+            for moment_id in exp.key_moment_ids:
+                moment = self._key_moments.get(moment_id)
+                if moment and query.fact_id in moment.fact_refs:
+                    return True
+            return False
 
         return False
 
@@ -128,9 +139,32 @@ class InMemoryExperienceStore(StateStore):
 
         return results[:limit]
 
+    def store_key_moments(self, session_id: UUID, moments: list[KeyMoment]) -> None:
+        """Store key moments for a session."""
+        for moment in moments:
+            self._key_moments[moment.id] = moment
+
+    def get_key_moment(self, moment_id: UUID) -> KeyMoment | None:
+        """Retrieve a key moment by its ID."""
+        return self._key_moments.get(moment_id)
+
+    def get_key_moments_for_session(self, session_id: UUID) -> list[KeyMoment]:
+        """Retrieve all key moments for a session."""
+        # Find the experience for this session
+        for exp_record in self._experiences.values():
+            if exp_record.experience.session_id == session_id:
+                result = []
+                for moment_id in exp_record.experience.key_moment_ids:
+                    moment = self._key_moments.get(moment_id)
+                    if moment:
+                        result.append(moment)
+                return result
+        return []
+
     def clear(self) -> None:
         """Clear all experiences from storage (useful for testing)."""
         self._experiences.clear()
+        self._key_moments.clear()
 
     def count(self) -> int:
         """Return the number of experiences in storage."""
@@ -185,9 +219,5 @@ class InMemoryExperienceStore(StateStore):
         raise NotImplementedError("KeyMoment operations not supported in InMemoryExperienceStore")
 
     def list_key_moments(self, session_id=None):  # type: ignore
-        """Not implemented - use FileStateStore for key moment operations."""
-        raise NotImplementedError("KeyMoment operations not supported in InMemoryExperienceStore")
-
-    def get_key_moment(self, key_moment_id):  # type: ignore
         """Not implemented - use FileStateStore for key moment operations."""
         raise NotImplementedError("KeyMoment operations not supported in InMemoryExperienceStore")

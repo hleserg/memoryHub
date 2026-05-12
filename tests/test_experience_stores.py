@@ -44,7 +44,12 @@ class StoreTestMixin:
             values_touched=["test", "quality"],
         )
         experience = SessionExperience(
-            session_id=uuid4(), key_moments=[moment], importance=0.7, salience=0.8
+            session_id=uuid4(),
+            key_moment_ids=[moment.id],
+            avg_emotional_intensity=0.7,
+            has_profound_moment=False,
+            importance=0.7,
+            salience=0.8,
         )
 
         return ExperienceRecord(experience=experience)
@@ -57,7 +62,7 @@ class StoreTestMixin:
 
         assert retrieved is not None
         assert retrieved.experience.id == created.experience.id
-        assert len(retrieved.experience.key_moments) == 1
+        assert len(retrieved.experience.key_moment_ids) == 1
 
     def test_get_nonexistent(self, store):
         """Test getting a non-existent experience returns None."""
@@ -114,7 +119,12 @@ class StoreTestMixin:
                 emotional_valence=0.0, emotional_intensity=0.5, depth=EmotionalDepth.SURFACE
             )
             moment = KeyMoment(what_happened=f"Moment {i}", how_i_felt=felt, why_it_matters="Test")
-            exp = SessionExperience(session_id=session_id, key_moments=[moment])
+            exp = SessionExperience(
+                session_id=session_id,
+                key_moment_ids=[moment.id],
+                avg_emotional_intensity=0.5,
+                has_profound_moment=False,
+            )
             record = ExperienceRecord(experience=exp)
             store.create_experience(record)
 
@@ -134,9 +144,15 @@ class StoreTestMixin:
             why_it_matters="Test",
             values_touched=["honesty", "competence"],
         )
-        exp = SessionExperience(session_id=uuid4(), key_moments=[moment])
+        exp = SessionExperience(
+            session_id=uuid4(),
+            key_moment_ids=[moment.id],
+            avg_emotional_intensity=0.5,
+            has_profound_moment=False,
+        )
         record = ExperienceRecord(experience=exp)
-        store.create_experience(record)
+        created = store.create_experience(record)
+        store.store_key_moments(created.experience.session_id, [moment])
 
         query = ValuesTouchedQuery(values=["honesty"])
         results = store.search_experiences(query=query)
@@ -149,9 +165,15 @@ class StoreTestMixin:
             emotional_valence=0.5, emotional_intensity=0.9, depth=EmotionalDepth.PROFOUND
         )
         moment = KeyMoment(what_happened="Profound", how_i_felt=felt, why_it_matters="Changed me")
-        exp = SessionExperience(session_id=uuid4(), key_moments=[moment])
+        exp = SessionExperience(
+            session_id=uuid4(),
+            key_moment_ids=[moment.id],
+            avg_emotional_intensity=0.9,
+            has_profound_moment=True,
+        )
         record = ExperienceRecord(experience=exp)
-        store.create_experience(record)
+        created = store.create_experience(record)
+        store.store_key_moments(created.experience.session_id, [moment])
 
         query = DepthQuery(depth="profound")
         results = store.search_experiences(query=query)
@@ -165,7 +187,12 @@ class StoreTestMixin:
                 emotional_valence=0.0, emotional_intensity=0.5, depth=EmotionalDepth.SURFACE
             )
             moment = KeyMoment(what_happened=f"Moment {i}", how_i_felt=felt, why_it_matters="Test")
-            exp = SessionExperience(session_id=uuid4(), key_moments=[moment])
+            exp = SessionExperience(
+                session_id=uuid4(),
+                key_moment_ids=[moment.id],
+                avg_emotional_intensity=0.5,
+                has_profound_moment=False,
+            )
             record = ExperienceRecord(experience=exp)
             store.create_experience(record)
 

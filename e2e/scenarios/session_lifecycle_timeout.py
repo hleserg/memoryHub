@@ -222,7 +222,7 @@ class TimeoutScenarioRunner:
                 results["experience_saved"] = True
                 results["experience_data"] = {
                     "id": str(exp_rec.experience.id),
-                    "key_moments_count": len(exp_rec.experience.key_moments),
+                    "key_moments_count": len(exp_rec.experience.key_moment_ids),
                     "fact_refs_count": len(exp_rec.experience.fact_refs),
                     # После реализации: exp_rec.experience.close_reason
                     # После реализации: exp_rec.experience.agent_recap

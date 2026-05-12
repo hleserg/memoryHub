@@ -11,7 +11,7 @@ Tests cover:
 """
 
 from datetime import UTC, datetime, timedelta
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 
@@ -23,6 +23,24 @@ from atman.core.models import (
     SessionExperience,
 )
 from atman.core.services import ExperienceService
+
+
+def _make_session_experience(
+    moment: KeyMoment,
+    session_id: UUID | None = None,
+    **kwargs: object,
+) -> SessionExperience:
+    """Helper to create SessionExperience with new key_moment_ids field."""
+    avg_intensity = moment.how_i_felt.emotional_intensity
+    is_profound = moment.how_i_felt.depth == EmotionalDepth.PROFOUND
+
+    return SessionExperience(
+        session_id=session_id or uuid4(),
+        key_moment_ids=[moment.id],
+        avg_emotional_intensity=avg_intensity,
+        has_profound_moment=is_profound,
+        **kwargs,  # type: ignore[arg-type]
+    )
 
 
 class TestExperienceService:
@@ -50,7 +68,12 @@ class TestExperienceService:
         )
 
         return SessionExperience(
-            session_id=uuid4(), key_moments=[moment], importance=0.7, salience=0.8
+            session_id=uuid4(),
+            key_moment_ids=[moment.id],
+            avg_emotional_intensity=0.7,
+            has_profound_moment=False,
+            importance=0.7,
+            salience=0.8,
         )
 
     def test_create_experience(self, service, sample_experience):
@@ -59,7 +82,7 @@ class TestExperienceService:
 
         assert record.experience.id == sample_experience.id
         assert record.schema_version == "1.0.0"
-        assert len(record.experience.key_moments) == 1
+        assert len(record.experience.key_moment_ids) == 1
 
     def test_create_duplicate_experience_fails(self, service, sample_experience):
         """Test that creating duplicate experience raises error."""
@@ -122,14 +145,16 @@ class TestExperienceService:
     def test_reframing_preserves_original(self, service, sample_experience):
         """Test that reframing doesn't modify original experience."""
         created = service.create_experience(sample_experience)
-        original_moment = created.experience.key_moments[0].what_happened
+        original_moment_ids = created.experience.key_moment_ids.copy()
 
         service.add_reframing_note(
             experience_id=created.experience.id, reflection="This changes everything!"
         )
 
         updated = service.get_experience(created.experience.id)
-        assert updated.experience.key_moments[0].what_happened == original_moment
+        assert updated is not None
+        # Key moment IDs should not change
+        assert updated.experience.key_moment_ids == original_moment_ids
 
     def test_mark_accessed(self, service, sample_experience):
         """Test marking an experience as accessed."""
@@ -167,7 +192,12 @@ class TestExperienceService:
             moment = KeyMoment(
                 what_happened=f"Moment {i}", how_i_felt=felt, why_it_matters="Testing"
             )
-            exp = SessionExperience(session_id=session_id, key_moments=[moment])
+            exp = SessionExperience(
+                session_id=session_id,
+                key_moment_ids=[moment.id],
+                avg_emotional_intensity=0.5,
+                has_profound_moment=False,
+            )
             service.create_experience(exp)
 
         # Search
@@ -188,14 +218,25 @@ class TestExperienceService:
             why_it_matters="Test",
             values_touched=["honesty", "competence", "service"],
         )
-        exp = SessionExperience(session_id=uuid4(), key_moments=[moment])
-        service.create_experience(exp)
+        # Store the moment first so we can reference it
+        exp = SessionExperience(
+            session_id=uuid4(),
+            key_moment_ids=[moment.id],
+            avg_emotional_intensity=0.5,
+            has_profound_moment=False,
+        )
+        created = service.create_experience(exp)
+        # Store the moment so queries can find it
+        service.store.store_key_moments(created.experience.session_id, [moment])
 
         # Search for experiences touching "honesty"
         results = service.search_by_values(["honesty"])
 
         assert len(results) == 1
-        assert "honesty" in results[0].experience.key_moments[0].values_touched
+        # Verify by fetching the moment
+        retrieved_moment = service.store.get_key_moment(results[0].experience.key_moment_ids[0])
+        assert retrieved_moment is not None
+        assert "honesty" in retrieved_moment.values_touched
 
     def test_search_by_depth(self, service):
         """Test searching by emotional depth."""
@@ -208,8 +249,14 @@ class TestExperienceService:
             how_i_felt=felt_profound,
             why_it_matters="Changed everything",
         )
-        exp_profound = SessionExperience(session_id=uuid4(), key_moments=[moment_profound])
-        service.create_experience(exp_profound)
+        exp_profound = SessionExperience(
+            session_id=uuid4(),
+            key_moment_ids=[moment_profound.id],
+            avg_emotional_intensity=0.9,
+            has_profound_moment=True,
+        )
+        created_profound = service.create_experience(exp_profound)
+        service.store.store_key_moments(created_profound.experience.session_id, [moment_profound])
 
         # Create surface experience
         felt_surface = FeltSense(
@@ -218,14 +265,22 @@ class TestExperienceService:
         moment_surface = KeyMoment(
             what_happened="Surface moment", how_i_felt=felt_surface, why_it_matters="Just noting"
         )
-        exp_surface = SessionExperience(session_id=uuid4(), key_moments=[moment_surface])
-        service.create_experience(exp_surface)
+        exp_surface = SessionExperience(
+            session_id=uuid4(),
+            key_moment_ids=[moment_surface.id],
+            avg_emotional_intensity=0.3,
+            has_profound_moment=False,
+        )
+        created_surface = service.create_experience(exp_surface)
+        service.store.store_key_moments(created_surface.experience.session_id, [moment_surface])
 
         # Search for profound
         results = service.search_by_depth("profound")
 
         assert len(results) == 1
-        assert results[0].experience.key_moments[0].how_i_felt.depth == EmotionalDepth.PROFOUND
+        retrieved_moment = service.store.get_key_moment(results[0].experience.key_moment_ids[0])
+        assert retrieved_moment is not None
+        assert retrieved_moment.how_i_felt.depth == EmotionalDepth.PROFOUND
 
     def test_search_by_date_range(self, service):
         """Test searching by date range."""
@@ -236,7 +291,13 @@ class TestExperienceService:
         moment = KeyMoment(what_happened="Test", how_i_felt=felt, why_it_matters="Test")
 
         now = datetime.now(UTC)
-        exp = SessionExperience(session_id=uuid4(), key_moments=[moment], timestamp=now)
+        exp = SessionExperience(
+            session_id=uuid4(),
+            key_moment_ids=[moment.id],
+            avg_emotional_intensity=0.5,
+            has_profound_moment=False,
+            timestamp=now,
+        )
         service.create_experience(exp)
 
         # Search in range that includes this experience
@@ -261,7 +322,12 @@ class TestExperienceService:
                 emotional_valence=0.0, emotional_intensity=0.5, depth=EmotionalDepth.SURFACE
             )
             moment = KeyMoment(what_happened=f"Moment {i}", how_i_felt=felt, why_it_matters="Test")
-            exp = SessionExperience(session_id=uuid4(), key_moments=[moment])
+            exp = SessionExperience(
+                session_id=uuid4(),
+                key_moment_ids=[moment.id],
+                avg_emotional_intensity=0.5,
+                has_profound_moment=False,
+            )
             service.create_experience(exp)
 
         # List recent
@@ -288,14 +354,25 @@ class TestExperienceService:
             why_it_matters="Fact helped me respond",
             fact_refs=[fact_id],
         )
-        exp_with_fact = SessionExperience(session_id=uuid4(), key_moments=[moment_with_fact])
+        exp_with_fact = SessionExperience(
+            session_id=uuid4(),
+            key_moment_ids=[moment_with_fact.id],
+            avg_emotional_intensity=0.7,
+            has_profound_moment=False,
+        )
         created_with_fact = service.create_experience(exp_with_fact)
+        service.store.store_key_moments(created_with_fact.experience.session_id, [moment_with_fact])
 
         # Create experience without fact reference
         moment_without_fact = KeyMoment(
             what_happened="Didn't use the fact", how_i_felt=felt, why_it_matters="Just happened"
         )
-        exp_without_fact = SessionExperience(session_id=uuid4(), key_moments=[moment_without_fact])
+        exp_without_fact = SessionExperience(
+            session_id=uuid4(),
+            key_moment_ids=[moment_without_fact.id],
+            avg_emotional_intensity=0.7,
+            has_profound_moment=False,
+        )
         service.create_experience(exp_without_fact)
 
         # Create another experience with different fact
@@ -305,7 +382,12 @@ class TestExperienceService:
             why_it_matters="Other fact helped",
             fact_refs=[other_fact_id],
         )
-        exp_other_fact = SessionExperience(session_id=uuid4(), key_moments=[moment_other_fact])
+        exp_other_fact = SessionExperience(
+            session_id=uuid4(),
+            key_moment_ids=[moment_other_fact.id],
+            avg_emotional_intensity=0.7,
+            has_profound_moment=False,
+        )
         service.create_experience(exp_other_fact)
 
         # Search by fact_id
@@ -313,7 +395,10 @@ class TestExperienceService:
 
         assert len(results) == 1
         assert results[0].experience.id == created_with_fact.experience.id
-        assert fact_id in results[0].experience.key_moments[0].fact_refs
+        # Verify by fetching the moment
+        retrieved_moment = service.store.get_key_moment(results[0].experience.key_moment_ids[0])
+        assert retrieved_moment is not None
+        assert fact_id in retrieved_moment.fact_refs
 
     def test_list_by_fact_multiple_matches(self, service):
         """Test listing multiple experiences referencing the same fact."""
@@ -332,8 +417,14 @@ class TestExperienceService:
                 why_it_matters="Testing",
                 fact_refs=[fact_id],
             )
-            exp = SessionExperience(session_id=uuid4(), key_moments=[moment])
+            exp = SessionExperience(
+                session_id=uuid4(),
+                key_moment_ids=[moment.id],
+                avg_emotional_intensity=0.5,
+                has_profound_moment=False,
+            )
             record = service.create_experience(exp)
+            service.store.store_key_moments(record.experience.session_id, [moment])
             exp_ids.append(record.experience.id)
 
         # List by fact with limit=2
@@ -351,7 +442,12 @@ class TestExperienceService:
             emotional_valence=0.0, emotional_intensity=0.5, depth=EmotionalDepth.SURFACE
         )
         moment = KeyMoment(what_happened="No facts", how_i_felt=felt, why_it_matters="Testing")
-        exp = SessionExperience(session_id=uuid4(), key_moments=[moment])
+        exp = SessionExperience(
+            session_id=uuid4(),
+            key_moment_ids=[moment.id],
+            avg_emotional_intensity=0.5,
+            has_profound_moment=False,
+        )
         service.create_experience(exp)
 
         # Search for non-existent fact
@@ -382,7 +478,12 @@ class TestExperienceServiceP2:
             why_it_matters="P2 test",
         )
         return SessionExperience(
-            session_id=uuid4(), key_moments=[moment], importance=0.5, salience=1.0
+            session_id=uuid4(),
+            key_moment_ids=[moment.id],
+            avg_emotional_intensity=0.7,
+            has_profound_moment=False,
+            importance=0.5,
+            salience=1.0,
         )
 
     def test_add_reframing_note_duplicate_triggered_by_returns_unchanged_record(

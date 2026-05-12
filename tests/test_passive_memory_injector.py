@@ -50,10 +50,13 @@ class _StaticEmbedding:
         return sum(x * y for x, y in zip(a, b, strict=True))
 
 
-def _experience(*, what_happened: str, timestamp: datetime | None = None) -> SessionExperience:
+def _experience(
+    *, what_happened: str, timestamp: datetime | None = None
+) -> tuple[SessionExperience, KeyMoment]:
+    ts = timestamp or datetime.now(UTC)
     moment = KeyMoment(
         what_happened=what_happened,
-        when=timestamp or datetime.now(UTC),
+        when=ts,
         how_i_felt=FeltSense(
             emotional_valence=0.0,
             emotional_intensity=0.5,
@@ -61,11 +64,19 @@ def _experience(*, what_happened: str, timestamp: datetime | None = None) -> Ses
         ),
         why_it_matters="why",
     )
-    return SessionExperience(
+    exp = SessionExperience(
         session_id=uuid4(),
-        timestamp=timestamp or datetime.now(UTC),
-        key_moments=[moment],
+        timestamp=ts,
+        key_moment_ids=[moment.id],
+        avg_emotional_intensity=moment.how_i_felt.emotional_intensity,
+        has_profound_moment=moment.how_i_felt.depth == EmotionalDepth.PROFOUND,
     )
+    return exp, moment
+
+
+def _save_experience(store: InMemoryStateStore, exp: SessionExperience, moment: KeyMoment) -> None:
+    store.create_experience(ExperienceRecord(experience=exp))
+    store.store_key_moments(exp.session_id, [moment])
 
 
 def test_surface_for_context_filters_below_threshold():
@@ -268,10 +279,10 @@ def test_surface_experiences_returns_empty_when_no_experiences():
 
 def test_surface_experiences_returns_top_matches():
     store = InMemoryStateStore()
-    matching = _experience(what_happened="matching event")
-    other = _experience(what_happened="unrelated event")
-    store.create_experience(ExperienceRecord(experience=matching))
-    store.create_experience(ExperienceRecord(experience=other))
+    matching, m1 = _experience(what_happened="matching event")
+    other, m2 = _experience(what_happened="unrelated event")
+    _save_experience(store, matching, m1)
+    _save_experience(store, other, m2)
 
     embed = _StaticEmbedding()
     embed.add("query", [1.0, 0.0, 0.0, 0.0])
@@ -291,8 +302,8 @@ def test_surface_experiences_returns_top_matches():
 
 def test_surface_experiences_skips_cached_experiences():
     store = InMemoryStateStore()
-    exp = _experience(what_happened="meaningful event")
-    store.create_experience(ExperienceRecord(experience=exp))
+    exp, moment = _experience(what_happened="meaningful event")
+    _save_experience(store, exp, moment)
 
     embed = _StaticEmbedding()
     embed.add("query", [1.0, 0.0, 0.0, 0.0])
@@ -311,16 +322,16 @@ def test_surface_experiences_skips_cached_experiences():
 def test_surface_for_context_uses_lookback_window_in_state_store():
     """List_recent_experiences should hand back records ordered by recency."""
     store = InMemoryStateStore()
-    older = _experience(
+    older, mo = _experience(
         what_happened="older",
         timestamp=datetime.now(UTC) - timedelta(days=2),
     )
-    newer = _experience(
+    newer, mn = _experience(
         what_happened="newer",
         timestamp=datetime.now(UTC) - timedelta(hours=1),
     )
-    store.create_experience(ExperienceRecord(experience=older))
-    store.create_experience(ExperienceRecord(experience=newer))
+    _save_experience(store, older, mo)
+    _save_experience(store, newer, mn)
 
     records = store.list_recent_experiences(limit=2)
     assert [r.experience.id for r in records] == [newer.id, older.id]
