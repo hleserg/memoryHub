@@ -263,6 +263,8 @@ class AtmanRunner:
 
     async def chat(self) -> None:
         """Run a simple stdin/stdout chat loop until EOF, empty input, or Ctrl-C."""
+        from pydantic_ai.messages import ModelRequest, UserPromptPart
+
         from atman.adapters.agent.factory import build_deps
         from atman.adapters.agent.instructions import build_instructions
         from atman.adapters.agent.tools import log_experience, record_key_moment
@@ -287,6 +289,22 @@ class AtmanRunner:
                 tools=tool_funcs,
             )
 
+            # E22.7: Inject wake-up message if previous session had close_reason
+            message_history: list[ModelRequest] = []
+            recent_experiences = session_manager._state_store.list_recent_experiences(limit=1)
+            if recent_experiences:
+                last_experience = recent_experiences[0].experience
+                wake_up_msg = self._build_wake_up_message(last_experience)
+                if wake_up_msg:
+                    _LOG.info("Injecting wake-up message for session %s", session_id)
+                    message_history.append(
+                        ModelRequest(
+                            parts=[
+                                UserPromptPart(content=f"[SYSTEM] {wake_up_msg}"),
+                            ],
+                        )
+                    )
+
             print_info("Session started. Empty line or Ctrl-D to exit.\n")
             while True:
                 try:
@@ -296,7 +314,14 @@ class AtmanRunner:
                 if not user_text.strip():
                     break
                 try:
-                    result = await agent.run(user_text, deps=deps)
+                    result = await agent.run(
+                        user_text,
+                        deps=deps,
+                        message_history=message_history if message_history else None,
+                    )
+                    # Only use history once for wake-up message
+                    if message_history:
+                        message_history = []
                 except Exception as exc:
                     print_err(f"Run failed: {exc!s}")
                     continue
@@ -321,3 +346,27 @@ class AtmanRunner:
                         raise
                 except (SessionAlreadyFinishedError, SessionNotFoundError):
                     pass
+
+    def _build_wake_up_message(self, experience: object) -> str | None:
+        """Build wake-up message based on close_reason from last SessionExperience."""
+        from atman.core.models import SessionExperience
+
+        if not isinstance(experience, SessionExperience):
+            return None
+
+        close_reason = experience.close_reason
+        if not close_reason:
+            return None
+
+        if close_reason == "timeout_sleep":
+            recap = experience.agent_recap or "нет recap"
+            return f"Ты задремал — пользователь отошёл, ты решил поспать. {recap}"
+        elif close_reason == "restart":
+            reason = experience.restart_reason or "не указана"
+            return f"Ты сам инициировал перезапуск. Причина: {reason}"
+        elif close_reason == "forced":
+            return "Контекст переполнился принудительно — ты не успел завершить сессию осознанно."
+        elif close_reason == "interrupted":
+            return "Сессия была прервана внешним сигналом — ты не участвовал в закрытии."
+
+        return None

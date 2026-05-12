@@ -287,6 +287,20 @@ class SessionExperience(BaseModel):
         description="IDs of all facts accessed during this session (deduplicated)",
     )
 
+    # SESSION CLOSURE METADATA (E22.7)
+    close_reason: str | None = Field(
+        default=None,
+        description="Reason for session closure: timeout_sleep | restart | forced | interrupted | None",
+    )
+    restart_reason: str | None = Field(
+        default=None,
+        description="Human-readable reason when close_reason=restart (agent's own words)",
+    )
+    agent_recap: str | None = Field(
+        default=None,
+        description="Agent's recap before timeout_sleep (optional, agent-authored)",
+    )
+
     @field_validator("importance", "salience")
     @classmethod
     def validate_zero_to_one(cls, v: float) -> float:
