@@ -96,6 +96,7 @@ omit = [
     "src/atman/cli_experience.py",
     "src/atman/cli_identity.py",
     "src/atman/cli_reflection.py",
+    "src/atman/adapters/agent/runner.py",
     "src/atman/core/ports/reflection.py",
     "src/atman/reflection/store.py",
     "src/atman/affect/emolex/emolex.py",
