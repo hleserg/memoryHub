@@ -22,7 +22,7 @@ import threading
 from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 from uuid import UUID
 
 from pydantic_ai import Agent
@@ -575,7 +575,7 @@ class AtmanRunner:
         # E22.6: Track session state for menu mode
         reflected_this_session = False
         interrupted = False
-        original_sigterm_handler: signal.Handlers | None = None
+        original_sigterm_handler: Any = None
 
         # E22.6: Start dedicated stdin reader thread with current event loop
         loop = asyncio.get_event_loop()
