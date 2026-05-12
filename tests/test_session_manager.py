@@ -1181,3 +1181,386 @@ def test_start_session_ignores_eigenstate_from_different_identity(tmp_path):
     mgr = SessionManager(store)
     ctx = mgr.start_session(id_b)
     assert ctx.last_eigenstate is None
+
+
+# Unexamined invariants tests
+
+
+def test_unexamined_invariant_key_moments_preserve_temporal_order(session_manager):
+    """Key moments must preserve insertion order throughout session lifecycle."""
+    manager, agent_id = session_manager
+    context = manager.start_session(agent_id)
+
+    # Record multiple key moments in specific order
+    moments_order = []
+    for i in range(5):
+        moment = KeyMomentInput(
+            what_happened=f"Event {i}",
+            emotional_valence=0.1 * i,
+            emotional_intensity=0.5,
+            depth=EmotionalDepth.SURFACE,
+            why_it_matters=f"Reason {i}",
+        )
+        manager.append_key_moment_input(context.session_id, moment)
+        moments_order.append(f"Event {i}")
+
+    # Check order before finish
+    active = manager.get_active_session(context.session_id)
+    assert active is not None
+    assert [m.what_happened for m in active.key_moments] == moments_order
+
+    # Finish and check order is preserved
+    result = manager.finish_session(context.session_id)
+    assert [m.what_happened for m in result.key_moments] == moments_order
+
+
+def test_unexamined_invariant_events_do_not_affect_key_moments(session_manager):
+    """Recording events must never contaminate key moments list."""
+    manager, agent_id = session_manager
+    context = manager.start_session(agent_id)
+
+    # Record many events
+    for i in range(10):
+        manager.record_event(
+            context.session_id,
+            SessionEvent(
+                session_id=context.session_id,
+                event_type="regular_event",
+                description=f"Event {i}",
+            ),
+        )
+
+    # Key moments should still be empty
+    active = manager.get_active_session(context.session_id)
+    assert active is not None
+    assert len(active.events) == 10
+    assert len(active.key_moments) == 0
+
+    # Add one key moment
+    manager.append_key_moment_input(
+        context.session_id,
+        KeyMomentInput(
+            what_happened="Key moment",
+            emotional_valence=0.5,
+            emotional_intensity=0.5,
+            depth=EmotionalDepth.SURFACE,
+            why_it_matters="Important",
+        ),
+    )
+
+    # Exactly 1 key moment should exist
+    active = manager.get_active_session(context.session_id)
+    assert active is not None
+    assert len(active.key_moments) == 1
+    assert len(active.events) == 10
+
+
+def test_unexamined_invariant_fact_refs_aggregate_from_all_sources(session_manager, temp_storage):
+    """SessionExperience fact_refs must aggregate from key moments AND _note_facts_read."""
+    manager, agent_id = session_manager
+    context = manager.start_session(agent_id)
+
+    # Facts from key moment
+    km_fact_id = uuid4()
+    moment = KeyMomentInput(
+        what_happened="Used fact A",
+        emotional_valence=0.3,
+        emotional_intensity=0.5,
+        depth=EmotionalDepth.SURFACE,
+        why_it_matters="Fact reference test",
+        fact_refs=[km_fact_id],
+    )
+    manager.append_key_moment_input(context.session_id, moment)
+
+    # Facts from _note_facts_read
+    noted_fact_id = uuid4()
+    manager._note_facts_read(context.session_id, [noted_fact_id])
+
+    manager.finish_session(context.session_id)
+
+    # Both facts should appear in stored experience
+    experiences = temp_storage.list_recent_experiences(limit=1)
+    assert len(experiences) == 1
+    exp = experiences[0].experience
+    assert km_fact_id in exp.fact_refs
+    assert noted_fact_id in exp.fact_refs
+
+
+def test_unexamined_invariant_incomplete_coloring_flag_propagates(session_manager, temp_storage):
+    """incomplete_coloring flag must propagate from KeyMomentInput to SessionExperience."""
+    manager, agent_id = session_manager
+    context = manager.start_session(agent_id)
+
+    # Add moment with incomplete coloring
+    manager.append_key_moment_input(
+        context.session_id,
+        KeyMomentInput(
+            what_happened="Uncolored moment",
+            emotional_valence=0.0,
+            emotional_intensity=0.0,
+            depth=EmotionalDepth.SURFACE,
+            why_it_matters="Coloring was incomplete",
+            incomplete_coloring=True,
+        ),
+    )
+
+    manager.finish_session(context.session_id)
+
+    # Check stored experience has incomplete_coloring flag
+    experiences = temp_storage.list_recent_experiences(limit=1)
+    assert len(experiences) == 1
+    assert experiences[0].experience.incomplete_coloring is True
+
+
+# Key moment separation tests
+
+
+def test_key_moment_separation_distinct_from_events(session_manager):
+    """Key moments are a separate dimension from events - not derived from events."""
+    manager, agent_id = session_manager
+    context = manager.start_session(agent_id)
+
+    # Record event with similar content
+    manager.record_event(
+        context.session_id,
+        SessionEvent(
+            session_id=context.session_id,
+            event_type="task",
+            description="Task completed successfully",
+        ),
+    )
+
+    # Record key moment with similar content
+    manager.append_key_moment_input(
+        context.session_id,
+        KeyMomentInput(
+            what_happened="Task completed successfully",
+            emotional_valence=0.7,
+            emotional_intensity=0.6,
+            depth=EmotionalDepth.MEANINGFUL,
+            why_it_matters="First successful task",
+        ),
+    )
+
+    active = manager.get_active_session(context.session_id)
+    assert active is not None
+    # Both structures coexist independently
+    assert len(active.events) == 1
+    assert len(active.key_moments) == 1
+    # But they're distinct objects
+    assert active.events[0].description == "Task completed successfully"
+    assert active.key_moments[0].what_happened == "Task completed successfully"
+
+
+# Immutability tests
+
+
+def test_key_moment_immutability_after_append(session_manager):
+    """Once appended, key moments cannot be modified via external references."""
+    manager, agent_id = session_manager
+    context = manager.start_session(agent_id)
+
+    original_what = "Original content"
+    moment_input = KeyMomentInput(
+        what_happened=original_what,
+        emotional_valence=0.5,
+        emotional_intensity=0.5,
+        depth=EmotionalDepth.SURFACE,
+        why_it_matters="Immutability test",
+    )
+
+    manager.append_key_moment_input(context.session_id, moment_input)
+
+    # Mutate the input after appending
+    moment_input.what_happened = "Modified content"
+
+    # Stored moment should be unchanged
+    active = manager.get_active_session(context.session_id)
+    assert active is not None
+    assert active.key_moments[0].what_happened == original_what
+
+
+# Journal lifecycle tests
+
+
+def test_journal_lifecycle_events_survive_session_completion(session_manager, temp_storage):
+    """Events recorded during session are preserved through finish_session."""
+    manager, agent_id = session_manager
+    context = manager.start_session(agent_id)
+
+    # Record events
+    event_descriptions = ["Event A", "Event B", "Event C"]
+    for desc in event_descriptions:
+        manager.record_event(
+            context.session_id,
+            SessionEvent(
+                session_id=context.session_id,
+                event_type="journal_entry",
+                description=desc,
+            ),
+        )
+
+    # Add key moment (required for finish)
+    manager.append_key_moment_input(
+        context.session_id,
+        KeyMomentInput(
+            what_happened="Key event",
+            emotional_valence=0.5,
+            emotional_intensity=0.5,
+            depth=EmotionalDepth.SURFACE,
+            why_it_matters="Required for finish",
+        ),
+    )
+
+    result = manager.finish_session(context.session_id)
+
+    # Events should be preserved in result
+    assert len(result.events) == 3
+    assert [e.description for e in result.events] == event_descriptions
+
+
+def test_journal_lifecycle_event_timestamps_are_immutable(
+    temp_storage, identity_fixture, narrative_fixture
+):
+    """Event timestamps must not change when recorded at different clock times."""
+    temp_storage.save_identity(identity_fixture)
+    temp_storage.save_narrative(narrative_fixture)
+
+    clock_t0 = FrozenClock(datetime(2024, 1, 15, 12, 0, 0, tzinfo=UTC))
+    manager = SessionManager(temp_storage, clock=clock_t0)
+    context = manager.start_session(identity_fixture.id)
+
+    # Record event at T0
+    event_t0 = SessionEvent(
+        session_id=context.session_id,
+        event_type="test",
+        description="Event at T0",
+        timestamp=clock_t0.now(),
+    )
+    manager.record_event(context.session_id, event_t0)
+
+    # Record another event - timestamp from event should be preserved
+    active = manager.get_active_session(context.session_id)
+    assert active is not None
+    assert active.events[0].timestamp == datetime(2024, 1, 15, 12, 0, 0, tzinfo=UTC)
+
+
+# Orphan recovery tests
+
+
+def test_orphan_recovery_finish_idempotent_after_experience_persisted(
+    session_manager, temp_storage
+):
+    """If experience persisted but eigenstate failed, retry must skip experience creation."""
+    manager, agent_id = session_manager
+    context = manager.start_session(agent_id)
+
+    manager.append_key_moment_input(
+        context.session_id,
+        KeyMomentInput(
+            what_happened="orphan recovery test",
+            emotional_valence=0.3,
+            emotional_intensity=0.4,
+            depth=EmotionalDepth.SURFACE,
+            why_it_matters="idempotency",
+        ),
+    )
+
+    # First finish attempt fails after experience creation
+    real_save_eigenstate = temp_storage.save_eigenstate
+    first_call = {"done": False}
+
+    def fail_eigenstate_once(es: Eigenstate) -> Eigenstate:
+        if not first_call["done"]:
+            first_call["done"] = True
+            # Experience is already created at this point
+            raise RuntimeError("Simulated eigenstate failure")
+        return real_save_eigenstate(es)
+
+    with (
+        patch.object(temp_storage, "save_eigenstate", side_effect=fail_eigenstate_once),
+        pytest.raises(RuntimeError, match="Simulated eigenstate failure"),
+    ):
+        manager.finish_session(context.session_id)
+
+    # Session should still be active for retry
+    assert manager.get_active_session(context.session_id) is not None
+
+    # Retry should succeed without duplicating experience
+    result = manager.finish_session(context.session_id)
+    assert result.eigenstate is not None
+
+    # Only one experience should exist
+    from atman.core.ports.state_store import SessionExperienceQuery
+
+    rows = temp_storage.search_experiences(SessionExperienceQuery(context.session_id), limit=10)
+    assert len(rows) == 1
+
+
+def test_orphan_recovery_deterministic_id_prevents_cross_session_pollution(
+    temp_storage, identity_fixture, narrative_fixture, frozen_clock
+):
+    """Deterministic experience ID must prevent one session from hijacking another's record."""
+    temp_storage.save_identity(identity_fixture)
+    temp_storage.save_narrative(narrative_fixture)
+    manager = SessionManager(temp_storage, clock=frozen_clock)
+
+    # Start first session and create orphaned experience record
+    context1 = manager.start_session(identity_fixture.id)
+    moment1 = KeyMomentInput(
+        what_happened="Session 1 event",
+        emotional_valence=0.3,
+        emotional_intensity=0.4,
+        depth=EmotionalDepth.SURFACE,
+        why_it_matters="Session 1",
+    )
+    km1 = moment1.to_key_moment()
+
+    # Manually create orphaned experience for session 1
+    orphaned_exp_id = deterministic_session_experience_id(context1.session_id)
+    orphan_record = ExperienceRecord(
+        experience=SessionExperience(
+            id=orphaned_exp_id,
+            session_id=context1.session_id,
+            timestamp=frozen_clock.now(),
+            key_moment_ids=[km1.id],
+            avg_emotional_intensity=0.4,
+            has_profound_moment=False,
+        )
+    )
+    temp_storage.create_experience(orphan_record)
+
+    # Start second session
+    context2 = manager.start_session(identity_fixture.id)
+    manager.append_key_moment_input(
+        context2.session_id,
+        KeyMomentInput(
+            what_happened="Session 2 event",
+            emotional_valence=0.5,
+            emotional_intensity=0.6,
+            depth=EmotionalDepth.SURFACE,
+            why_it_matters="Session 2",
+        ),
+    )
+
+    # Session 2 finish should succeed with its own unique ID
+    manager.finish_session(context2.session_id)
+    exp_id_2 = deterministic_session_experience_id(context2.session_id)
+
+    # IDs must be different
+    assert exp_id_2 != orphaned_exp_id
+
+    # Both experiences should exist independently
+    from atman.core.ports.state_store import SessionExperienceQuery
+
+    exp1_records = temp_storage.search_experiences(
+        SessionExperienceQuery(context1.session_id), limit=10
+    )
+    exp2_records = temp_storage.search_experiences(
+        SessionExperienceQuery(context2.session_id), limit=10
+    )
+
+    assert len(exp1_records) == 1
+    assert len(exp2_records) == 1
+    assert exp1_records[0].experience.session_id == context1.session_id
+    assert exp2_records[0].experience.session_id == context2.session_id
