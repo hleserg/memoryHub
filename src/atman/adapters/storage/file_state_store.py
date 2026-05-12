@@ -18,6 +18,7 @@ from atman.core.models import (
     ExperienceRecord,
     Identity,
     IdentitySnapshot,
+    KeyMoment,
     NarrativeDocument,
     ReframingNote,
 )
@@ -75,6 +76,9 @@ class FileStateStore(StateStore):
 
         self.experiences_dir = self.workspace / "experiences"
         self.experiences_dir.mkdir(exist_ok=True)
+
+        self.key_moments_dir = self.workspace / "key_moments"
+        self.key_moments_dir.mkdir(exist_ok=True)
 
         # Paths for current state files
         self.identity_path = self.workspace / "identity.json"
@@ -168,13 +172,15 @@ class FileStateStore(StateStore):
                 if record.experience.session_id == query.session_id:
                     all_experiences.append(record)
             elif isinstance(query, ValuesTouchedQuery):
-                for moment in record.experience.key_moments:
-                    if any(v in moment.values_touched for v in query.values):
+                for moment_id in record.experience.key_moment_ids:
+                    moment = self.get_key_moment(moment_id)
+                    if moment and any(v in moment.values_touched for v in query.values):
                         all_experiences.append(record)
                         break
             elif isinstance(query, DepthQuery):
-                for moment in record.experience.key_moments:
-                    if moment.how_i_felt.depth == query.depth:
+                for moment_id in record.experience.key_moment_ids:
+                    moment = self.get_key_moment(moment_id)
+                    if moment and moment.how_i_felt.depth == query.depth:
                         all_experiences.append(record)
                         break
             elif (
@@ -190,6 +196,33 @@ class FileStateStore(StateStore):
     def list_recent_experiences(self, limit: int = 10) -> list[ExperienceRecord]:
         """List recent experiences."""
         return self.search_experiences(query=None, limit=limit)
+
+    def store_key_moments(self, session_id: UUID, moments: list[KeyMoment]) -> None:
+        """Store key moments for a session."""
+        session_moments_file = self.key_moments_dir / f"{session_id}_moments.json"
+        moments_data = [m.model_dump() for m in moments]
+        self._write_json_atomically(session_moments_file, json.dumps(moments_data, indent=2))
+
+        # Also store individual moment files for quick lookup
+        for moment in moments:
+            moment_file = self.key_moments_dir / f"{moment.id}.json"
+            self._write_json_atomically(moment_file, moment.model_dump_json(indent=2))
+
+    def get_key_moment(self, moment_id: UUID) -> KeyMoment | None:
+        """Retrieve a key moment by its ID."""
+        moment_file = self.key_moments_dir / f"{moment_id}.json"
+        if not moment_file.exists():
+            return None
+        data = _read_json_file(moment_file)
+        return KeyMoment.model_validate(data)
+
+    def get_key_moments_for_session(self, session_id: UUID) -> list[KeyMoment]:
+        """Retrieve all key moments for a session."""
+        session_moments_file = self.key_moments_dir / f"{session_id}_moments.json"
+        if not session_moments_file.exists():
+            return []
+        data = _read_json_file(session_moments_file)
+        return [KeyMoment.model_validate(m) for m in data]
 
     # Identity Store operations
 

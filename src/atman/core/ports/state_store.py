@@ -18,6 +18,7 @@ from atman.core.models import (
     ExperienceRecord,
     Identity,
     IdentitySnapshot,
+    KeyMoment,
     NarrativeDocument,
     ReframingNote,
 )
@@ -168,6 +169,45 @@ class StateStore(ABC):
 
         Returns:
             list[ExperienceRecord]: List of recent experiences, newest first
+        """
+        pass
+
+    # KeyMoment operations
+
+    @abstractmethod
+    def store_key_moments(self, session_id: UUID, moments: list[KeyMoment]) -> None:
+        """
+        Store key moments for a session.
+
+        Args:
+            session_id: UUID of the session
+            moments: List of key moments to store
+        """
+        pass
+
+    @abstractmethod
+    def get_key_moment(self, moment_id: UUID) -> KeyMoment | None:
+        """
+        Retrieve a key moment by its ID.
+
+        Args:
+            moment_id: UUID of the key moment
+
+        Returns:
+            KeyMoment | None: The key moment if found, None otherwise
+        """
+        pass
+
+    @abstractmethod
+    def get_key_moments_for_session(self, session_id: UUID) -> list[KeyMoment]:
+        """
+        Retrieve all key moments for a session.
+
+        Args:
+            session_id: UUID of the session
+
+        Returns:
+            list[KeyMoment]: List of key moments for the session
         """
         pass
 

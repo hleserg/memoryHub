@@ -105,6 +105,8 @@ class KeyMoment(BaseModel):
     Immutable after creation - no methods to modify.
     """
 
+    id: UUID = Field(default_factory=uuid4, description="Unique identifier for this key moment")
+
     # WHAT HAPPENED
     what_happened: str = Field(min_length=1, description="Description of what actually happened")
     when: datetime = Field(
@@ -239,7 +241,7 @@ class SessionExperience(BaseModel):
 
     # IMMUTABLE ORIGINAL EXPERIENCE
     key_moment_ids: list[UUID] = Field(
-        default_factory=list,
+        min_length=1,
         description="IDs of key moments that made up this experience - IMMUTABLE references",
     )
 
@@ -288,6 +290,18 @@ class SessionExperience(BaseModel):
     )
     access_count: int = Field(
         default=0, ge=0, description="How many times this experience has been accessed"
+    )
+
+    # SALIENCE METADATA (derived from key moments at creation time)
+    avg_emotional_intensity: float = Field(
+        default=0.5,
+        ge=0.0,
+        le=1.0,
+        description="Average emotional intensity across key moments",
+    )
+    has_profound_moment: bool = Field(
+        default=False,
+        description="Whether any key moment had profound emotional depth",
     )
 
     # HONEST FALLBACK
@@ -368,8 +382,16 @@ class SessionExperience(BaseModel):
 
         days_since_access = (current_time - self.last_accessed_at).total_seconds() / 86400
 
-        # Base decay without key moment details (since we only store IDs now)
-        effective_salience = self.salience * math.exp(-decay_lambda * days_since_access)
+        # Adjust decay rate based on emotional intensity and depth metadata
+        adjusted_lambda = decay_lambda
+
+        # Profound or intense experiences decay more slowly
+        if self.has_profound_moment:
+            adjusted_lambda *= 0.5
+        elif self.avg_emotional_intensity > 0.7:
+            adjusted_lambda *= 0.7
+
+        effective_salience = self.salience * math.exp(-adjusted_lambda * days_since_access)
         return max(0.0, min(1.0, effective_salience))
 
     model_config = ConfigDict(
@@ -388,6 +410,8 @@ class SessionExperience(BaseModel):
                 "restart_reason": "",
                 "importance": 0.7,
                 "salience": 0.7,
+                "avg_emotional_intensity": 0.6,
+                "has_profound_moment": True,
                 "incomplete_coloring": False,
             }
         },

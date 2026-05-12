@@ -402,6 +402,9 @@ class SessionManager:
         try:
             existing_record = self._state_store.get_experience(experience_id)
             if existing_record is None:
+                # Store key moments separately first
+                self._state_store.store_key_moments(session_id, session_result.key_moments)
+
                 # Aggregate fact_refs from all key moments and _note_facts_read
                 fact_refs_set: set[UUID] = set()
                 for moment in session_result.key_moments:
@@ -409,15 +412,34 @@ class SessionManager:
                 # Also include any facts noted via _note_facts_read
                 fact_refs_set.update(session_result._facts_read)
 
+                # Extract key moment IDs and compute salience metadata
+                key_moment_ids = [moment.id for moment in session_result.key_moments]
+
+                # Compute avg_emotional_intensity and has_profound_moment
+                avg_emotional_intensity = 0.5  # default
+                has_profound_moment = False
+                if session_result.key_moments:
+                    from atman.core.models.experience import EmotionalDepth
+
+                    avg_emotional_intensity = sum(
+                        m.how_i_felt.emotional_intensity for m in session_result.key_moments
+                    ) / len(session_result.key_moments)
+                    has_profound_moment = any(
+                        m.how_i_felt.depth == EmotionalDepth.PROFOUND
+                        for m in session_result.key_moments
+                    )
+
                 experience = SessionExperience(
                     id=experience_id,
                     session_id=session_id,
                     timestamp=session_result.finished_at,
-                    key_moments=session_result.key_moments,
+                    key_moment_ids=key_moment_ids,
                     recorded_by="session_manager",
                     identity_snapshot_id=session_result.identity_snapshot_id,
                     importance=0.5,
                     salience=0.5,
+                    avg_emotional_intensity=avg_emotional_intensity,
+                    has_profound_moment=has_profound_moment,
                     incomplete_coloring=session_result.incomplete_coloring,
                     fact_refs=list(fact_refs_set),
                 )
