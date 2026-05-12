@@ -933,3 +933,52 @@ def test_force_finish_with_menu_timeout(
     experiences = session_manager._state_store.list_recent_experiences(limit=1)
     assert len(experiences) == 1
     assert experiences[0].experience.close_reason == "menu_timeout"
+
+
+def test_do_restart_persists_restart_reason(
+    session_manager: SessionManager,
+    identity_with_narrative: Identity,
+    tmp_path: Path,
+) -> None:
+    """Test that _do_restart persists restart_reason to SessionExperience."""
+    from dataclasses import replace
+
+    from atman.adapters.agent.config import AgentConfig
+    from atman.adapters.agent.factory import build_deps
+    from atman.adapters.agent.runner import AtmanRunner
+
+    # Create runner and build deps
+    config = AgentConfig()
+    runner = AtmanRunner(tmp_path, identity_with_narrative.id, config)
+    deps, sm, _store = build_deps(tmp_path, identity_with_narrative.id, config)
+
+    # Start session
+    ctx = sm.start_session(identity_with_narrative.id)
+
+    # Add a key moment so session can be finished
+    moment = KeyMomentInput(
+        what_happened="Context window approaching limit",
+        emotional_valence=0.0,
+        emotional_intensity=0.4,
+        depth=EmotionalDepth.SURFACE,
+        why_it_matters="Need to restart",
+    )
+    sm.append_key_moment_input(ctx.session_id, moment)
+
+    # Update deps with session_id
+    deps = replace(deps, session_id=ctx.session_id)
+    history = []
+
+    # Execute restart with specific reason
+    restart_reason = "Context window 95% full"
+    new_session_id, new_deps = runner._do_restart(
+        sm, ctx.session_id, deps, history, restart_reason
+    )
+
+    # Verify restart_reason is persisted in SessionExperience
+    experiences = sm._state_store.list_recent_experiences(limit=1)
+    assert len(experiences) == 1
+    assert experiences[0].experience.close_reason == "restart"
+    assert (
+        experiences[0].experience.restart_reason == restart_reason
+    ), "restart_reason should be persisted to SessionExperience"

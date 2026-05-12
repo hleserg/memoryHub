@@ -470,6 +470,7 @@ class AtmanRunner:
             alignment_check=True,
             alignment_notes="",
             close_reason="restart",
+            restart_reason=restart_reason or None,
         )
 
         # 3. Build restart package
