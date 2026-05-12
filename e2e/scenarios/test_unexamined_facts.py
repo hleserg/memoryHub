@@ -5,8 +5,7 @@
 Проверяем:
   1. Факты прочитанные агентом но не вошедшие в key_moments → unexamined_fact_refs
   2. Факты вошедшие в key_moment.fact_refs → НЕ попадают в unexamined
-  3. Wake-up message при следующей сессии содержит правильный контекст для каждого close_reason
-  4. agent_recap сохраняется при timeout_sleep
+  3. close_reason корректно сохраняется для каждого типа закрытия
 
 Запуск:
     PYTHONPATH=src OLLAMA_BASE_URL=http://localhost:11434/v1 \
@@ -195,12 +194,9 @@ def test_wakeup_messages() -> int:
             kwargs: dict = {"overall_emotional_tone": 0.0, "close_reason": reason}
             if reason == "restart":
                 kwargs["restart_reason"] = "тест перезапуска"
-            if reason == "timeout_sleep":
-                kwargs["agent_recap"] = "Краткий пересказ: разговор был продуктивным"
 
             session_manager.finish_session(sid, **kwargs)
 
-            # Получаем wake-up message через _build_wake_up_message если есть
             exp_id = deterministic_session_experience_id(sid)
             rec = store.get_experience(exp_id)
             if rec is None:
@@ -208,118 +204,18 @@ def test_wakeup_messages() -> int:
                 failures += 1
                 continue
 
-            # Проверяем что build_wake_up_message строит нужный текст
-            try:
-                msg = session_manager._build_wake_up_message(rec.experience)
-            except AttributeError:
-                # Метод может быть в другом месте
-                msg = None
+            chk(f"B: {reason} — close_reason сохранён корректно",
+                rec.experience.close_reason == reason,
+                f"got={rec.experience.close_reason}")
+            if rec.experience.close_reason != reason:
+                failures += 1
 
-            if msg is None:
-                # Метод не найден — проверяем хотя бы сохранённые поля
-                chk(f"B: {reason} — close_reason сохранён корректно",
-                    rec.experience.close_reason == reason,
-                    f"got={rec.experience.close_reason}")
-                if reason == "restart":
-                    ok = chk(f"B: restart_reason сохранён",
-                             "тест" in (rec.experience.restart_reason or ""),
-                             f"got={rec.experience.restart_reason!r}")
-                    if not ok:
-                        failures += 1
-                if reason == "timeout_sleep":
-                    ok = chk(f"B: agent_recap сохранён",
-                             bool(rec.experience.agent_recap),
-                             f"got={rec.experience.agent_recap!r}")
-                    if not ok:
-                        failures += 1
-            else:
-                msg_lower = msg.lower()
-                keywords = expected_keywords.get(reason, [])
-                for kw in keywords:
-                    ok = chk(f"B: {reason} — '{kw}' в wake-up message",
-                             kw.lower() in msg_lower,
-                             f"msg={msg[:120]!r}")
-                    if not ok:
-                        failures += 1
-
-    return failures
-
-
-# ---------------------------------------------------------------------------
-# Тест C: agent_recap через реальный LLM
-# ---------------------------------------------------------------------------
-
-async def test_agent_recap_live() -> int:
-    """Агент пишет recap перед timeout_sleep."""
-    failures = 0
-    hdr("C: agent_recap — LLM пишет пересказ перед сном")
-
-    from pydantic_ai import Agent
-    from atman.adapters.agent.instructions import build_instructions
-    from atman.adapters.agent.tools import log_experience, record_key_moment
-
-    with tempfile.TemporaryDirectory(prefix="atman_recap_") as tmpdir:
-        workspace = Path(tmpdir)
-        agent_id = uuid4()
-        config = AgentConfig(
-            model=ModelConfig(model=MODEL, max_tokens=256, context_limit=4096),
-            enable_key_moments=True,
-        )
-        deps, session_manager, store = build_deps(workspace, agent_id, config)
-        bootstrap(store, agent_id)
-
-        ctx = session_manager.start_session(agent_id)
-        session_id = ctx.session_id
-        deps = replace(deps, session_id=session_id)
-
-        agent = Agent(
-            MODEL,
-            deps_type=type(deps),
-            instructions=lambda c: build_instructions(c.deps),
-            tools=(record_key_moment, log_experience),
-        )
-
-        # Краткий разговор
-        messages = [
-            "Расскажи мне что-то важное о себе.",
-            "Спасибо. Напиши короткий пересказ нашего разговора для следующей сессии.",
-        ]
-
-        history: list = []
-        recap_text: str | None = None
-        for msg in messages:
-            result = await agent.run(msg, deps=deps, message_history=history or None)
-            history.extend(result.new_messages())
-            output = str(result.output or "")
-            print(f"  Agent: {output[:200]}{'…' if len(output)>200 else ''}")
-            if "пересказ" in msg.lower():
-                recap_text = output  # последний ответ = пересказ
-
-        # Финализируем с timeout_sleep и передаём recap
-        try:
-            session_manager.finish_session(
-                session_id,
-                overall_emotional_tone=0.3,
-                close_reason="timeout_sleep",
-                agent_recap=recap_text,
-            )
-        except Exception as e:
-            print(f"  [warn] finish_session: {e}")
-
-        exp_id = deterministic_session_experience_id(session_id)
-        rec = store.get_experience(exp_id)
-
-        ok1 = chk("C: experience записан", rec is not None)
-        if rec:
-            ok2 = chk("C: close_reason=timeout_sleep",
-                      rec.experience.close_reason == "timeout_sleep",
-                      f"got={rec.experience.close_reason}")
-            ok3 = chk("C: agent_recap сохранён",
-                      bool(rec.experience.agent_recap),
-                      f"len={len(rec.experience.agent_recap or '')}")
-            failures += sum([not ok2, not ok3])
-        else:
-            failures += 2
+            if reason == "restart":
+                ok = chk(f"B: restart_reason сохранён",
+                         "тест" in (rec.experience.restart_reason or ""),
+                         f"got={rec.experience.restart_reason!r}")
+                if not ok:
+                    failures += 1
 
     return failures
 
@@ -328,7 +224,6 @@ async def main() -> int:
     total = 0
     total += test_unexamined_facts_computation()
     total += test_wakeup_messages()
-    total += await test_agent_recap_live()
 
     hdr("ИТОГ")
     if total == 0:

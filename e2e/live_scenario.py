@@ -115,8 +115,6 @@ def dump_experience(store, session_id: UUID, label: str) -> None:
     show("fact_refs", len(exp.fact_refs))
     show("unexamined_fact_refs", len(exp.unexamined_fact_refs))
     show("incomplete_coloring", exp.incomplete_coloring)
-    if exp.agent_recap:
-        show("agent_recap", exp.agent_recap[:150])
     for i, km_id in enumerate(exp.key_moment_ids, 1):
         km = store.get_key_moment(km_id)
         if km is None:
@@ -273,7 +271,7 @@ async def run_session(
         exp = recent[0].experience
         cr = exp.close_reason
         if cr == "timeout_sleep":
-            ctx_msg = f"Ты задремал — пользователь отошёл. {exp.agent_recap or ''}"
+            ctx_msg = "Ты задремал — пользователь отошёл, ты решил поспать."
         elif cr == "restart":
             ctx_msg = f"Ты сам инициировал перезапуск. Причина: {exp.restart_reason or 'не указана'}"
         elif cr == "forced":

@@ -985,8 +985,7 @@ class AtmanRunner:
             return None
 
         if close_reason == "timeout_sleep":
-            recap = experience.agent_recap or "нет recap"
-            return f"Ты задремал — пользователь отошёл, ты решил поспать. {recap}"
+            return "Ты задремал — пользователь отошёл, ты решил поспать."
         elif close_reason == "restart":
             reason = experience.restart_reason or "не указана"
             return f"Ты сам инициировал перезапуск. Причина: {reason}"

@@ -756,7 +756,6 @@ def test_build_wake_up_message_timeout_sleep(
     session_manager.finish_session(
         ctx.session_id,
         close_reason="timeout_sleep",
-        agent_recap="Пользователь обсуждал проект X",
     )
 
     # Get last experience and build wake-up message
@@ -772,7 +771,6 @@ def test_build_wake_up_message_timeout_sleep(
     msg = runner._build_wake_up_message(last_exp)
     assert msg is not None
     assert "задремал" in msg
-    assert "Пользователь обсуждал проект X" in msg
 
 
 def test_build_wake_up_message_restart(

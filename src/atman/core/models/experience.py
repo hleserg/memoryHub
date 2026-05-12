@@ -284,10 +284,6 @@ class SessionExperience(BaseModel):
         default=None,
         description="Reason why the session ended",
     )
-    agent_recap: str | None = Field(
-        default=None,
-        description="Agent's own summary of the session upon close",
-    )
     restart_reason: str = Field(
         default="",
         description="Reason for session restart if close_reason is 'restart'",
@@ -434,7 +430,6 @@ class SessionExperience(BaseModel):
                 ],
                 "unexamined_fact_refs": ["423e4567-e89b-12d3-a456-426614174003"],
                 "close_reason": "timeout_sleep",
-                "agent_recap": "Complex problem-solving session with breakthrough insights",
                 "restart_reason": "",
                 "importance": 0.7,
                 "salience": 0.7,
