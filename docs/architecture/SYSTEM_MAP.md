@@ -98,11 +98,12 @@ All paths are absolute relative to the repository root.
 | `adapters/reflection/mock_reflection_model.py` (`MockReflectionModel`) | `ReflectionModel` | deterministic mock |
 | `adapters/reflection/fixture_loader.py` | — | load fixtures for demos |
 | `adapters/agent/config.py` (`ModelConfig`, `AgentConfig`) | — | Pydantic AI model + agent runtime config: context window limits, session timeout, free-time toggle, monologue visibility (E22.1, E26-R1, E26-R2, E26-R4) |
-| `adapters/agent/deps.py` (`AtmanDeps`, `AtmanDeps.from_config`) | — | frozen DI container wiring `SessionManager`, `IdentityService`, `ExperienceService`, `MicroReflectionService`, `StateStore`; `from_config` factory transfers validated limits from `AgentConfig` |
+| `adapters/agent/deps.py` (`AtmanDeps`, `AtmanDeps.from_config`) | — | frozen DI container wiring `SessionManager`, `IdentityService`, `ExperienceService`, `MicroReflectionService`, `StateStore`; includes `model_config: ModelConfig \| None` for context limits; `from_config` factory transfers validated limits from `AgentConfig` (E22.3) |
 | `adapters/agent/instructions.py` (`build_instructions`) | — | builds dynamic system prompt from current `Identity` + `NarrativeDocument` (truncated per `AtmanDeps.truncate_narrative_*`) |
 | `adapters/agent/tools.py` (`record_key_moment` async, `log_experience`, `restart_session`, `wait_session`) | — | Pydantic AI tools: `record_key_moment` → `AffectDetector.submit_self_report` when `SessionManager` is configured with affect; `log_experience` redirect stub; `restart_session` / `wait_session` return sentinel strings for session control (E22.4) |
 | `adapters/agent/factory.py` (`build_deps`) | — | Assembles `AtmanDeps`, `SessionManager`, `FileStateStore`, services, optional `AffectDetector` from workspace + `AgentConfig` |
 | `adapters/agent/runner.py` (`chat`, `_force_finish`) | — | Signal-aware session lifecycle wrapper; SIGTERM/KeyboardInterrupt/EOFError/SystemExit → graceful `_force_finish()`; creates minimal `KeyMoment` if empty; preserves exit codes (E22.2) |
+| `adapters/agent/token_monitor.py` (`TokenMonitor`, `ContextLimitExceeded`) | — | Token usage monitor with progressive warnings at 70/80/90/95%; tracks `input_tokens` vs `context_limit` after each `agent.run()`, raises `ContextLimitExceeded` at 95% threshold (E22.3) |
 | `agents_registry.py` (`AgentsRegistry`) | — | PostgreSQL-backed registry of agent instances (app/admin DB URLs); used by `src/run_agent.py` |
 
 ### 1.6. CLI / TUI / Web / Demos
@@ -192,6 +193,7 @@ Connections between two or more parts. These are seams that may break independen
 | `record_key_moment` / `log_experience` / `restart_session` / `wait_session` ↔ `AffectDetector.submit_self_report` / `SessionManager` | `adapters/agent/tools.py` → `affect/detector.py` + `core/services/session_manager.py` | Async Pydantic AI tools → affect write gateway (`record_key_moment` requires `affect_workspace` + config on `SessionManager`; `restart_session` / `wait_session` return sentinel strings for E22.5 runner detection) |
 | `build_instructions` ↔ `StateStore.load_identity` / `load_narrative` | `adapters/agent/instructions.py` → `core/ports/state_store.py` | dynamic system-prompt builder |
 | `chat` / `_force_finish` ↔ `SessionManager` | `adapters/agent/runner.py` → `core/services/session_manager.py` | Signal handler registration + exception boundary; calls `append_key_moment_input()`, `get_active_session()`, `finish_session()` on interruption (E22.2) |
+| `TokenMonitor` ↔ `Agent` (Pydantic AI) + `AtmanDeps.model_config` | `adapters/agent/token_monitor.py` → `pydantic_ai.run.AgentRunResult` | Token usage tracking; computes `input_tokens / context_limit` after each run; progressive warnings via logging (E22.3) |
 
 ### 2.3. CLI ↔ service
 
