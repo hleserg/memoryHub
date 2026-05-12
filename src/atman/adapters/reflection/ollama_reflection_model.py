@@ -60,7 +60,9 @@ class OllamaReflectionModel(ReflectionModel):
             ValueError: If ATMAN_OLLAMA_BASE_URL has invalid scheme
         """
         # Try new LLM_OLLAMA_HOST first, fall back to ATMAN_OLLAMA_BASE_URL for compatibility
-        base_url = os.getenv("LLM_OLLAMA_HOST", os.getenv("ATMAN_OLLAMA_BASE_URL", "http://localhost:11434"))
+        base_url = os.getenv(
+            "LLM_OLLAMA_HOST", os.getenv("ATMAN_OLLAMA_BASE_URL", "http://localhost:11434")
+        )
         parsed_url = urlparse(base_url)
         if parsed_url.scheme not in ("http", "https"):
             raise ValueError(
