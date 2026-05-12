@@ -8,25 +8,33 @@ on:
       - 'docs/**'
       - 'scripts/extract_playbook.py'
 
+permissions:
+  contents: read
+
+concurrency:
+  group: playbook-sync-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   sync:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - name: Checkout atman
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           path: atman
           fetch-depth: 0
 
       - name: Checkout playbook
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           repository: hleserg/agent-playbook
           path: agent-playbook
           token: ${{ secrets.PLAYBOOK_SYNC_TOKEN }}
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: '3.12'
 
