@@ -1,5 +1,5 @@
 """
-Tests for AgentRunner with token monitoring.
+Tests for TokenMonitor with token usage tracking.
 
 Covers:
 - 70/80/90/95% threshold warnings
@@ -16,10 +16,10 @@ from pydantic_ai.usage import RunUsage
 
 from atman.adapters.agent import (
     AgentConfig,
-    AgentRunner,
     AtmanDeps,
     ContextLimitExceeded,
     ModelConfig,
+    TokenMonitor,
 )
 from atman.adapters.reflection.mock_reflection_model import MockReflectionModel
 from atman.adapters.storage import InMemoryExperienceStore, InMemoryStateStore
@@ -71,15 +71,15 @@ def _create_deps(
     )
 
 
-class TestAgentRunner:
-    """Tests for AgentRunner token monitoring."""
+class TestTokenMonitor:
+    """Tests for TokenMonitor token monitoring."""
 
-    def test_runner_initialization(self):
-        """Test AgentRunner initializes correctly."""
+    def test_token_monitor_initialization(self):
+        """Test TokenMonitor initializes correctly."""
         agent_id = uuid4()
         deps = _create_deps(agent_id)
 
-        runner = AgentRunner(deps=deps)
+        runner = TokenMonitor(deps=deps)
 
         assert runner._deps == deps
         assert runner._triggered == set()
@@ -91,7 +91,7 @@ class TestAgentRunner:
         agent_id = uuid4()
         deps = _create_deps(agent_id, context_limit=1000)
 
-        runner = AgentRunner(deps=deps)
+        runner = TokenMonitor(deps=deps)
 
         # Mock agent.run to return 600 input tokens (60%)
         mock_result = MagicMock()
@@ -114,7 +114,7 @@ class TestAgentRunner:
         agent_id = uuid4()
         deps = _create_deps(agent_id, context_limit=1000)
 
-        runner = AgentRunner(deps=deps)
+        runner = TokenMonitor(deps=deps)
 
         # Mock agent.run to return 720 input tokens (72%)
         mock_result = MagicMock()
@@ -138,7 +138,7 @@ class TestAgentRunner:
         agent_id = uuid4()
         deps = _create_deps(agent_id, context_limit=1000)
 
-        runner = AgentRunner(deps=deps)
+        runner = TokenMonitor(deps=deps)
 
         # Mock agent.run to return 820 input tokens (82%)
         mock_result = MagicMock()
@@ -163,7 +163,7 @@ class TestAgentRunner:
         agent_id = uuid4()
         deps = _create_deps(agent_id, context_limit=1000)
 
-        runner = AgentRunner(deps=deps)
+        runner = TokenMonitor(deps=deps)
 
         # Mock agent.run to return 920 input tokens (92%)
         mock_result = MagicMock()
@@ -189,7 +189,7 @@ class TestAgentRunner:
         agent_id = uuid4()
         deps = _create_deps(agent_id, context_limit=1000)
 
-        runner = AgentRunner(deps=deps)
+        runner = TokenMonitor(deps=deps)
 
         # Mock agent.run to return 960 input tokens (96%)
         mock_result = MagicMock()
@@ -213,7 +213,7 @@ class TestAgentRunner:
         agent_id = uuid4()
         deps = _create_deps(agent_id, context_limit=1000)
 
-        runner = AgentRunner(deps=deps)
+        runner = TokenMonitor(deps=deps)
 
         # First run at 75%
         mock_result_1 = MagicMock()
@@ -247,7 +247,7 @@ class TestAgentRunner:
         agent_id = uuid4()
         deps = _create_deps(agent_id)
 
-        runner = AgentRunner(deps=deps)
+        runner = TokenMonitor(deps=deps)
         runner._triggered = {70, 80, 90}
 
         runner.reset_triggers()
@@ -260,7 +260,7 @@ class TestAgentRunner:
         agent_id = uuid4()
         deps = _create_deps(agent_id)
 
-        runner = AgentRunner(deps=deps)
+        runner = TokenMonitor(deps=deps)
 
         # Mock agent.run with no usage data
         mock_result = MagicMock()
@@ -302,7 +302,7 @@ class TestAgentRunner:
             model_config=None,
         )
 
-        runner = AgentRunner(deps=deps)
+        runner = TokenMonitor(deps=deps)
 
         # Mock agent.run with 6000 tokens (73% of default 8192)
         mock_result = MagicMock()

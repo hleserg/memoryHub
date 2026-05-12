@@ -1,14 +1,17 @@
 """
-Agent runner with token monitoring and threshold warnings.
+Token monitor for tracking agent context usage with progressive warnings.
 
-This module provides the execution layer for Atman agent sessions,
-including:
-- Agent initialization with Pydantic AI
-- Session lifecycle management
-- Token usage monitoring with 70/80/90/95% thresholds
-- Automatic session termination on context limit
+This module provides token usage monitoring for Atman agent sessions:
+- Tracks input_tokens vs context_limit after each agent.run()
+- Progressive warnings at 70/80/90/95% thresholds
+- Automatic session termination on 95% limit
+- Stateful trigger tracking to avoid duplicate warnings
 
 Implements E22.3: Token monitoring with progressive warnings.
+
+Note: This is separate from runner.py (E22.2) which handles signal-based
+session lifecycle. Future integration: runner.py chat loop can use TokenMonitor
+to enforce context limits during interactive sessions.
 """
 
 from __future__ import annotations
@@ -25,21 +28,21 @@ if TYPE_CHECKING:
     from pydantic_ai.run import AgentRunResult
 
 
-class AgentRunner:
+class TokenMonitor:
     """
-    Agent runner with token monitoring.
+    Token usage monitor for Pydantic AI agents.
 
-    Wraps Pydantic AI Agent and enforces context limits with progressive
+    Tracks token consumption and enforces context limits with progressive
     warnings at 70%, 80%, 90% and forced closure at 95%.
 
     Usage:
-        runner = AgentRunner(deps=deps)
-        result = await runner.run("User message")
+        monitor = TokenMonitor(deps=deps)
+        result = await monitor.run("User message")
     """
 
     def __init__(self, deps: AtmanDeps) -> None:
         """
-        Initialize agent runner.
+        Initialize token monitor.
 
         Args:
             deps: Dependency container with services and configuration
