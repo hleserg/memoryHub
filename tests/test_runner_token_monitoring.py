@@ -32,10 +32,7 @@ def identity_with_narrative(tmp_path: Path) -> Identity:
 
     identity = Identity(
         id=agent_id,
-        schema_version="1.0.0",
-        agent_name="Test Agent",
-        initial_values=[],
-        foundational_experiences=[],
+        self_description="Test Agent",
     )
     store.save_identity(identity)
 
@@ -196,6 +193,7 @@ def test_runner_token_monitoring_95_threshold_does_not_duplicate_lower(
     mock_result = MagicMock()
     mock_result.usage = MagicMock(return_value=RunUsage(input_tokens=950, output_tokens=20))
 
+    would_break = False
     usage = mock_result.usage()
     if usage and usage.input_tokens:
         context_limit = runner._config.model.context_limit
@@ -204,7 +202,6 @@ def test_runner_token_monitoring_95_threshold_does_not_duplicate_lower(
 
         # Replicate threshold checks in order (95% check would break in real code)
         # But for unit test, verify all can be added
-        would_break = False
         if ratio >= 0.95 and 95 not in runner._triggered:
             runner._triggered.add(95)
             would_break = True  # In real code, this is 'break' statement
