@@ -34,7 +34,7 @@ import json
 import sys
 import tempfile
 from pathlib import Path
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 from atman.adapters.storage.file_state_store import FileStateStore
 from atman.core.clock_impl import SystemClock
@@ -71,11 +71,15 @@ class JournalSimulator:
 
     def append(self, session_id, event_type: str, data: dict) -> None:
         from datetime import UTC, datetime
-        line = json.dumps({
-            "type": event_type,
-            "recorded_at": datetime.now(UTC).isoformat(),
-            **data,
-        }, default=str)
+
+        line = json.dumps(
+            {
+                "type": event_type,
+                "recorded_at": datetime.now(UTC).isoformat(),
+                **data,
+            },
+            default=str,
+        )
         with open(self.journal_path(session_id), "a", encoding="utf-8") as f:
             f.write(line + "\n")
 
@@ -101,7 +105,7 @@ class JournalSimulator:
         return list(self.base.glob("active_*.jsonl"))
 
 
-def _bootstrap(workspace: Path) -> tuple[FileStateStore, object, SessionManager]:
+def _bootstrap(workspace: Path) -> tuple[FileStateStore, UUID, SessionManager]:
     store = FileStateStore(workspace=workspace)
     agent_id = uuid4()
     clock = SystemClock()
@@ -128,11 +132,13 @@ def _bootstrap(workspace: Path) -> tuple[FileStateStore, object, SessionManager]
         emotional_baseline=0.0,
     )
     store.save_identity(identity)
-    store.save_narrative(NarrativeDocument(
-        identity_id=agent_id,
-        core_layer=NarrativeLayer(layer_type=LayerType.CORE, content="Тестовый агент."),
-        recent_layer=NarrativeLayer(layer_type=LayerType.RECENT, content=""),
-    ))
+    store.save_narrative(
+        NarrativeDocument(
+            identity_id=agent_id,
+            core_layer=NarrativeLayer(layer_type=LayerType.CORE, content="Тестовый агент."),
+            recent_layer=NarrativeLayer(layer_type=LayerType.RECENT, content=""),
+        )
+    )
 
     sm = SessionManager(store, clock=clock)
     return store, agent_id, sm
@@ -184,7 +190,7 @@ def scenario_a_keyboard_interrupt(workspace: Path) -> dict:
     except KeyboardInterrupt:
         print("    [KeyboardInterrupt caught] → _force_finish(close_reason='interrupted')")
         # _force_finish создаёт минимальный key moment если нужно, вызывает finish_session
-        session_result = sm.finish_session(
+        sm.finish_session(
             session_id,
             overall_emotional_tone=0.0,
             key_insight="Сессия прервана внешним сигналом.",
@@ -242,7 +248,7 @@ def scenario_b_crash_journal_recovery(workspace: Path) -> dict:
     journal.append(session_id, "facts_read", {"fact_ids": [str(f) for f in unexamined_ids]})
 
     print(f"    Journal written: {len(journal.read_all(session_id))} events")
-    print(f"    [CRASH SIMULATED] — finish_session НЕ вызван, journal остался на диске")
+    print("    [CRASH SIMULATED] — finish_session НЕ вызван, journal остался на диске")
 
     # Имитируем новый запуск: новый SessionManager, та же store
     sm2 = SessionManager(store, clock=SystemClock())
@@ -269,7 +275,9 @@ def scenario_b_crash_journal_recovery(workspace: Path) -> dict:
         key_moment_events = [e for e in events if e["type"] == "key_moment"]
         facts_events = [e for e in events if e["type"] == "facts_read"]
 
-        print(f"    Recovering from journal: {len(key_moment_events)} key_moments, {len(facts_events)} facts_read events")
+        print(
+            f"    Recovering from journal: {len(key_moment_events)} key_moments, {len(facts_events)} facts_read events"
+        )
 
         # В реальной реализации: reconstruct SessionResult from journal events
         # и вызвать finish_session. Здесь симулируем финальный результат:
@@ -278,8 +286,11 @@ def scenario_b_crash_journal_recovery(workspace: Path) -> dict:
                 ctx2 = sm2.start_session(agent_id)
                 new_sid = ctx2.session_id
                 sm2.append_key_moment_input(new_sid, km)
-                result = sm2.finish_session(new_sid, overall_emotional_tone=0.0,
-                                            key_insight="Восстановлено из journal после crash.")
+                result = sm2.finish_session(
+                    new_sid,
+                    overall_emotional_tone=0.0,
+                    key_insight="Восстановлено из journal после crash.",
+                )
                 recovered_experience = result
                 journal.delete(session_id)  # cleanup
                 break
@@ -326,7 +337,9 @@ def scenario_c_idempotent_recovery(workspace: Path) -> dict:
     sm.finish_session(session_id, overall_emotional_tone=0.0, key_insight="Готово.")
     # journal не удаляем — симулируем что cleanup упал
 
-    print(f"    Experience saved: {store.get_experience(deterministic_session_experience_id(session_id)) is not None}")
+    print(
+        f"    Experience saved: {store.get_experience(deterministic_session_experience_id(session_id)) is not None}"
+    )
     print(f"    Journal still exists (cleanup crashed): {journal.exists(session_id)}")
 
     experiences_before = len(store.list_recent_experiences(limit=100))
@@ -379,9 +392,17 @@ def _run(workspace: Path, out: Path) -> int:
 
     checks_a = [
         ("Experience сохранён после KeyboardInterrupt", results_a["experience_saved"], ""),
-        ("Key moments не потеряны", results_a["key_moments_saved"] > 0, f"count: {results_a['key_moments_saved']}"),
+        (
+            "Key moments не потеряны",
+            results_a["key_moments_saved"] > 0,
+            f"count: {results_a['key_moments_saved']}",
+        ),
         ("Journal очищен после graceful finish", results_a["journal_cleaned"], ""),
-        ("fact_refs сохранены", results_a["fact_refs_saved"] > 0, f"count: {results_a['fact_refs_saved']}"),
+        (
+            "fact_refs сохранены",
+            results_a["fact_refs_saved"] > 0,
+            f"count: {results_a['fact_refs_saved']}",
+        ),
     ]
     for label, passed, detail in checks_a:
         status = "✓" if passed else "✗"
@@ -398,7 +419,11 @@ def _run(workspace: Path, out: Path) -> int:
     all_results["B"] = results_b
 
     checks_b = [
-        ("Orphaned journal обнаружен", results_b["orphaned_journals_found"] > 0, f"found: {results_b['orphaned_journals_found']}"),
+        (
+            "Orphaned journal обнаружен",
+            results_b["orphaned_journals_found"] > 0,
+            f"found: {results_b['orphaned_journals_found']}",
+        ),
         ("Recovery выполнен", results_b["experience_recovered"], ""),
         ("Journal удалён после recovery", results_b["journal_cleaned_after_recovery"], ""),
     ]
@@ -419,8 +444,11 @@ def _run(workspace: Path, out: Path) -> int:
     checks_c = [
         ("Experience присутствовал до recovery", results_c["experience_was_present"], ""),
         ("Journal очищен без создания дублей", results_c["journal_cleaned"], ""),
-        ("Нет дубликатов в store", results_c["no_duplicate_experience"],
-         f"before={results_c['experiences_count_before']}, after={results_c['experiences_count_after']}"),
+        (
+            "Нет дубликатов в store",
+            results_c["no_duplicate_experience"],
+            f"before={results_c['experiences_count_before']}, after={results_c['experiences_count_after']}",
+        ),
     ]
     for label, passed, detail in checks_c:
         status = "✓" if passed else "✗"
@@ -453,6 +481,7 @@ def main() -> int:
     except Exception as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
         import traceback
+
         traceback.print_exc()
         return 1
 

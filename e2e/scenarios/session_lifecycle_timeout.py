@@ -99,11 +99,15 @@ class TimeoutScenarioRunner:
         journal_path.parent.mkdir(parents=True, exist_ok=True)
         import json as _json
         from datetime import UTC, datetime
-        line = _json.dumps({
-            "type": event_type,
-            "recorded_at": datetime.now(UTC).isoformat(),
-            **data,
-        }, default=str)
+
+        line = _json.dumps(
+            {
+                "type": event_type,
+                "recorded_at": datetime.now(UTC).isoformat(),
+                **data,
+            },
+            default=str,
+        )
         with open(journal_path, "a", encoding="utf-8") as f:
             f.write(line + "\n")
 
@@ -156,16 +160,24 @@ class TimeoutScenarioRunner:
                     ),
                 )
                 # Запись key moment в journal
-                self._write_journal_event(journal_path, "key_moment", {
-                    "what_happened": f"Пользователь спросил: {msg[:80]}",
-                })
+                self._write_journal_event(
+                    journal_path,
+                    "key_moment",
+                    {
+                        "what_happened": f"Пользователь спросил: {msg[:80]}",
+                    },
+                )
 
         # Добавляем "неокрашенные" факты через _note_facts_read
         unexamined_fact_ids = [uuid4(), uuid4(), uuid4()]
         self.session_manager._note_facts_read(session_id, unexamined_fact_ids)
-        self._write_journal_event(journal_path, "facts_read", {
-            "fact_ids": [str(f) for f in unexamined_fact_ids],
-        })
+        self._write_journal_event(
+            journal_path,
+            "facts_read",
+            {
+                "fact_ids": [str(f) for f in unexamined_fact_ids],
+            },
+        )
         results["unexamined_fact_ids"] = [str(f) for f in unexamined_fact_ids]
 
         print(f"    Journal записан: {journal_path}")
@@ -222,7 +234,7 @@ class TimeoutScenarioRunner:
             # Сейчас journal не удаляется — помечаем как ожидаемое поведение
             results["journal_cleaned_up"] = not journal_path.exists()
             if journal_path.exists():
-                print(f"    [PLANNED] journal_path будет удалён в finish_session() после реализации")
+                print("    [PLANNED] journal_path будет удалён в finish_session() после реализации")
                 # Для теста: проверяем что journal содержит корректные данные
                 lines = journal_path.read_text().strip().split("\n")
                 print(f"    Journal lines: {len(lines)}")
@@ -263,21 +275,36 @@ def _run(workspace: Path, out: Path) -> int:
     identity = Identity(
         id=agent_id,
         self_description="Технический ассистент.",
-        core_values=[CoreValue(name="полезность", description="Помогать людям", confidence=0.8, justification="")],
-        goals=[Goal(content="Помочь с Observer pattern", horizon=GoalHorizon.SHORT, owner=GoalOwner.AGENT, active=True)],
+        core_values=[
+            CoreValue(
+                name="полезность", description="Помогать людям", confidence=0.8, justification=""
+            )
+        ],
+        goals=[
+            Goal(
+                content="Помочь с Observer pattern",
+                horizon=GoalHorizon.SHORT,
+                owner=GoalOwner.AGENT,
+                active=True,
+            )
+        ],
         emotional_baseline=0.0,
     )
     store.save_identity(identity)
-    store.save_narrative(NarrativeDocument(
-        identity_id=agent_id,
-        core_layer=NarrativeLayer(layer_type=LayerType.CORE, content="Я технический ассистент."),
-        recent_layer=NarrativeLayer(layer_type=LayerType.RECENT, content=""),
-    ))
+    store.save_narrative(
+        NarrativeDocument(
+            identity_id=agent_id,
+            core_layer=NarrativeLayer(
+                layer_type=LayerType.CORE, content="Я технический ассистент."
+            ),
+            recent_layer=NarrativeLayer(layer_type=LayerType.RECENT, content=""),
+        )
+    )
 
     print()
     print("[1] Setup: workspace ready")
     print(f"    Agent ID: {agent_id}")
-    print(f"    session_timeout_minutes: 7 (в тесте симулируем немедленно)")
+    print("    session_timeout_minutes: 7 (в тесте симулируем немедленно)")
 
     print()
     print("[2] Running conversation + simulated timeout")
@@ -295,7 +322,8 @@ def _run(workspace: Path, out: Path) -> int:
         ),
         (
             "Агент выбрал команду",
-            results["agent_choice"] in ("sleep", "reflect", "wait", "review_facts", "save_to_memory"),
+            results["agent_choice"]
+            in ("sleep", "reflect", "wait", "review_facts", "save_to_memory"),
             f"choice: {results['agent_choice']}",
         ),
         (
@@ -360,6 +388,7 @@ def main() -> int:
     except Exception as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
         import traceback
+
         traceback.print_exc()
         return 1
 

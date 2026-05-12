@@ -14,13 +14,20 @@ _force_finish() to ensure session results are persisted.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import signal
 import sys
+from dataclasses import replace
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import TYPE_CHECKING
 from uuid import UUID
 
+from pydantic_ai import Agent
+
+from atman.adapters.agent.config import AgentConfig
+from atman.adapters.agent.deps import AtmanDeps
 from atman.core.exceptions import SessionAlreadyFinishedError, SessionNotFoundError
 from atman.core.models import EmotionalDepth, KeyMomentInput
 
@@ -240,3 +247,70 @@ def _force_finish(
     except SessionAlreadyFinishedError:
         # Race condition: another thread finished first
         _LOG.warning("Session %s was already finished", session_id)
+
+
+class AtmanRunner:
+    """
+    Pydantic-AI based REPL runner wired to FileStateStore workspace and SessionManager.
+
+    Used by ``src/run_agent.py`` to run an interactive session for a persisted agent.
+    """
+
+    def __init__(self, workspace: Path, agent_id: UUID, config: AgentConfig) -> None:
+        self._workspace = workspace
+        self._agent_id = agent_id
+        self._config = config
+
+    async def chat(self) -> None:
+        """Run a simple stdin/stdout chat loop until EOF, empty input, or Ctrl-C."""
+        from atman.adapters.agent.factory import build_deps
+        from atman.adapters.agent.instructions import build_instructions
+        from atman.adapters.agent.tools import log_experience, record_key_moment
+
+        deps, session_manager, _store = build_deps(self._workspace, self._agent_id, self._config)
+        session_ctx = session_manager.start_session(self._agent_id)
+        deps = replace(deps, session_id=session_ctx.session_id)
+        session_id = session_ctx.session_id
+
+        if self._config.enable_key_moments:
+            tool_funcs = (record_key_moment, log_experience)
+        else:
+            tool_funcs = (log_experience,)
+
+        agent = Agent(
+            self._config.model.model,
+            deps_type=AtmanDeps,
+            instructions=lambda ctx: build_instructions(ctx.deps),
+            tools=tool_funcs,
+        )
+
+        print("Session started. Empty line or Ctrl-D to exit.\n")
+        try:
+            while True:
+                try:
+                    user_text = await asyncio.to_thread(input, "You: ")
+                except EOFError:
+                    break
+                if not user_text.strip():
+                    break
+                result = await agent.run(user_text, deps=deps)
+                print(result.output)
+                print()
+        except KeyboardInterrupt:
+            print("\nInterrupted.")
+        finally:
+            try:
+                session_manager.finish_session(
+                    session_id,
+                    overall_emotional_tone=0.0,
+                    key_insight="",
+                    alignment_check=True,
+                    alignment_notes="",
+                )
+            except ValueError as exc:
+                if "Cannot finish session without key moments" in str(exc):
+                    _force_finish(session_manager, session_id, "completed")
+                else:
+                    raise
+            except (SessionAlreadyFinishedError, SessionNotFoundError):
+                pass
