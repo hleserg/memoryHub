@@ -1441,6 +1441,7 @@ def test_orphan_recovery_deterministic_id_prevents_cross_session_pollution(
     assert exp1_records[0].experience.session_id == context1.session_id
     assert exp2_records[0].experience.session_id == context2.session_id
 
+
 def test_journal_created_on_key_moment(tmp_path, identity_fixture, narrative_fixture, frozen_clock):
     """Test that journal is created when key moment is appended."""
     store = InMemoryStateStore()
@@ -2052,9 +2053,7 @@ def test_unexamined_facts_excludes_facts_colored_across_multiple_moments(
     assert exp_record.experience.unexamined_fact_refs == [fact_id_unexamined]
 
 
-def test_unexamined_facts_aggregated_fact_refs_includes_all_facts(
-    session_manager, temp_storage
-):
+def test_unexamined_facts_aggregated_fact_refs_includes_all_facts(session_manager, temp_storage):
     """E21.7: SessionExperience.fact_refs includes both colored and unexamined facts."""
     manager, agent_id = session_manager
     context = manager.start_session(agent_id)
