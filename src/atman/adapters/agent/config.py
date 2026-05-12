@@ -36,6 +36,11 @@ class ModelConfig(BaseModel):
         gt=0,
         description="Maximum tokens for model response",
     )
+    context_limit: int = Field(
+        default=8192,
+        gt=0,
+        description="Maximum context window size for the model",
+    )
 
 
 class AgentConfig(BaseModel):
@@ -74,6 +79,24 @@ class AgentConfig(BaseModel):
     enable_key_moments: bool = Field(
         default=True,
         description="Enable record_key_moment tool",
+    )
+    context_tail_messages: int = Field(
+        default=10,
+        gt=0,
+        description="Number of recent messages to retain in context window",
+    )
+    session_timeout_minutes: int = Field(
+        default=7,
+        gt=0,
+        description="Session timeout in minutes before automatic termination",
+    )
+    enable_free_time: bool = Field(
+        default=True,
+        description="Enable free time processing between sessions",
+    )
+    show_agent_monologue: bool = Field(
+        default=False,
+        description="Display agent internal reasoning and thought process",
     )
 
     model: ModelConfig = Field(default_factory=ModelConfig)
