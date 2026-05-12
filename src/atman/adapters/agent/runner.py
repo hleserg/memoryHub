@@ -700,6 +700,58 @@ class AtmanRunner:
                         _LOG.exception("Failed to restart session %s", session_id)
                         break  # Exit loop on restart failure
 
+                # E22.3: Token monitoring - check context usage and warn/force-close
+                usage = result.usage() if hasattr(result, "usage") else None
+                if usage and usage.input_tokens:
+                    context_limit = self._config.model.context_limit
+                    input_tokens = usage.input_tokens
+                    ratio = input_tokens / context_limit if context_limit > 0 else 0.0
+
+                    # Check thresholds: 70%, 80%, 90%, 95%
+                    if ratio >= 0.95 and 95 not in self._triggered:
+                        # Force close at 95%
+                        _LOG.warning(
+                            "Context 95%% full (%d/%d tokens) - forcing session close",
+                            input_tokens,
+                            context_limit,
+                        )
+                        print_warn(
+                            f"\n⚠️  Context 95% full ({input_tokens}/{context_limit} tokens). "
+                            "Forcing session close.\n"
+                        )
+                        self._triggered.add(95)
+                        try:
+                            _force_finish(session_manager, session_id, "forced")
+                        except Exception as exc:
+                            _LOG.exception("Failed to force-finish session %s", session_id)
+                            print_err(f"Force-finish failed: {exc!s}")
+                        break  # Exit main loop
+
+                    elif ratio >= 0.90 and 90 not in self._triggered:
+                        remaining = context_limit - input_tokens
+                        print_warn(
+                            f"\n⚠️  Context 90% full ({input_tokens}/{context_limit} tokens). "
+                            f"~{remaining} tokens remaining.\n"
+                        )
+                        self._triggered.add(90)
+
+                    elif ratio >= 0.80 and 80 not in self._triggered:
+                        remaining = context_limit - input_tokens
+                        print_warn(
+                            f"\n⚠️  Context 80% full ({input_tokens}/{context_limit} tokens). "
+                            f"~{remaining} tokens remaining.\n"
+                        )
+                        self._triggered.add(80)
+
+                    elif ratio >= 0.70 and 70 not in self._triggered:
+                        remaining = context_limit - input_tokens
+                        print_warn(
+                            f"\n[Системное уведомление] Контекст сессии заполняется — "
+                            f"осталось около {remaining} токенов.\n"
+                            f"Когда будешь готов — вызови restart_session.\n"
+                        )
+                        self._triggered.add(70)
+
                 # E22.5: Check for wait request (agent-triggered timeout adjustment)
                 wait_requested, wait_minutes = _check_wait_requested(result.new_messages())
 
