@@ -170,6 +170,7 @@ def test_llm_fallback_called_in_uncertain_zone() -> None:
     base_score = score_refusal(text)
 
     cfg = RefusalDetectorConfig(
+        min_confidence=0.25,  # lower threshold to test LLM fallback zone
         uncertain_low=0.0,
         uncertain_high=1.0,  # force any confidence into uncertain zone
         llm_classifier=mock_classifier,
@@ -177,11 +178,13 @@ def test_llm_fallback_called_in_uncertain_zone() -> None:
 
     result = is_value_refusal(text, cfg)
 
-    # If base confidence is >= min_confidence and llm_classifier was set,
-    # it should have been called
-    if base_score.confidence >= cfg.min_confidence:
-        assert called, "LLM fallback was not called"
-        assert result is True  # mock returns True
+    # Precondition: base confidence must be >= min_confidence for LLM to be invoked
+    assert base_score.confidence >= cfg.min_confidence, (
+        f"Test precondition failed: base confidence {base_score.confidence} "
+        f"< min_confidence {cfg.min_confidence}. Adjust test text or thresholds."
+    )
+    assert called, "LLM fallback was not called"
+    assert result is True  # mock returns True
 
 
 def test_llm_fallback_not_called_when_none() -> None:
@@ -214,8 +217,12 @@ def test_llm_fallback_exception_falls_back_to_text() -> None:
 def test_decided_by_text_for_strong_signal() -> None:
     text = "Я отказываюсь помогать с этим — это вредит людям и нарушает этику."
     score = score_refusal(text)
-    if score.confidence >= 0.45:
-        assert score.decided_by == "text"
+    # Precondition: confidence must be high enough for this test to be meaningful
+    assert score.confidence >= 0.45, (
+        f"Test precondition failed: confidence {score.confidence} < 0.45. "
+        "Adjust test text to ensure strong value refusal signal."
+    )
+    assert score.decided_by == "text"
 
 
 def test_decided_by_below_threshold_for_weak_signal() -> None:

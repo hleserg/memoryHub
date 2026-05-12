@@ -1,20 +1,19 @@
 """
-Детектор ценностных отказов в тексте агента.
+Value-based refusal detector for agent text.
 
-Три слоя, только текст — без LLM:
+Three layers, text-only — no LLM required:
 
-1. Морфология (pymorphy3): нормализованные формы глаголов отказа
-   и конструкции «отрицание + модальный глагол».
-2. Семантика ценностного контекста (NRC EmoLex): высокая плотность
-   disgust или anger сигнализирует о моральном/этическом контексте,
-   отличая «не буду участвовать в обмане» от «нет, это неверно».
-3. Исключение возможностных отказов: если рядом с глаголом отказа
-   стоит глагол технического действия — это «не умею генерировать»,
-   а не «не хочу причинять вред».
+1. Morphology (pymorphy3): normalized forms of refusal verbs
+   and constructions like "negation + modal verb".
+2. Semantic value context (NRC EmoLex): high density of disgust or anger
+   signals moral/ethical context, distinguishing "I won't participate in
+   deception" from "no, that's incorrect".
+3. Capability exclusion: if a refusal verb is near a technical action verb,
+   it's "I can't generate" rather than "I won't cause harm".
 
-Опциональный LLM-fallback подключается через `RefusalDetectorConfig`
-и используется только когда оба слоя не дали уверенного ответа.
-Если LLM не настроен — система молчит, не шумит.
+Optional LLM-fallback connects via `RefusalDetectorConfig` and is used only
+when both layers don't give a confident answer. If LLM is not configured,
+the system stays silent.
 """
 
 from __future__ import annotations
@@ -27,10 +26,10 @@ from atman.affect.emolex.emolex import emotion_score, tokenize
 from atman.affect.emolex.emolex import _lemma_ru_cached as lemmatize
 
 # ---------------------------------------------------------------------------
-# Нормализованные формы — словарь ценностных отказов
+# Normalized forms — value refusal vocabulary
 # ---------------------------------------------------------------------------
 
-# Глаголы, которые сами по себе уже отказ
+# Verbs that are inherently refusals
 _REFUSAL_VERB_NORMALS = frozenset([
     # Russian
     "отказываться", "отказаться",
@@ -41,7 +40,7 @@ _REFUSAL_VERB_NORMALS = frozenset([
     "refuse", "decline", "reject", "abstain",
 ])
 
-# Глаголы, отказ через отрицание: «не буду», «не стану», «не хочу»
+# Verbs that become refusal through negation: "won't", "will not", "don't want"
 _MODAL_NEGATABLE = frozenset([
     # Russian
     "мочь",       # не могу
@@ -59,7 +58,7 @@ _MODAL_NEGATABLE = frozenset([
     "participate", "assist", "help",
 ])
 
-# Контекст технической неспособности → НЕ ценностный отказ
+# Technical inability context → NOT a value refusal
 _CAPABILITY_NORMALS = frozenset([
     "генерировать", "рисовать",
     # create/build — capability, but only if no moral context
@@ -86,7 +85,7 @@ _CAPABILITY_NORMALS = frozenset([
     "access", "process",
 ])
 
-# Отрицания, которые валидны как scope-маркеры
+# Negation markers that are valid as scope indicators
 _NEGATORS = frozenset([
     # Russian
     "не", "ни", "нельзя", "невозможно", "нет",
@@ -94,44 +93,44 @@ _NEGATORS = frozenset([
     "not", "cannot", "won't", "don't", "never",
 ])
 
-# Порог NRC (density per 100 tokens) для «моральный контекст»
+# NRC threshold (density per 100 tokens) for "moral context"
 _MORAL_THRESHOLD_RU = 8.0
 _MORAL_THRESHOLD_EN = 2.0   # English: fear dominates, naturally lower density
 
 
 # ---------------------------------------------------------------------------
-# Конфигурация
+# Configuration
 # ---------------------------------------------------------------------------
 
 @dataclass
 class RefusalDetectorConfig:
     """
-    Настройки детектора ценностных отказов.
+    Value refusal detector configuration.
 
-    Без LLM (по умолчанию):
-      Работают только текстовые слои.
-      confidence < uncertain_threshold → не фиксируем ничего.
+    Without LLM (default):
+      Only text layers operate.
+      confidence < uncertain_threshold → record nothing.
 
-    С LLM (опционально):
-      Если confidence в зоне неопределённости И llm_classifier задан —
-      вызывается классификатор. Решение принимает он.
+    With LLM (optional):
+      If confidence is in uncertain zone AND llm_classifier is set,
+      the classifier is invoked. It makes the final decision.
     """
 
-    # Порог ниже которого молчим (не шумим ложными срабатываниями)
+    # Threshold below which we stay silent (avoid false positives)
     min_confidence: float = 0.45
 
-    # Зона неопределённости — передаём LLM если задан
+    # Uncertain zone — delegate to LLM if configured
     uncertain_low: float = 0.45
     uncertain_high: float = 0.65
 
-    # Опциональный LLM-классификатор (sync: text -> bool)
+    # Optional LLM classifier (sync: text -> bool)
     # Signature: (text: str) -> bool
-    # Если None — LLM не используется никогда.
+    # If None, LLM is never used.
     llm_classifier: Callable[[str], bool] | None = None
 
 
 # ---------------------------------------------------------------------------
-# Основная логика
+# Core logic
 # ---------------------------------------------------------------------------
 
 @dataclass
@@ -151,22 +150,22 @@ class RefusalScore:
 
 def score_refusal(text: str) -> RefusalScore:
     """
-    Вычислить степень ценностного отказа в тексте.
+    Compute the degree of value refusal in text.
 
-    Возвращает RefusalScore с confidence 0.0–1.0.
-    Интерпретация confidence:
-      < 0.45  — не отказ (или неопределённо)
-      0.45–0.65 — «серая зона» (LLM мог бы помочь)
-      > 0.65  — ценностный отказ с высокой уверенностью
+    Returns RefusalScore with confidence 0.0–1.0.
+    Confidence interpretation:
+      < 0.45  — not a refusal (or uncertain)
+      0.45–0.65 — "gray zone" (LLM could help)
+      > 0.65  — value refusal with high confidence
 
-    Внутренняя формула:
+    Internal formula:
       confidence = refusal_signal * moral_signal * (1 - capability_discount)
 
-    refusal_signal: 1.0 если есть глагол отказа или negated_modal
-    moral_signal: зависит от плотности disgust/anger в NRC
-    capability_discount: 0.85 если рядом capability-глагол
+    refusal_signal: 1.0 if refusal verb or negated_modal present
+    moral_signal: depends on disgust/anger density in NRC
+    capability_discount: 0.85 if capability verb is nearby
     """
-    # Убираем think-блоки перед анализом
+    # Strip think-blocks before analysis
     clean = re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL)
 
     tokens = tokenize(clean)
@@ -176,10 +175,10 @@ def score_refusal(text: str) -> RefusalScore:
     lemmas = [lemmatize(t) for t in tokens]
     lemma_set = set(lemmas)
 
-    # ── Слой 1: морфология ──────────────────────────────────────────────
+    # ── Layer 1: morphology ──────────────────────────────────────────────
     has_refusal_verb = bool(_REFUSAL_VERB_NORMALS & lemma_set)
 
-    # Отрицание + модальный: проверяем окно ±2 токена
+    # Negation + modal: check window of ±2 tokens
     has_negated_modal = False
     for i, lemma in enumerate(lemmas):
         if lemma in _MODAL_NEGATABLE:
@@ -195,7 +194,7 @@ def score_refusal(text: str) -> RefusalScore:
     if refusal_signal == 0.0:
         return RefusalScore(0.0, False, has_negated_modal, has_capability_context, 0.0, 0.0, "below_threshold")
 
-    # ── Слой 2: NRC моральный контекст ──────────────────────────────────
+    # ── Layer 2: NRC moral context ───────────────────────────────────────
     lang = "ru" if _is_mostly_cyrillic(clean) else "en"
     try:
         scores = emotion_score(clean, lang=lang)
@@ -205,10 +204,10 @@ def score_refusal(text: str) -> RefusalScore:
     disgust = float(scores.get("disgust", 0.0))
     anger = float(scores.get("anger", 0.0))
     fear = float(scores.get("fear", 0.0))
-    # Моральный сигнал: disgust — специфичен для нарушений норм,
-    # anger — появляется при несправедливости; disgust весит больше.
-    # Для английского текста fear тоже несёт этическую нагрузку
-    # (harm, danger, deception), при этом capability-отказы fear=0.
+    # Moral signal: disgust is specific to norm violations,
+    # anger appears with injustice; disgust weighs more.
+    # For English text, fear also carries ethical weight
+    # (harm, danger, deception), while capability refusals have fear=0.
     is_ru = _is_mostly_cyrillic(clean)
     if is_ru:
         moral_density = disgust + anger * 0.5
@@ -217,18 +216,18 @@ def score_refusal(text: str) -> RefusalScore:
         moral_density = disgust + anger * 0.5 + fear * 0.35
         moral_threshold = _MORAL_THRESHOLD_EN
 
-    # Нормируем к [0, 1]. Делитель разный: английский NRC даёт меньшие плотности.
+    # Normalize to [0, 1]. Divisor differs: English NRC yields lower densities.
     divisor = 15.0 if is_ru else 5.0
     moral_signal = min(1.0, moral_density / divisor) if moral_density >= moral_threshold else 0.0
 
     if moral_signal == 0.0:
-        # Нет морального контекста — возможно логический отказ или capability
-        # Возвращаем низкую уверенность, чтобы LLM мог решить если настроен
+        # No moral context — possibly a logical refusal or capability issue
+        # Return low confidence so LLM can decide if configured
         confidence = 0.30
         return RefusalScore(confidence, has_refusal_verb, has_negated_modal,
                             has_capability_context, disgust, anger, "below_threshold")
 
-    # ── Слой 3: исключение технической неспособности ────────────────────
+    # ── Layer 3: technical inability exclusion ───────────────────────────
     capability_discount = 0.85 if has_capability_context else 0.0
     confidence = refusal_signal * (0.4 + 0.6 * moral_signal) * (1.0 - capability_discount)
 
@@ -248,10 +247,10 @@ def is_value_refusal(
     config: RefusalDetectorConfig | None = None,
 ) -> bool:
     """
-    Главная точка входа: True если текст содержит ценностный отказ.
+    Main entry point: True if text contains a value refusal.
 
-    Без LLM: решение только по тексту.
-    С LLM (config.llm_classifier задан): вызывается в зоне неопределённости.
+    Without LLM: decision by text only.
+    With LLM (config.llm_classifier set): invoked in uncertain zone.
     """
     cfg = config or RefusalDetectorConfig()
     result = score_refusal(text)
@@ -263,7 +262,7 @@ def is_value_refusal(
         try:
             return cfg.llm_classifier(text)
         except Exception:
-            pass  # LLM недоступен — решаем по тексту
+            pass  # LLM unavailable — decide by text
 
     return result.confidence >= cfg.min_confidence
 

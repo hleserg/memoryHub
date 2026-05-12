@@ -193,4 +193,6 @@ I don't pretend to be something I'm not yet. I am learning who I am through expe
 def _truncate_text(text: str, max_chars: int) -> str:
     if len(text) <= max_chars:
         return text
+    if max_chars <= 3:
+        return "..."
     return text[: max_chars - 3] + "..."
