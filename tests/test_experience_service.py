@@ -273,6 +273,92 @@ class TestExperienceService:
         timestamps = [r.experience.timestamp for r in results]
         assert timestamps == sorted(timestamps, reverse=True)
 
+    def test_list_by_fact(self, service):
+        """Test listing experiences by fact reference."""
+        fact_id = uuid4()
+        other_fact_id = uuid4()
+
+        # Create experience with fact reference
+        felt = FeltSense(
+            emotional_valence=0.3, emotional_intensity=0.7, depth=EmotionalDepth.MEANINGFUL
+        )
+        moment_with_fact = KeyMoment(
+            what_happened="Used a specific fact",
+            how_i_felt=felt,
+            why_it_matters="Fact helped me respond",
+            fact_refs=[fact_id],
+        )
+        exp_with_fact = SessionExperience(session_id=uuid4(), key_moments=[moment_with_fact])
+        created_with_fact = service.create_experience(exp_with_fact)
+
+        # Create experience without fact reference
+        moment_without_fact = KeyMoment(
+            what_happened="Didn't use the fact", how_i_felt=felt, why_it_matters="Just happened"
+        )
+        exp_without_fact = SessionExperience(session_id=uuid4(), key_moments=[moment_without_fact])
+        service.create_experience(exp_without_fact)
+
+        # Create another experience with different fact
+        moment_other_fact = KeyMoment(
+            what_happened="Used different fact",
+            how_i_felt=felt,
+            why_it_matters="Other fact helped",
+            fact_refs=[other_fact_id],
+        )
+        exp_other_fact = SessionExperience(session_id=uuid4(), key_moments=[moment_other_fact])
+        service.create_experience(exp_other_fact)
+
+        # Search by fact_id
+        results = service.list_by_fact(fact_id, limit=10)
+
+        assert len(results) == 1
+        assert results[0].experience.id == created_with_fact.experience.id
+        assert fact_id in results[0].experience.key_moments[0].fact_refs
+
+    def test_list_by_fact_multiple_matches(self, service):
+        """Test listing multiple experiences referencing the same fact."""
+        fact_id = uuid4()
+
+        felt = FeltSense(
+            emotional_valence=0.0, emotional_intensity=0.5, depth=EmotionalDepth.SURFACE
+        )
+
+        # Create three experiences with the same fact
+        exp_ids = []
+        for i in range(3):
+            moment = KeyMoment(
+                what_happened=f"Used fact {i}",
+                how_i_felt=felt,
+                why_it_matters="Testing",
+                fact_refs=[fact_id],
+            )
+            exp = SessionExperience(session_id=uuid4(), key_moments=[moment])
+            record = service.create_experience(exp)
+            exp_ids.append(record.experience.id)
+
+        # List by fact with limit=2
+        results = service.list_by_fact(fact_id, limit=2)
+
+        assert len(results) == 2
+        # Should be ordered by timestamp descending (newest first)
+        timestamps = [r.experience.timestamp for r in results]
+        assert timestamps == sorted(timestamps, reverse=True)
+
+    def test_list_by_fact_nonexistent(self, service):
+        """Test listing by non-existent fact returns empty list."""
+        # Create experience without fact refs
+        felt = FeltSense(
+            emotional_valence=0.0, emotional_intensity=0.5, depth=EmotionalDepth.SURFACE
+        )
+        moment = KeyMoment(what_happened="No facts", how_i_felt=felt, why_it_matters="Testing")
+        exp = SessionExperience(session_id=uuid4(), key_moments=[moment])
+        service.create_experience(exp)
+
+        # Search for non-existent fact
+        results = service.list_by_fact(uuid4())
+
+        assert len(results) == 0
+
 
 # --- SYSTEM_MAP §1.3 / §4.2 P2 additions ---
 
