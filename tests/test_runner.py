@@ -654,6 +654,33 @@ def test_atman_runner_initialization(tmp_path: Path) -> None:
     assert runner._config.enable_free_time is True
 
 
+def test_build_deps_bootstraps_state_and_enables_session_journal(tmp_path: Path) -> None:
+    """New runner workspaces should start sessions and persist crash journals."""
+    from atman.adapters.agent.config import AgentConfig
+    from atman.adapters.agent.factory import build_deps
+
+    agent_id = uuid4()
+    _deps, session_manager, store = build_deps(tmp_path, agent_id, AgentConfig())
+
+    context = session_manager.start_session(agent_id)
+    assert store.load_identity(agent_id) is not None
+    assert store.load_narrative(agent_id) is not None
+
+    session_manager.append_key_moment_input(
+        context.session_id,
+        KeyMomentInput(
+            what_happened="Runner recorded a recoverable moment",
+            emotional_valence=0.2,
+            emotional_intensity=0.6,
+            depth=EmotionalDepth.MEANINGFUL,
+            why_it_matters="Crash recovery needs a journal entry",
+        ),
+    )
+
+    journal_path = tmp_path / str(agent_id) / "sessions" / f"active_{context.session_id}.jsonl"
+    assert journal_path.exists()
+
+
 async def test_stdin_reader_thread_lifecycle(tmp_path: Path) -> None:
     """Test that stdin reader thread lifecycle is managed correctly.
 

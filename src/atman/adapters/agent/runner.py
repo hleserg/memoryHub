@@ -575,10 +575,21 @@ class AtmanRunner:
         # E22.6: Track session state for menu mode
         reflected_this_session = False
         interrupted = False
+        original_sigterm_handler: signal.Handlers | None = None
 
         # E22.6: Start dedicated stdin reader thread with current event loop
         loop = asyncio.get_event_loop()
         self._start_stdin_reader(loop)
+
+        def _request_shutdown(signum: int, frame: object) -> None:
+            """Convert SIGTERM into the same graceful path as Ctrl-C/EOF."""
+            nonlocal interrupted
+            _ = (signum, frame)
+            interrupted = True
+            loop.call_soon_threadsafe(self._input_queue.put_nowait, None)
+
+        if threading.current_thread() is threading.main_thread():
+            original_sigterm_handler = signal.signal(signal.SIGTERM, _request_shutdown)
 
         try:
             session_ctx = session_manager.start_session(self._agent_id)
@@ -719,6 +730,8 @@ class AtmanRunner:
             # Track interruption for close_reason
             interrupted = True
         finally:
+            if original_sigterm_handler is not None:
+                signal.signal(signal.SIGTERM, original_sigterm_handler)
             self._stop_stdin_reader()
             if session_id is not None:
                 try:

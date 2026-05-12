@@ -37,6 +37,7 @@ from atman.core.ports.reflection import ExperienceRepository, NarrativeRepositor
 from atman.core.ports.state_store import DateRangeQuery, SessionExperienceQuery
 from atman.core.services.experience_service import ExperienceService
 from atman.core.services.identity_service import IdentityService
+from atman.core.services.narrative_service import NarrativeService
 from atman.core.services.narrative_revision import NarrativeRevisionService
 from atman.core.services.reflection_service import MicroReflectionService
 from atman.core.services.session_manager import SessionManager
@@ -149,6 +150,14 @@ def build_deps(
 
     workspace.mkdir(parents=True, exist_ok=True)
     state_store = FileStateStore(workspace=workspace)
+    identity_service = IdentityService(state_store)
+    narrative_service = NarrativeService(state_store)
+
+    identity = state_store.load_identity(agent_id)
+    if identity is None:
+        identity = identity_service.bootstrap_identity(agent_id)
+    if state_store.load_narrative(identity.id) is None:
+        narrative_service.create_narrative(identity)
 
     affect_kwargs: dict = {}
     if _AFFECT_AVAILABLE:
@@ -157,7 +166,7 @@ def build_deps(
             "affect_workspace": workspace,
             "affect_config": _AffectDetectorConfig(),
         }
-    session_manager = SessionManager(state_store, **affect_kwargs)
+    session_manager = SessionManager(state_store, workspace=workspace, **affect_kwargs)
 
     narrative_revision = NarrativeRevisionService(
         narrative_repo=_NarrativeAdapter(state_store),
@@ -173,7 +182,7 @@ def build_deps(
     deps = AtmanDeps.from_config(
         config=config,
         session_manager=session_manager,
-        identity_service=IdentityService(state_store),
+        identity_service=identity_service,
         experience_service=ExperienceService(state_store),
         micro_reflection=micro_reflection,
         state_store=state_store,

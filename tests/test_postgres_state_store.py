@@ -167,6 +167,22 @@ def test_create_key_moment_raises_on_duplicate(store: Any, sample_key_moment: Ke
         store.create_key_moment(sample_key_moment)
 
 
+def test_store_key_moments_updates_placeholder_session(
+    store: Any, sample_key_moment: KeyMoment
+) -> None:
+    """SessionManager creates first, then associates the same moment with a session."""
+    session_id = uuid4()
+
+    store.create_key_moment(sample_key_moment)
+    assert store.get_key_moments_for_session(session_id) == []
+
+    store.store_key_moments(session_id, [sample_key_moment])
+
+    moments = store.get_key_moments_for_session(session_id)
+    assert len(moments) == 1
+    assert moments[0].id == sample_key_moment.id
+
+
 def test_list_key_moments_all(store: Any) -> None:
     """Test listing all key moments across sessions."""
     session1 = uuid4()

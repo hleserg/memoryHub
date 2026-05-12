@@ -131,15 +131,25 @@ class PostgresStateStore(StateStore):
                     """
                     INSERT INTO public.key_moments (id, session_id, data, created_at)
                     VALUES (%(id)s, %(session_id)s, %(data)s, %(created_at)s)
-                    ON CONFLICT (id) DO NOTHING
+                    ON CONFLICT (id) DO UPDATE
+                    SET session_id = EXCLUDED.session_id,
+                        data = EXCLUDED.data,
+                        created_at = EXCLUDED.created_at
+                    WHERE public.key_moments.session_id = EXCLUDED.session_id
+                       OR public.key_moments.session_id = %(placeholder_session_id)s
                     """,
                     {
                         "id": moment.id,
                         "session_id": session_id,
+                        "placeholder_session_id": UUID("00000000-0000-0000-0000-000000000000"),
                         "data": data,
                         "created_at": moment.when,
                     },
                 )
+                if cur.rowcount == 0:
+                    raise ValueError(
+                        f"KeyMoment {moment.id} already belongs to another session"
+                    )
 
     def get_key_moment(self, moment_id: UUID) -> KeyMoment | None:
         """

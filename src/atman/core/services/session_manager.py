@@ -143,6 +143,25 @@ class SessionManager:
         except (OSError, ValueError) as exc:
             _LOG.warning("Failed to write journal entry for session %s: %s", session_id, exc)
 
+    # PLAYBOOK-START
+    # id: self-contained-recovery-journals
+    # category: design-patterns
+    # title: Self-Contained Recovery Journals for In-Flight State
+    # status: draft
+    # since: 2026-05-12
+    #
+    # Pattern: when journaling in-flight state for crash recovery, include enough
+    # payload to reconstruct the referenced records, not just their IDs. Recovery
+    # must refuse to delete the journal if it cannot rebuild every referenced row.
+    #
+    # Why generalizable: any write-behind or finish-time persistence flow can crash
+    # between "record exists in memory" and "record exists in durable storage".
+    # ID-only journals create dangling references; self-contained journal entries
+    # preserve the last recovery source.
+    #
+    # Trade-offs: journal entries are larger and may duplicate data already stored
+    # on the happy path, but the duplication is bounded and only used for recovery.
+    # PLAYBOOK-END
     def _recover_orphaned_sessions(self, agent_id: UUID) -> None:
         """
         Scan for orphaned session journals and convert to SessionExperience.
@@ -180,6 +199,7 @@ class SessionManager:
 
                 # Parse journal to extract key moments and facts
                 key_moment_ids: list[UUID] = []
+                journaled_moments: dict[UUID, KeyMoment] = {}
                 fact_refs_set: set[UUID] = set()
 
                 with journal_file.open("r", encoding="utf-8") as f:
@@ -192,6 +212,9 @@ class SessionManager:
                             if entry.get("type") == "key_moment":
                                 moment_id = UUID(entry["moment_id"])
                                 key_moment_ids.append(moment_id)
+                                moment_data = entry.get("moment")
+                                if isinstance(moment_data, dict):
+                                    journaled_moments[moment_id] = KeyMoment.model_validate(moment_data)
                                 # Extract fact_refs if present
                                 for fact_id_str in entry.get("fact_refs", []):
                                     fact_refs_set.add(UUID(fact_id_str))
@@ -210,8 +233,25 @@ class SessionManager:
                     loaded_moments: list[KeyMoment] = []
                     for moment_id in key_moment_ids:
                         loaded_moment = self._state_store.get_key_moment(moment_id)
+                        if loaded_moment is None and moment_id in journaled_moments:
+                            loaded_moment = journaled_moments[moment_id]
+                            try:
+                                self._state_store.create_key_moment(loaded_moment)
+                            except ValueError:
+                                # Another recovery/finish path stored it first.
+                                loaded_moment = self._state_store.get_key_moment(moment_id)
                         if loaded_moment is not None:
                             loaded_moments.append(loaded_moment)
+
+                    if len(loaded_moments) != len(key_moment_ids):
+                        _LOG.warning(
+                            "Cannot recover orphaned session %s: %d/%d key moments available; "
+                            "leaving journal for manual recovery",
+                            session_id,
+                            len(loaded_moments),
+                            len(key_moment_ids),
+                        )
+                        continue
 
                     # Compute better metadata if we have loaded moments
                     avg_emotional_intensity = 0.5
@@ -424,6 +464,7 @@ class SessionManager:
                     "moment_id": str(moment.id),
                     "timestamp": self._clock.now().isoformat(),
                     "what_happened": moment.what_happened,
+                    "moment": moment.model_dump(mode="json"),
                     "fact_refs": [str(fid) for fid in moment.fact_refs],
                 },
             )
@@ -472,6 +513,7 @@ class SessionManager:
                     "moment_id": str(key_moment.id),
                     "timestamp": self._clock.now().isoformat(),
                     "what_happened": key_moment.what_happened,
+                    "moment": key_moment.model_dump(mode="json"),
                     "fact_refs": [str(fid) for fid in key_moment.fact_refs],
                 },
             )

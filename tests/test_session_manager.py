@@ -1694,8 +1694,9 @@ def test_orphan_recovery_handles_malformed_journal(
     # Should not raise - just skip bad lines
     manager.start_session(identity_fixture.id)
 
-    # Journal should still be deleted
-    assert not orphan_journal.exists()
+    # The valid-looking line has no recoverable KeyMoment payload, so keep the
+    # journal instead of deleting the only remaining recovery source.
+    assert orphan_journal.exists()
 
 
 def test_journal_not_created_without_workspace(identity_fixture, narrative_fixture, frozen_clock):
@@ -1816,6 +1817,7 @@ def test_append_key_moment_writes_journal_for_affect_detector(
         entry = json.loads(lines[0])
         assert entry["type"] == "key_moment"
         assert entry["what_happened"] == "Affect-detected moment"
+        assert entry["moment"]["what_happened"] == "Affect-detected moment"
 
 
 def test_orphan_recovery_loads_key_moments_from_storage(
@@ -1880,3 +1882,49 @@ def test_orphan_recovery_loads_key_moments_from_storage(
     assert recovered_exp is not None
     assert recovered_exp.experience.has_profound_moment is True  # Loaded from storage
     assert recovered_exp.experience.avg_emotional_intensity == 0.9  # Loaded from storage
+
+
+def test_orphan_recovery_restores_journaled_key_moment_payload(
+    tmp_path, identity_fixture, narrative_fixture, frozen_clock
+):
+    """Orphan recovery must not create experiences pointing at missing KeyMoment rows."""
+    store = FileStateStore(workspace=tmp_path / "recovery_payload_store")
+    store.save_identity(identity_fixture)
+    store.save_narrative(narrative_fixture)
+
+    workspace = tmp_path / "recovery_payload_workspace"
+    manager = SessionManager(store, clock=frozen_clock, workspace=workspace)
+    context = manager.start_session(identity_fixture.id)
+
+    moment = KeyMomentInput(
+        what_happened="Journaled but not finished",
+        emotional_valence=0.4,
+        emotional_intensity=0.8,
+        depth=EmotionalDepth.PROFOUND,
+        why_it_matters="This would be lost without payload recovery",
+        values_touched=["continuity"],
+        fact_refs=[uuid4()],
+    )
+    manager.append_key_moment_input(context.session_id, moment)
+
+    journal_path = (
+        workspace / str(identity_fixture.id) / "sessions" / f"active_{context.session_id}.jsonl"
+    )
+    assert journal_path.exists()
+    assert store.get_key_moments_for_session(context.session_id) == []
+
+    recovery_manager = SessionManager(store, clock=frozen_clock, workspace=workspace)
+    recovery_manager.start_session(identity_fixture.id)
+
+    assert not journal_path.exists()
+    experience_id = deterministic_session_experience_id(context.session_id)
+    recovered_exp = store.get_experience(experience_id)
+    assert recovered_exp is not None
+    assert recovered_exp.experience.recorded_by == "session_manager_recovery"
+    assert recovered_exp.experience.close_reason == "interrupted"
+    assert len(recovered_exp.experience.key_moment_ids) == 1
+
+    restored_moment = store.get_key_moment(recovered_exp.experience.key_moment_ids[0])
+    assert restored_moment is not None
+    assert restored_moment.what_happened == "Journaled but not finished"
+    assert restored_moment.how_i_felt.depth == EmotionalDepth.PROFOUND
