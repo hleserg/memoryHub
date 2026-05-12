@@ -322,7 +322,7 @@ class AtmanRunner:
                     except Exception:
                         _LOG.warning("Micro-reflection failed", exc_info=True)
                 except Exception as e:
-                    console.print(f"[term.err]Ошибка:[/term.err] {e}\n")
+                    console.print(f"[term.err]Ошибка:[/term.err] {escape(str(e))}\n")
                     _LOG.exception("Agent or session error in chat loop")
                 finally:
                     _finalize_open_session(
@@ -332,7 +332,7 @@ class AtmanRunner:
                         key_insight="",
                     )
             except Exception as e:
-                console.print(f"[term.err]Ошибка запуска сессии:[/term.err] {e}\n")
+                console.print(f"[term.err]Ошибка запуска сессии:[/term.err] {escape(str(e))}\n")
                 _LOG.exception("Session start failed")
                 continue
 

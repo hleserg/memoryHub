@@ -13,21 +13,21 @@
 CREATE OR REPLACE FUNCTION public.prevent_key_moment_modification()
 RETURNS TRIGGER LANGUAGE plpgsql AS $$
 BEGIN
-    RAISE EXCEPTION 'key_moments are immutable';
+    RAISE EXCEPTION 'key_moments are immutable (UPDATE not allowed)';
 END;
 $$;
 
 CREATE OR REPLACE FUNCTION public.prevent_snapshot_modification()
 RETURNS TRIGGER LANGUAGE plpgsql AS $$
 BEGIN
-    RAISE EXCEPTION 'identity_snapshots are immutable';
+    RAISE EXCEPTION 'identity_snapshots are immutable (UPDATE not allowed)';
 END;
 $$;
 
 CREATE OR REPLACE FUNCTION public.prevent_reframing_modification()
 RETURNS TRIGGER LANGUAGE plpgsql AS $$
 BEGIN
-    RAISE EXCEPTION 'reframing_notes are append-only';
+    RAISE EXCEPTION 'reframing_notes are append-only (UPDATE/DELETE not allowed)';
 END;
 $$;
 
@@ -88,7 +88,7 @@ BEGIN
             ON %I.identity_snapshots (agent_id, snapshot_at DESC);
         DROP TRIGGER IF EXISTS identity_snapshots_immutable ON %I.identity_snapshots;
         CREATE TRIGGER identity_snapshots_immutable
-            BEFORE DELETE OR UPDATE ON %I.identity_snapshots
+            BEFORE UPDATE ON %I.identity_snapshots
             FOR EACH ROW EXECUTE FUNCTION public.prevent_snapshot_modification();
     $sql$, schema_name, schema_name, schema_name, schema_name);
 
@@ -157,7 +157,7 @@ BEGIN
             WHERE embedding IS NOT NULL;
         DROP TRIGGER IF EXISTS key_moments_immutable ON %I.key_moments;
         CREATE TRIGGER key_moments_immutable
-            BEFORE DELETE OR UPDATE ON %I.key_moments
+            BEFORE UPDATE ON %I.key_moments
             FOR EACH ROW EXECUTE FUNCTION public.prevent_key_moment_modification();
     $sql$,
     schema_name, schema_name,

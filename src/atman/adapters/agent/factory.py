@@ -90,6 +90,14 @@ class _ExperienceAdapter(ExperienceRepository):
         raise NotImplementedError
 
     def add_reframing_note(self, experience_id, note):
+        # Check for duplicate before calling store
+        if note.triggered_by:
+            record = self._s.get_experience(experience_id)
+            if record is None:
+                return ReframingNoteAppendResult.EXPERIENCE_NOT_FOUND
+            if any(n.triggered_by == note.triggered_by for n in record.experience.reframing_notes):
+                return ReframingNoteAppendResult.DUPLICATE_TRIGGERED_BY
+
         result = self._s.add_reframing_note(experience_id, note)
         return (
             ReframingNoteAppendResult.STORED
