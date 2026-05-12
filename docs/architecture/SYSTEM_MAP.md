@@ -34,7 +34,7 @@ All paths are absolute relative to the repository root.
 |------|---------|-----------|
 | `core/ports/memory_backend.py` | Factual memory interface | `FactualMemory` (ABC) |
 | `core/ports/clock.py` | Domain clock for reproducibility | `ClockPort` (Protocol) |
-| `core/ports/state_store.py` | Storage for experience/identity/narrative | `StateStore`, `ExperienceQuery`, `SessionExperienceQuery`, `ValuesTouchedQuery`, `DepthQuery`, `DateRangeQuery` |
+| `core/ports/state_store.py` | Storage for experience/identity/narrative | `StateStore`, `ExperienceQuery`, `SessionExperienceQuery`, `ValuesTouchedQuery`, `DepthQuery`, `DateRangeQuery`, `FactRefsContainsQuery` |
 | `core/ports/reflection.py` | Reflection Engine dependencies; `ReflectionModel` returns structured DTOs (#146) | `ExperienceRepository`, `IdentityRepository`, `NarrativeRepository`, `ReflectionModel`, `PatternStore`, `ReflectionEventStore`, `HealthAssessmentStore`, `ReflectionEventPersistenceObserver`, `NarrativeWriteAuditPort` |
 | `core/ports/embedding.py` (E24.6) | Text embedding generation for semantic similarity | `EmbeddingPort` (Protocol) |
 | `core/ports/memory_middleware.py` (E24) | Memory surfacing context wrapping | `MemoryMiddlewarePort` (Protocol), `MemoryContext` |

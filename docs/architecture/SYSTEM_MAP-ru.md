@@ -37,7 +37,7 @@
 |------|------------|-----------|
 | `core/ports/memory_backend.py` | Интерфейс факт-памяти | `FactualMemory` (ABC) |
 | `core/ports/clock.py` | Доменные часы для воспроизводимости | `ClockPort` (Protocol) |
-| `core/ports/state_store.py` | Хранилище опыта/identity/нарратива | `StateStore`, `ExperienceQuery`, `SessionExperienceQuery`, `ValuesTouchedQuery`, `DepthQuery`, `DateRangeQuery` |
+| `core/ports/state_store.py` | Хранилище опыта/identity/нарратива | `StateStore`, `ExperienceQuery`, `SessionExperienceQuery`, `ValuesTouchedQuery`, `DepthQuery`, `DateRangeQuery`, `FactRefsContainsQuery` |
 | `core/ports/reflection.py` | Зависимости Reflection Engine; `ReflectionModel` возвращает DTO (#146) | `ExperienceRepository`, `IdentityRepository`, `NarrativeRepository`, `ReflectionModel`, `PatternStore`, `ReflectionEventStore`, `HealthAssessmentStore`, `ReflectionEventPersistenceObserver`, `NarrativeWriteAuditPort` |
 | **`core/ports/reflection_store.py`** | **E27**: Интерфейс таблицы PostgreSQL `reflections` | `ReflectionStore` (ABC): `add`, `get`, `list_by_session`, `list_recent`, `list_by_level`, `list_by_experience` |
 | `core/ports/embedding.py` | Интерфейс эмбеддингов для семантического поиска | `EmbeddingPort` (ABC) — `embed()`, `embed_batch()`, `dimension()`, `model_name()` |
