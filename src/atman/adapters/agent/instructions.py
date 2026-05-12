@@ -30,7 +30,6 @@ from uuid import UUID
 
 from atman.adapters.agent.deps import AtmanDeps
 
-
 # PLAYBOOK-START
 # id: dynamic-prompt-from-state-with-truncation
 # category: design-patterns
@@ -164,7 +163,9 @@ def build_memory_context(
 
         if narrative.recent_layer.content.strip():
             parts.append("\n## Нарратив (недавнее)\n")
-            parts.append(_truncate_text(narrative.recent_layer.content, deps.truncate_narrative_recent))
+            parts.append(
+                _truncate_text(narrative.recent_layer.content, deps.truncate_narrative_recent)
+            )
             parts.append("\n")
 
     return "".join(parts)

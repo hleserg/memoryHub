@@ -30,11 +30,11 @@ DIVIDER = "═" * 70
 
 SCENARIOS = [
     # (module_path, label, needs_llm)
-    ("e2e/scenarios/test_signal_interrupt.py",    "signal_interrupt",    False),
-    ("e2e/scenarios/test_token_monitor.py",        "token_monitor",       True),
-    ("e2e/scenarios/test_unexamined_facts.py",     "unexamined_facts",    True),
+    ("e2e/scenarios/test_signal_interrupt.py", "signal_interrupt", False),
+    ("e2e/scenarios/test_token_monitor.py", "token_monitor", True),
+    ("e2e/scenarios/test_unexamined_facts.py", "unexamined_facts", True),
     ("e2e/scenarios/test_restart_with_handoff.py", "restart_with_handoff", True),
-    ("e2e/live_scenario.py",                       "live_full",           True),
+    ("e2e/live_scenario.py", "live_full", True),
 ]
 
 

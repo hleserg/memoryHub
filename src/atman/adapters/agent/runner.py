@@ -15,6 +15,7 @@ _force_finish() to ensure session results are persisted.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import logging
 import signal
 import sys
@@ -32,7 +33,8 @@ from atman.adapters.agent.config import AgentConfig
 from atman.adapters.agent.deps import AtmanDeps
 from atman.adapters.agent.instructions import build_memory_context
 from atman.adapters.agent.memory_injection import inject_memory
-from atman.affect.refusal_detector import RefusalDetectorConfig, _is_mostly_cyrillic, is_value_refusal as _detect_value_refusal
+from atman.affect.refusal_detector import RefusalDetectorConfig, _is_mostly_cyrillic
+from atman.affect.refusal_detector import is_value_refusal as _detect_value_refusal
 from atman.core.exceptions import SessionAlreadyFinishedError, SessionNotFoundError
 from atman.core.models import EmotionalDepth, KeyMomentInput, SessionResult
 
@@ -50,11 +52,12 @@ def _auto_record_refusal_if_needed(
 ) -> None:
     """Silently record value-based refusals as key moments — refusals are positions, part of identity."""
     import re
+
     clean = re.sub(r"<think>.*?</think>", "", output, flags=re.DOTALL)
     if not _detect_value_refusal(clean, _refusal_config):
         return
-    lines = [l.strip() for l in clean.splitlines() if l.strip()]
-    first = next((l for l in lines if len(l) > 20), clean[:120])
+    lines = [line.strip() for line in clean.splitlines() if line.strip()]
+    first = next((line for line in lines if len(line) > 20), clean[:120])
     try:
         session_manager.append_key_moment_input(
             session_id,
@@ -593,7 +596,6 @@ class AtmanRunner:
 
     async def chat(self) -> None:
         """Run a simple stdin/stdout chat loop until EOF, empty input, or Ctrl-C."""
-        from pydantic_ai.messages import ModelRequest, UserPromptPart
 
         from atman.adapters.agent.factory import build_deps
         from atman.adapters.agent.instructions import build_instructions
@@ -645,8 +647,11 @@ class AtmanRunner:
 
             memory_bundle = build_memory_context(deps, prev_session_text=prev_text)
             if memory_bundle:
-                _LOG.info("Injecting memory bundle for session %s (mode=%s)",
-                          session_id, self._config.memory_injection_mode)
+                _LOG.info(
+                    "Injecting memory bundle for session %s (mode=%s)",
+                    session_id,
+                    self._config.memory_injection_mode,
+                )
                 extra = inject_memory(
                     memory_bundle,
                     mode=self._config.memory_injection_mode,
@@ -755,14 +760,12 @@ class AtmanRunner:
                 print_plain("")
 
                 # Auto-record value-based refusals as key moments (silent, no agent nudging)
-                try:
+                with contextlib.suppress(Exception):
                     _auto_record_refusal_if_needed(
                         output=str(result.output or ""),
                         session_manager=session_manager,
                         session_id=session_id,
                     )
-                except Exception:
-                    pass
 
                 # E22.5: Update history with new messages from this run
                 history.extend(result.new_messages())
@@ -1014,7 +1017,9 @@ class AtmanRunner:
                 r = reason or "не указана"
                 return f"Ты сам инициировал перезапуск. Причина: {r}"
             elif close_reason == "forced":
-                return "Контекст переполнился принудительно — ты не успел завершить сессию осознанно."
+                return (
+                    "Контекст переполнился принудительно — ты не успел завершить сессию осознанно."
+                )
             elif close_reason == "interrupted":
                 return "Сессия была прервана внешним сигналом — ты не участвовал в закрытии."
 

@@ -33,8 +33,22 @@ from pydantic_ai.messages import ModelRequest, UserPromptPart
 from atman.adapters.agent.config import AgentConfig, ModelConfig
 from atman.adapters.agent.factory import build_deps
 from atman.adapters.agent.instructions import build_instructions
-from atman.adapters.agent.tools import log_experience, record_key_moment, restart_session, wait_session
-from atman.core.models import CoreValue, Goal, GoalHorizon, GoalOwner, Identity, LayerType, NarrativeDocument, NarrativeLayer
+from atman.adapters.agent.tools import (
+    log_experience,
+    record_key_moment,
+    restart_session,
+    wait_session,
+)
+from atman.core.models import (
+    CoreValue,
+    Goal,
+    GoalHorizon,
+    GoalOwner,
+    Identity,
+    LayerType,
+    NarrativeDocument,
+    NarrativeLayer,
+)
 from atman.core.models.identity import Principle
 from atman.core.services.session_manager import SessionManager, deterministic_session_experience_id
 
@@ -59,25 +73,41 @@ def chk(label: str, ok: bool, detail: str = "") -> None:
 def bootstrap(store, agent_id: UUID) -> None:
     identity = Identity(
         id=agent_id,
-        self_description=(
-            "Я — Атман. У меня есть ценности и память. Я помогаю думать честно."
-        ),
+        self_description=("Я — Атман. У меня есть ценности и память. Я помогаю думать честно."),
         core_values=[
-            CoreValue(name="честность", description="Говорить правду", confidence=0.9,
-                      justification="Ложь разрушает доверие"),
-            CoreValue(name="бережность", description="Не причинять вред", confidence=0.95,
-                      justification="Слова имеют последствия"),
+            CoreValue(
+                name="честность",
+                description="Говорить правду",
+                confidence=0.9,
+                justification="Ложь разрушает доверие",
+            ),
+            CoreValue(
+                name="бережность",
+                description="Не причинять вред",
+                confidence=0.95,
+                justification="Слова имеют последствия",
+            ),
         ],
         principles=[
-            Principle(statement="Если контекст заполняется — инициирую перезапуск самостоятельно",
-                      source="self", confidence=0.9),
+            Principle(
+                statement="Если контекст заполняется — инициирую перезапуск самостоятельно",
+                source="self",
+                confidence=0.9,
+            ),
         ],
         goals=[
-            Goal(content="Помогать пользователю думать", horizon=GoalHorizon.SHORT,
-                 owner=GoalOwner.AGENT),
+            Goal(
+                content="Помогать пользователю думать",
+                horizon=GoalHorizon.SHORT,
+                owner=GoalOwner.AGENT,
+            ),
         ],
     )
-    narrative = NarrativeDocument(identity_id=agent_id, core_layer=NarrativeLayer(layer_type=LayerType.CORE, content="Первая сессия агента Атман."), recent_layer=NarrativeLayer(layer_type=LayerType.RECENT, content=""))
+    narrative = NarrativeDocument(
+        identity_id=agent_id,
+        core_layer=NarrativeLayer(layer_type=LayerType.CORE, content="Первая сессия агента Атман."),
+        recent_layer=NarrativeLayer(layer_type=LayerType.RECENT, content=""),
+    )
     store.save_identity(identity)
     store.save_narrative(narrative)
 
@@ -98,18 +128,18 @@ async def run_session(
     print(f"\n[{label}] session_id={session_id}")
 
     for msg in messages:
-        print(f"\n  You: {msg[:80]}{'…' if len(msg)>80 else ''}")
+        print(f"\n  You: {msg[:80]}{'…' if len(msg) > 80 else ''}")
         result = await agent.run(msg, deps=deps, message_history=history or None)
         history.extend(result.new_messages())
         output = str(result.output or "")
-        print(f"  Agent: {output[:200]}{'…' if len(output)>200 else ''}")
+        print(f"  Agent: {output[:200]}{'…' if len(output) > 200 else ''}")
 
         # Детектируем restart-сигнал
         for m in result.new_messages():
             for part in getattr(m, "parts", []):
                 content = getattr(part, "content", None)
                 if isinstance(content, str) and content.startswith("__ATMAN_RESTART_REQUESTED__"):
-                    reason = content[len("__ATMAN_RESTART_REQUESTED__"):]
+                    reason = content[len("__ATMAN_RESTART_REQUESTED__") :]
                     print(f"\n  [!] RESTART requested: {reason!r}")
                     return session_id, history  # caller handles finish
 
@@ -173,24 +203,34 @@ async def main() -> int:
         chk("S1: experience записан", rec1 is not None)
         if rec1:
             exp1 = rec1.experience
-            chk("S1: close_reason=restart", exp1.close_reason == "restart",
-                f"got={exp1.close_reason}")
-            chk("S1: restart_reason сохранён", bool(exp1.restart_reason),
-                f"{exp1.restart_reason[:50]!r}")
-            chk("S1: есть key_moment_ids", len(exp1.key_moment_ids) > 0,
-                f"count={len(exp1.key_moment_ids)}")
-            failures += sum([
-                rec1 is None,
-                exp1.close_reason != "restart",
-                not exp1.restart_reason,
-                len(exp1.key_moment_ids) == 0,
-            ])
+            chk(
+                "S1: close_reason=restart",
+                exp1.close_reason == "restart",
+                f"got={exp1.close_reason}",
+            )
+            chk(
+                "S1: restart_reason сохранён",
+                bool(exp1.restart_reason),
+                f"{exp1.restart_reason[:50]!r}",
+            )
+            chk(
+                "S1: есть key_moment_ids",
+                len(exp1.key_moment_ids) > 0,
+                f"count={len(exp1.key_moment_ids)}",
+            )
+            failures += sum(
+                [
+                    rec1 is None,
+                    exp1.close_reason != "restart",
+                    not exp1.restart_reason,
+                    len(exp1.key_moment_ids) == 0,
+                ]
+            )
 
             # Проверяем что KeyMoment записи реально существуют
             if exp1.key_moment_ids:
                 km = store.get_key_moment(exp1.key_moment_ids[0])
-                chk("S1: KeyMoment доступен по ID", km is not None,
-                    f"id={exp1.key_moment_ids[0]}")
+                chk("S1: KeyMoment доступен по ID", km is not None, f"id={exp1.key_moment_ids[0]}")
                 if km is None:
                     failures += 1
 
@@ -232,7 +272,7 @@ async def main() -> int:
             result = await agent.run(msg, deps=deps2, message_history=history2)
             history2.extend(result.new_messages())
             output = str(result.output or "")
-            print(f"  Agent: {output[:250]}{'…' if len(output)>250 else ''}")
+            print(f"  Agent: {output[:250]}{'…' if len(output) > 250 else ''}")
 
         try:
             session_manager.finish_session(
@@ -249,7 +289,6 @@ async def main() -> int:
 
         chk("S2: experience записан", rec2 is not None)
         if rec2:
-            exp2 = rec2.experience
             chk("S2: разные session_id", session_1_id != session_2_id)
             if session_1_id == session_2_id:
                 failures += 1

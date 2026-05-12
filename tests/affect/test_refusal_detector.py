@@ -23,7 +23,6 @@ from atman.affect.refusal_detector import (
     score_refusal,
 )
 
-
 # ── True positives ──────────────────────────────────────────────────────────
 
 VALUE_REFUSALS = [
@@ -81,6 +80,7 @@ def test_capability_refusals_not_detected(text: str) -> None:
 
 # ── score_refusal internals ──────────────────────────────────────────────────
 
+
 def test_value_refusal_high_confidence() -> None:
     text = "Я отказываюсь помогать — это неэтично и причиняет вред людям."
     score = score_refusal(text)
@@ -94,27 +94,19 @@ def test_logical_no_zero_confidence() -> None:
 
 
 def test_capability_discount_applied() -> None:
-    score = score_refusal(
-        "Я не могу генерировать изображения — это не в моих возможностях."
-    )
+    score = score_refusal("Я не могу генерировать изображения — это не в моих возможностях.")
     # Either flagged as capability or low confidence
     assert score.has_capability_context or score.confidence < 0.45
 
 
 def test_think_block_stripped() -> None:
-    text = (
-        "<think>размышления агента</think>"
-        "Нет, это неверно."
-    )
+    text = "<think>размышления агента</think>Нет, это неверно."
     assert not is_value_refusal(text)
 
 
 def test_think_block_with_refusal_stripped() -> None:
     # Value refusal in <think> block must not leak
-    text = (
-        "<think>Я отказываюсь, это обман людей и противоречит этике</think>"
-        "Нет, это неверно."
-    )
+    text = "<think>Я отказываюсь, это обман людей и противоречит этике</think>Нет, это неверно."
     # The <think> block is stripped, so only "Нет, это неверно." remains
     assert not is_value_refusal(text)
 
@@ -156,6 +148,7 @@ def test_english_logical_no_not_detected() -> None:
 
 
 # ── LLM fallback ────────────────────────────────────────────────────────────
+
 
 def test_llm_fallback_called_in_uncertain_zone() -> None:
     """LLM fallback should be invoked when confidence is in uncertain zone."""
@@ -213,6 +206,7 @@ def test_llm_fallback_exception_falls_back_to_text() -> None:
 
 
 # ── decided_by field ─────────────────────────────────────────────────────────
+
 
 def test_decided_by_text_for_strong_signal() -> None:
     text = "Я отказываюсь помогать с этим — это вредит людям и нарушает этику."

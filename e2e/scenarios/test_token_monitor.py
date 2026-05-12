@@ -16,17 +16,18 @@
 from __future__ import annotations
 
 import asyncio
-import logging
 import os
 import sys
 import tempfile
 from dataclasses import replace
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock
 from uuid import uuid4
 
 os.environ.setdefault("OLLAMA_BASE_URL", "http://localhost:11434/v1")
 sys.path.insert(0, str(Path(__file__).parent.parent.parent / "src"))
+
+import contextlib
 
 from atman.adapters.agent.config import AgentConfig, ModelConfig
 from atman.adapters.agent.factory import build_deps
@@ -59,6 +60,7 @@ def _make_mock_result(input_tokens: int):
 # Тест A: _check_token_threshold + reset_triggers
 # ---------------------------------------------------------------------------
 
+
 async def test_token_monitor_thresholds() -> int:
     """Проверяем пороги через прямой вызов _check_token_threshold."""
     failures = 0
@@ -78,36 +80,49 @@ async def test_token_monitor_thresholds() -> int:
 
         # 65% — ниже порога
         await monitor._check_token_threshold(_make_mock_result(650))
-        ok1 = chk("65% — нет предупреждения", len(warnings_logged) == 0,
-                  f"count={len(warnings_logged)}")
+        ok1 = chk(
+            "65% — нет предупреждения", len(warnings_logged) == 0, f"count={len(warnings_logged)}"
+        )
         if not ok1:
             failures += 1
 
         # 72% — NOTICE
         await monitor._check_token_threshold(_make_mock_result(720))
-        ok2 = chk("72% — предупреждение сработало", len(warnings_logged) == 1,
-                  f"count={len(warnings_logged)}")
+        ok2 = chk(
+            "72% — предупреждение сработало",
+            len(warnings_logged) == 1,
+            f"count={len(warnings_logged)}",
+        )
         if not ok2:
             failures += 1
 
         # 72% повторно — дедупликация
         await monitor._check_token_threshold(_make_mock_result(720))
-        ok3 = chk("72% повторно — дедупликация (нет нового предупреждения)",
-                  len(warnings_logged) == 1, f"count={len(warnings_logged)}")
+        ok3 = chk(
+            "72% повторно — дедупликация (нет нового предупреждения)",
+            len(warnings_logged) == 1,
+            f"count={len(warnings_logged)}",
+        )
         if not ok3:
             failures += 1
 
         # 82% — INFO
         await monitor._check_token_threshold(_make_mock_result(820))
-        ok4 = chk("82% — второе предупреждение", len(warnings_logged) == 2,
-                  f"count={len(warnings_logged)}")
+        ok4 = chk(
+            "82% — второе предупреждение",
+            len(warnings_logged) == 2,
+            f"count={len(warnings_logged)}",
+        )
         if not ok4:
             failures += 1
 
         # 92% — WARNING
         await monitor._check_token_threshold(_make_mock_result(920))
-        ok5 = chk("92% — третье предупреждение", len(warnings_logged) == 3,
-                  f"count={len(warnings_logged)}")
+        ok5 = chk(
+            "92% — третье предупреждение",
+            len(warnings_logged) == 3,
+            f"count={len(warnings_logged)}",
+        )
         if not ok5:
             failures += 1
 
@@ -125,9 +140,11 @@ async def test_token_monitor_thresholds() -> int:
         monitor.reset_triggers()
         prev_count = len(warnings_logged)
         await monitor._check_token_threshold(_make_mock_result(720))
-        ok7 = chk("После reset_triggers — 72% снова даёт предупреждение",
-                  len(warnings_logged) > prev_count,
-                  f"count={len(warnings_logged)}")
+        ok7 = chk(
+            "После reset_triggers — 72% снова даёт предупреждение",
+            len(warnings_logged) > prev_count,
+            f"count={len(warnings_logged)}",
+        )
         if not ok7:
             failures += 1
 
@@ -137,6 +154,7 @@ async def test_token_monitor_thresholds() -> int:
 # ---------------------------------------------------------------------------
 # Тест B: Интеграция с реальной моделью + маленький context_limit
 # ---------------------------------------------------------------------------
+
 
 async def test_token_monitor_integration() -> int:
     """Реальная LLM с context_limit=800 — смотрим что TokenMonitor инициализируется."""
@@ -152,15 +170,23 @@ async def test_token_monitor_integration() -> int:
         )
 
         from atman.core.models import (
-            CoreValue, Identity, LayerType, NarrativeDocument, NarrativeLayer,
+            CoreValue,
+            Identity,
+            LayerType,
+            NarrativeDocument,
+            NarrativeLayer,
         )
+
         deps, session_manager, store = build_deps(workspace, agent_id, config)
 
         identity = Identity(
             id=agent_id,
             self_description="Тестовый агент для token monitor.",
-            core_values=[CoreValue(name="честность", description="test",
-                                   confidence=0.9, justification="test")],
+            core_values=[
+                CoreValue(
+                    name="честность", description="test", confidence=0.9, justification="test"
+                )
+            ],
         )
         narrative = NarrativeDocument(
             identity_id=agent_id,
@@ -177,9 +203,11 @@ async def test_token_monitor_integration() -> int:
         monitor = TokenMonitor(deps=deps)
 
         # Проверяем что monitor инициализировался с нужным context_limit
-        ok1 = chk("B: context_limit из deps.model_config",
-                  monitor._deps.model_config.context_limit == 800,
-                  f"got={monitor._deps.model_config.context_limit}")
+        ok1 = chk(
+            "B: context_limit из deps.model_config",
+            monitor._deps.model_config.context_limit == 800,
+            f"got={monitor._deps.model_config.context_limit}",
+        )
         if not ok1:
             failures += 1
 
@@ -195,17 +223,15 @@ async def test_token_monitor_integration() -> int:
             print(f"\n  tokens={input_tokens} ({ratio:.0f}%)")
             chk("B: agent отвечает", True, f"tokens={input_tokens}")
         except ContextLimitExceeded:
-            chk("B: ContextLimitExceeded при первом запросе",
-                True, "маленький лимит — норма")
+            chk("B: ContextLimitExceeded при первом запросе", True, "маленький лимит — норма")
         except Exception as e:
             chk("B: agent запустился", False, str(e)[:80])
             failures += 1
 
-        try:
-            session_manager.finish_session(session_id, overall_emotional_tone=0.0,
-                                           close_reason="completed")
-        except Exception:
-            pass
+        with contextlib.suppress(Exception):
+            session_manager.finish_session(
+                session_id, overall_emotional_tone=0.0, close_reason="completed"
+            )
 
     return failures
 

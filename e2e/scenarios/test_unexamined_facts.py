@@ -18,7 +18,6 @@ import asyncio
 import os
 import sys
 import tempfile
-from dataclasses import replace
 from pathlib import Path
 from uuid import UUID, uuid4
 
@@ -28,10 +27,15 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent / "src"))
 from atman.adapters.agent.config import AgentConfig, ModelConfig
 from atman.adapters.agent.factory import build_deps
 from atman.core.models import (
-    CoreValue, EmotionalDepth, Goal, GoalHorizon, GoalOwner,
-    Identity, KeyMomentInput, LayerType, NarrativeDocument, NarrativeLayer,
+    CoreValue,
+    EmotionalDepth,
+    Identity,
+    KeyMomentInput,
+    LayerType,
+    NarrativeDocument,
+    NarrativeLayer,
 )
-from atman.core.services.session_manager import SessionManager, deterministic_session_experience_id
+from atman.core.services.session_manager import deterministic_session_experience_id
 
 DIVIDER = "─" * 70
 MODEL = os.environ.get("ATMAN_MODEL", "ollama:qwen3.5:9b")
@@ -48,14 +52,18 @@ def chk(label: str, ok: bool, detail: str = "") -> bool:
 
 
 def bootstrap(store, agent_id: UUID) -> None:
-    from atman.core.models.identity import Principle
     identity = Identity(
         id=agent_id,
         self_description="Тестовый агент для unexamined facts.",
-        core_values=[CoreValue(name="честность", description="test",
-                               confidence=0.9, justification="test")],
+        core_values=[
+            CoreValue(name="честность", description="test", confidence=0.9, justification="test")
+        ],
     )
-    narrative = NarrativeDocument(identity_id=agent_id, core_layer=NarrativeLayer(layer_type=LayerType.CORE, content="test"), recent_layer=NarrativeLayer(layer_type=LayerType.RECENT, content=""))
+    narrative = NarrativeDocument(
+        identity_id=agent_id,
+        core_layer=NarrativeLayer(layer_type=LayerType.CORE, content="test"),
+        recent_layer=NarrativeLayer(layer_type=LayerType.RECENT, content=""),
+    )
     store.save_identity(identity)
     store.save_narrative(narrative)
 
@@ -63,6 +71,7 @@ def bootstrap(store, agent_id: UUID) -> None:
 # ---------------------------------------------------------------------------
 # Тест A: unexamined_fact_refs вычисляется корректно
 # ---------------------------------------------------------------------------
+
 
 def test_unexamined_facts_computation() -> int:
     failures = 0
@@ -105,19 +114,20 @@ def test_unexamined_facts_computation() -> int:
         exp_id = deterministic_session_experience_id(session_id)
         rec = store.get_experience(exp_id)
 
-        ok1 = chk("A: experience записан", rec is not None)
+        chk("A: experience записан", rec is not None)
         if rec:
             exp = rec.experience
             unex = set(exp.unexamined_fact_refs)
-            ok2 = chk("A: fact_b в unexamined",
-                      fact_b in unex, f"unexamined={[str(u)[:8] for u in unex]}")
-            ok3 = chk("A: fact_c в unexamined",
-                      fact_c in unex)
-            ok4 = chk("A: fact_a НЕ в unexamined (он окрашен)",
-                      fact_a not in unex)
-            ok5 = chk("A: fact_refs содержит все три",
-                      set(exp.fact_refs) == {fact_a, fact_b, fact_c},
-                      f"fact_refs={[str(f)[:8] for f in exp.fact_refs]}")
+            ok2 = chk(
+                "A: fact_b в unexamined", fact_b in unex, f"unexamined={[str(u)[:8] for u in unex]}"
+            )
+            ok3 = chk("A: fact_c в unexamined", fact_c in unex)
+            ok4 = chk("A: fact_a НЕ в unexamined (он окрашен)", fact_a not in unex)
+            ok5 = chk(
+                "A: fact_refs содержит все три",
+                set(exp.fact_refs) == {fact_a, fact_b, fact_c},
+                f"fact_refs={[str(f)[:8] for f in exp.fact_refs]}",
+            )
             failures += sum([not ok2, not ok3, not ok4, not ok5])
         else:
             failures += 4
@@ -136,15 +146,18 @@ def test_unexamined_facts_computation() -> int:
                 depth=EmotionalDepth.SURFACE,
             ),
         )
-        session_manager.finish_session(session_id2, overall_emotional_tone=0.0,
-                                       close_reason="completed")
+        session_manager.finish_session(
+            session_id2, overall_emotional_tone=0.0, close_reason="completed"
+        )
 
         exp2_id = deterministic_session_experience_id(session_id2)
         rec2 = store.get_experience(exp2_id)
         if rec2:
-            ok6 = chk("A2: без фактов → unexamined пуст",
-                      len(rec2.experience.unexamined_fact_refs) == 0,
-                      f"count={len(rec2.experience.unexamined_fact_refs)}")
+            ok6 = chk(
+                "A2: без фактов → unexamined пуст",
+                len(rec2.experience.unexamined_fact_refs) == 0,
+                f"count={len(rec2.experience.unexamined_fact_refs)}",
+            )
             if not ok6:
                 failures += 1
 
@@ -155,11 +168,10 @@ def test_unexamined_facts_computation() -> int:
 # Тест B: wake-up messages для каждого close_reason
 # ---------------------------------------------------------------------------
 
+
 def test_wakeup_messages() -> int:
     failures = 0
     hdr("B: Wake-up messages для каждого close_reason")
-
-    from atman.core.services.session_manager import SessionManager
 
     with tempfile.TemporaryDirectory(prefix="atman_wakeup_") as tmpdir:
         workspace = Path(tmpdir)
@@ -169,12 +181,6 @@ def test_wakeup_messages() -> int:
         bootstrap(store, agent_id)
 
         close_reasons = ["timeout_sleep", "restart", "forced", "interrupted"]
-        expected_keywords = {
-            "timeout_sleep": ["задремал", "sleep", "тайм"],
-            "restart":       ["перезапуск", "restart"],
-            "forced":        ["переполн", "forced", "принудительно"],
-            "interrupted":   ["прерван", "interrupted", "сигнал"],
-        }
 
         for reason in close_reasons:
             ctx = session_manager.start_session(agent_id)
@@ -204,16 +210,20 @@ def test_wakeup_messages() -> int:
                 failures += 1
                 continue
 
-            chk(f"B: {reason} — close_reason сохранён корректно",
+            chk(
+                f"B: {reason} — close_reason сохранён корректно",
                 rec.experience.close_reason == reason,
-                f"got={rec.experience.close_reason}")
+                f"got={rec.experience.close_reason}",
+            )
             if rec.experience.close_reason != reason:
                 failures += 1
 
             if reason == "restart":
-                ok = chk(f"B: restart_reason сохранён",
-                         "тест" in (rec.experience.restart_reason or ""),
-                         f"got={rec.experience.restart_reason!r}")
+                ok = chk(
+                    "B: restart_reason сохранён",
+                    "тест" in (rec.experience.restart_reason or ""),
+                    f"got={rec.experience.restart_reason!r}",
+                )
                 if not ok:
                     failures += 1
 
