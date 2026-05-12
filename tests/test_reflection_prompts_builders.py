@@ -39,7 +39,9 @@ def _session(km: KeyMoment) -> SessionExperience:
     return SessionExperience(
         session_id=uuid4(),
         timestamp=datetime(2025, 3, 1, 12, 0, tzinfo=UTC),
-        key_moments=[km],
+        key_moment_ids=[km.id],
+        avg_emotional_intensity=km.how_i_felt.emotional_intensity,
+        has_profound_moment=km.how_i_felt.depth == EmotionalDepth.PROFOUND,
     )
 
 
@@ -48,7 +50,7 @@ def test_build_reframing_messages_includes_context_and_values() -> None:
     msgs = build_reframing_messages(exp, {"note": "extra"})
     assert msgs[0]["role"] == "system"
     assert "Experience" in msgs[1]["content"]
-    assert "values touched: honesty" in msgs[1]["content"]
+    assert "key moments" in msgs[1]["content"].lower()
     assert "extra" in msgs[1]["content"]
 
 

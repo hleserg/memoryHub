@@ -256,7 +256,7 @@ def test_finish_session_creates_experience_and_eigenstate(session_manager, temp_
     stored_exp = experiences[0].experience
     assert stored_exp.session_id == context.session_id
     assert stored_exp.recorded_by == "session_manager"
-    assert len(stored_exp.key_moments) == 1
+    assert len(stored_exp.key_moment_ids) == 1
 
 
 def test_finish_session_without_key_moments_fails(session_manager):
@@ -292,9 +292,11 @@ def test_stored_experience_matches_recorded_key_moment(session_manager, temp_sto
 
     experiences = temp_storage.list_recent_experiences(limit=1)
     stored_exp = experiences[0].experience
+    stored_moment = temp_storage.get_key_moment(stored_exp.key_moment_ids[0])
+    assert stored_moment is not None
 
     assert result.key_moments[0].what_happened == original_what
-    assert stored_exp.key_moments[0].what_happened == original_what
+    assert stored_moment.what_happened == original_what
     assert stored_exp.recorded_by == "session_manager"
 
 
@@ -1100,15 +1102,19 @@ def test_finish_session_rejects_conflicting_deterministic_experience_id(
     )
     manager.append_key_moment_input(context.session_id, moment)
 
+    km_conflict = moment.to_key_moment()
     conflicting_record = ExperienceRecord(
         experience=SessionExperience(
             id=deterministic_session_experience_id(context.session_id),
             session_id=uuid4(),
             timestamp=frozen_clock.now(),
-            key_moments=[moment.to_key_moment()],
+            key_moment_ids=[km_conflict.id],
+            avg_emotional_intensity=km_conflict.how_i_felt.emotional_intensity,
+            has_profound_moment=km_conflict.how_i_felt.depth == EmotionalDepth.PROFOUND,
         )
     )
     temp_storage.create_experience(conflicting_record)
+    temp_storage.store_key_moments(conflicting_record.experience.session_id, [km_conflict])
 
     with pytest.raises(ValueError, match="belongs to another session"):
         manager.finish_session(context.session_id)

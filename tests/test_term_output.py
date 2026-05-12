@@ -103,7 +103,9 @@ def test_print_experience_record_full(term_console: io.StringIO) -> None:
     )
     session = SessionExperience(
         session_id=uuid4(),
-        key_moments=[moment],
+        key_moment_ids=[moment.id],
+        avg_emotional_intensity=moment.how_i_felt.emotional_intensity,
+        has_profound_moment=moment.how_i_felt.depth == EmotionalDepth.PROFOUND,
     )
     session.add_reframing_note(
         ReframingNote(
@@ -116,7 +118,8 @@ def test_print_experience_record_full(term_console: io.StringIO) -> None:
     print_experience_record(record)
     print_experience_record(record, prefix="  ")
     out = term_console.getvalue()
-    assert "Event" in out
+    assert str(moment.id) in out
+    assert "Key moments" in out
     assert "Rethought" in out
 
 

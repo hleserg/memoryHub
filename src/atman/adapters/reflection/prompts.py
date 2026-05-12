@@ -50,16 +50,14 @@ def _schema_block(model: type[pydantic.BaseModel]) -> str:
 def _experience_summary(exp: SessionExperience) -> str:
     """Compact textual summary of a single experience for prompt inclusion."""
     lines: list[str] = [f"Session {exp.session_id} ({exp.timestamp.isoformat()})"]
-    for km in exp.key_moments:
-        valence = km.how_i_felt.emotional_valence
-        intensity = km.how_i_felt.emotional_intensity
-        lines.append(
-            f"  - {km.what_happened} "
-            f"(valence={valence:+.2f}, intensity={intensity:.2f}, "
-            f"depth={km.how_i_felt.depth.value})"
-        )
-        if km.values_touched:
-            lines.append(f"    values touched: {', '.join(km.values_touched)}")
+    # Use metadata instead of iterating through key moments (which are now stored separately)
+    lines.append(
+        f"  - {len(exp.key_moment_ids)} key moments "
+        f"(avg_intensity={exp.avg_emotional_intensity:.2f}, "
+        f"profound={exp.has_profound_moment})"
+    )
+    if exp.fact_refs:
+        lines.append(f"    facts accessed: {len(exp.fact_refs)} total")
     return "\n".join(lines)
 
 

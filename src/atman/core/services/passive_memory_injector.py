@@ -192,7 +192,13 @@ class PassiveMemoryInjector:
                 continue
 
             # Create text representation for embedding
-            exp_text = " ".join(km.what_happened for km in exp.key_moments)
+            # Fetch key moments and concatenate their content
+            moment_texts = []
+            for moment_id in exp.key_moment_ids:
+                moment = self.state_store.get_key_moment(moment_id)
+                if moment:
+                    moment_texts.append(moment.what_happened)
+            exp_text = " ".join(moment_texts)
             if not exp_text.strip():
                 continue
 

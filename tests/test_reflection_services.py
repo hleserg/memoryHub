@@ -328,20 +328,22 @@ def create_test_experience(session_id: UUID | None = None) -> SessionExperience:
     if session_id is None:
         session_id = uuid4()
 
+    km = KeyMoment(
+        what_happened="Test event",
+        how_i_felt=FeltSense(
+            emotional_valence=0.3,
+            emotional_intensity=0.6,
+            depth=EmotionalDepth.MEANINGFUL,
+        ),
+        why_it_matters="Test importance",
+        values_touched=["test_value"],
+    )
+
     return SessionExperience(
         session_id=session_id,
-        key_moments=[
-            KeyMoment(
-                what_happened="Test event",
-                how_i_felt=FeltSense(
-                    emotional_valence=0.3,
-                    emotional_intensity=0.6,
-                    depth=EmotionalDepth.MEANINGFUL,
-                ),
-                why_it_matters="Test importance",
-                values_touched=["test_value"],
-            )
-        ],
+        key_moment_ids=[km.id],
+        avg_emotional_intensity=km.how_i_felt.emotional_intensity,
+        has_profound_moment=km.how_i_felt.depth == EmotionalDepth.PROFOUND,
     )
 
 

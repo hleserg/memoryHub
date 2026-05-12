@@ -48,25 +48,30 @@ from atman.core.ports.state_store import DateRangeQuery
 
 def _record(
     *, timestamp: datetime | None = None, values: list[str] | None = None
-) -> ExperienceRecord:
-    return ExperienceRecord(
-        experience=SessionExperience(
-            session_id=uuid4(),
-            timestamp=timestamp or datetime.now(UTC),
-            key_moments=[
-                KeyMoment(
-                    what_happened="invariant test",
-                    how_i_felt=FeltSense(
-                        emotional_valence=0.5,
-                        emotional_intensity=0.5,
-                        depth=EmotionalDepth.SURFACE,
-                    ),
-                    why_it_matters="coverage",
-                    values_touched=values or ["honesty"],
-                )
-            ],
-        )
+) -> tuple[ExperienceRecord, KeyMoment]:
+    moment = KeyMoment(
+        what_happened="invariant test",
+        how_i_felt=FeltSense(
+            emotional_valence=0.5,
+            emotional_intensity=0.5,
+            depth=EmotionalDepth.SURFACE,
+        ),
+        why_it_matters="coverage",
+        values_touched=values or ["honesty"],
     )
+    exp = SessionExperience(
+        session_id=uuid4(),
+        timestamp=timestamp or datetime.now(UTC),
+        key_moment_ids=[moment.id],
+        avg_emotional_intensity=moment.how_i_felt.emotional_intensity,
+        has_profound_moment=False,
+    )
+    return ExperienceRecord(experience=exp), moment
+
+
+def _persist(store: FileStateStore, record: ExperienceRecord, moment: KeyMoment) -> None:
+    store.create_experience(record)
+    store.store_key_moments(record.experience.session_id, [moment])
 
 
 # ---------------------------------------------------------------------------
@@ -79,8 +84,8 @@ def test_invariant_list_recent_newest_first(tmp_path: Path) -> None:
     base = datetime(2025, 6, 1, 12, 0, 0, tzinfo=UTC)
     ids_in_order = []
     for i in range(5):
-        r = _record(timestamp=base + timedelta(hours=i))
-        store.create_experience(r)
+        r, m = _record(timestamp=base + timedelta(hours=i))
+        _persist(store, r, m)
         ids_in_order.append(r.experience.id)
 
     results = store.list_recent_experiences(limit=10)
@@ -97,12 +102,12 @@ def test_invariant_date_range_excludes_outside(tmp_path: Path) -> None:
     store = FileStateStore(tmp_path)
     now = datetime(2025, 6, 1, 12, 0, 0, tzinfo=UTC)
 
-    inside = _record(timestamp=now)
-    early = _record(timestamp=now - timedelta(days=2))
-    late = _record(timestamp=now + timedelta(days=2))
+    inside, mi = _record(timestamp=now)
+    early, me = _record(timestamp=now - timedelta(days=2))
+    late, ml = _record(timestamp=now + timedelta(days=2))
 
-    for r in (inside, early, late):
-        store.create_experience(r)
+    for r, m in ((inside, mi), (early, me), (late, ml)):
+        _persist(store, r, m)
 
     window = DateRangeQuery(
         start_date=now - timedelta(hours=1),
@@ -123,17 +128,20 @@ def test_invariant_date_range_excludes_outside(tmp_path: Path) -> None:
 
 def test_invariant_reframing_note_does_not_mutate_key_moments(tmp_path: Path) -> None:
     store = FileStateStore(tmp_path)
-    record = _record()
-    original_what = record.experience.key_moments[0].what_happened
-    original_values = list(record.experience.key_moments[0].values_touched)
-    store.create_experience(record)
+    record, moment = _record()
+    original_what = moment.what_happened
+    original_values = list(moment.values_touched)
+    _persist(store, record, moment)
 
     note = ReframingNote(reflection="new perspective", reflection_type="growth")
     updated = store.add_reframing_note(record.experience.id, note)
 
     assert updated is not None
-    assert updated.experience.key_moments[0].what_happened == original_what
-    assert list(updated.experience.key_moments[0].values_touched) == original_values
+    mid = updated.experience.key_moment_ids[0]
+    loaded = store.get_key_moment(mid)
+    assert loaded is not None
+    assert loaded.what_happened == original_what
+    assert list(loaded.values_touched) == original_values
 
 
 # ---------------------------------------------------------------------------
@@ -143,8 +151,8 @@ def test_invariant_reframing_note_does_not_mutate_key_moments(tmp_path: Path) ->
 
 def test_invariant_duplicate_triggered_by_is_noop(tmp_path: Path) -> None:
     store = FileStateStore(tmp_path)
-    record = _record()
-    store.create_experience(record)
+    record, moment = _record()
+    _persist(store, record, moment)
 
     run_id = str(uuid4())
     note = ReframingNote(reflection="first", reflection_type="growth", triggered_by=run_id)
@@ -165,12 +173,12 @@ def test_invariant_duplicate_triggered_by_is_noop(tmp_path: Path) -> None:
 
 
 def test_invariant_salience_is_in_valid_range() -> None:
-    record = _record()
+    record, _moment = _record()
     assert 0.0 <= record.experience.salience <= 1.0
 
 
 def test_invariant_salience_decreases_with_time() -> None:
-    record = _record()
+    record, _moment = _record()
     # Pin last_accessed_at to "now" and compare salience at +0 vs +365 days
     from datetime import UTC, datetime
 
@@ -190,8 +198,8 @@ def test_invariant_salience_decreases_with_time() -> None:
 
 def test_invariant_access_count_increments_by_one(tmp_path: Path) -> None:
     store = FileStateStore(tmp_path)
-    record = _record()
-    store.create_experience(record)
+    record, moment = _record()
+    _persist(store, record, moment)
 
     for expected in range(1, 4):
         updated = store.mark_accessed(record.experience.id)

@@ -52,15 +52,27 @@ def _make_experience(
         KeyMoment(what_happened=text, how_i_felt=felt, why_it_matters=reason)
         for text, reason in pairs
     ]
+    avg = sum(km.how_i_felt.emotional_intensity for km in key_moments) / len(key_moments)
+    profound = any(km.how_i_felt.depth == EmotionalDepth.PROFOUND for km in key_moments)
     exp = SessionExperience(
         session_id=session_id or uuid4(),
-        key_moments=key_moments,
+        key_moment_ids=[km.id for km in key_moments],
+        avg_emotional_intensity=avg,
+        has_profound_moment=profound,
         importance=0.6,
         salience=0.8,
     )
+    object.__setattr__(exp, "_living_test_moments", tuple(key_moments))
     if timestamp is not None:
         exp.timestamp = timestamp
     return exp
+
+
+def _persist_experience(store: InMemoryStateStore, exp: SessionExperience) -> None:
+    store.create_experience(ExperienceRecord(experience=exp))
+    moments = getattr(exp, "_living_test_moments", ())
+    if moments:
+        store.store_key_moments(exp.session_id, list(moments))
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -106,7 +118,7 @@ class TestSessionWorkingMemory:
         wm.add_fact(fact)
         assert wm.size() == 1
 
-    def test_add_experience_summary_uses_first_two_key_moments(self) -> None:
+    def test_add_experience_summary_uses_metadata(self) -> None:
         wm = SessionWorkingMemory()
         exp = _make_experience(
             moments=[
@@ -118,9 +130,8 @@ class TestSessionWorkingMemory:
         wm.add_experience(exp)
         cached = wm.get(exp.id)
         assert cached is not None
-        assert "first happens" in cached.content
-        assert "second happens" in cached.content
-        assert "third should be omitted" not in cached.content
+        assert "3 key moments" in cached.content
+        assert "avg_intensity" in cached.content
 
     def test_add_experience_idempotent(self) -> None:
         wm = SessionWorkingMemory()
@@ -304,7 +315,7 @@ class TestEmotionalEcho:
     def _store_with(self, experiences: list[SessionExperience]) -> InMemoryStateStore:
         store = InMemoryStateStore()
         for exp in experiences:
-            store.create_experience(ExperienceRecord(experience=exp))
+            _persist_experience(store, exp)
         return store
 
     def test_build_echo_empty_store_returns_empty(self) -> None:
@@ -521,8 +532,8 @@ class TestPassiveMemoryInjector:
         unrelated_exp = _make_experience(
             moments=[("entirely different topic about cooking", "matters")],
         )
-        store.create_experience(ExperienceRecord(experience=target_exp))
-        store.create_experience(ExperienceRecord(experience=unrelated_exp))
+        _persist_experience(store, target_exp)
+        _persist_experience(store, unrelated_exp)
 
         injector = PassiveMemoryInjector(
             embedding=MockEmbeddingAdapter(),
@@ -547,7 +558,7 @@ class TestPassiveMemoryInjector:
     def test_surface_experiences_skips_working_memory_hits(self) -> None:
         store = InMemoryStateStore()
         exp = _make_experience(moments=[("alpha bravo", "matters")])
-        store.create_experience(ExperienceRecord(experience=exp))
+        _persist_experience(store, exp)
 
         wm = SessionWorkingMemory()
         wm.add_experience(exp)
@@ -568,10 +579,11 @@ class TestPassiveMemoryInjector:
         # degenerate record (the public API rejects empty key_moments).
         store = InMemoryStateStore()
         exp = _make_experience(moments=[("alpha bravo", "matters")])
-        store.create_experience(ExperienceRecord(experience=exp))
-        # Replace the stored copy with one whose key_moments are gone.
+        _persist_experience(store, exp)
+        # Remove stored moments so joined key-moment text is empty.
         stored = store._experiences[exp.id]
-        stored.experience.key_moments.clear()
+        for mid in list(stored.experience.key_moment_ids):
+            store._key_moments.pop(mid, None)
 
         injector = PassiveMemoryInjector(
             embedding=MockEmbeddingAdapter(),
