@@ -181,7 +181,7 @@ def chat(
 def _force_finish(
     session_manager: SessionManager,
     session_id: UUID,
-    close_reason: str,
+    close_reason: str | None,
 ) -> None:
     """
     Force-finish a session with minimum viable state.
@@ -194,7 +194,7 @@ def _force_finish(
     Args:
         session_manager: Session manager instance
         session_id: UUID of the session to finish
-        close_reason: Reason for forced finish (e.g. "interrupted")
+        close_reason: Reason for forced finish (e.g. "interrupted"), or None for normal completion
 
     Raises:
         SessionNotFoundError: If session is not active
@@ -215,14 +215,21 @@ def _force_finish(
             session_id,
         )
 
-        # Create minimal key moment for interrupted session
+        # Create minimal key moment - text depends on whether this was an interruption
+        if close_reason and close_reason != "completed":
+            what_happened = f"Session interrupted ({close_reason})"
+            why_it_matters = "Session was interrupted before completion"
+        else:
+            what_happened = "Session completed without recorded key moments"
+            why_it_matters = "Session ended normally but no moments were captured"
+
         minimal_moment = KeyMomentInput(
-            what_happened=f"Session interrupted ({close_reason})",
+            what_happened=what_happened,
             recorded_at=datetime.now(UTC),
             emotional_valence=0.0,
-            emotional_intensity=0.3,  # Slight arousal from interruption
+            emotional_intensity=0.3 if close_reason else 0.1,
             depth=EmotionalDepth.SURFACE,
-            why_it_matters="Session was interrupted before completion",
+            why_it_matters=why_it_matters,
             incomplete_coloring=True,  # Honest: this is synthetic
         )
 
@@ -233,16 +240,20 @@ def _force_finish(
             _LOG.warning("Session %s was finished during force-finish", session_id)
             return
 
-    # Finish session with interrupted status
+    # Finish session - only pass close_reason if it's a documented value
+    valid_close_reasons = {"timeout_sleep", "restart", "forced", "interrupted"}
+    finish_kwargs = {
+        "session_id": session_id,
+        "overall_emotional_tone": 0.0,
+        "key_insight": f"Session {close_reason or 'completed'}",
+        "alignment_check": True,
+        "alignment_notes": "",
+    }
+    if close_reason and close_reason in valid_close_reasons:
+        finish_kwargs["close_reason"] = close_reason
+
     try:
-        session_manager.finish_session(
-            session_id,
-            overall_emotional_tone=0.0,
-            key_insight=f"Session {close_reason}",
-            alignment_check=True,
-            alignment_notes="",
-            close_reason=close_reason,
-        )
+        session_manager.finish_session(**finish_kwargs)
         _LOG.info("Session %s force-finished successfully", session_id)
 
     except SessionAlreadyFinishedError:
@@ -273,6 +284,7 @@ class AtmanRunner:
 
         deps, session_manager, _store = build_deps(self._workspace, self._agent_id, self._config)
         session_id: UUID | None = None
+        interrupted = False  # Track if session was interrupted
         try:
             session_ctx = session_manager.start_session(self._agent_id)
             session_id = session_ctx.session_id
@@ -331,19 +343,27 @@ class AtmanRunner:
                 print_plain("")
         except KeyboardInterrupt:
             print_warn("\nInterrupted.")
+            # Track interruption for close_reason
+            interrupted = True
         finally:
             if session_id is not None:
                 try:
-                    session_manager.finish_session(
-                        session_id,
-                        overall_emotional_tone=0.0,
-                        key_insight="",
-                        alignment_check=True,
-                        alignment_notes="",
-                    )
+                    # Pass close_reason if session was interrupted
+                    finish_kwargs = {
+                        "session_id": session_id,
+                        "overall_emotional_tone": 0.0,
+                        "key_insight": "",
+                        "alignment_check": True,
+                        "alignment_notes": "",
+                    }
+                    if interrupted:
+                        finish_kwargs["close_reason"] = "interrupted"
+
+                    session_manager.finish_session(**finish_kwargs)
                 except ValueError as exc:
                     if "Cannot finish session without key moments" in str(exc):
-                        _force_finish(session_manager, session_id, "completed")
+                        # Pass None for normal completion without key moments
+                        _force_finish(session_manager, session_id, None)
                     else:
                         raise
                 except (SessionAlreadyFinishedError, SessionNotFoundError):

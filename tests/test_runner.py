@@ -93,13 +93,18 @@ def test_force_finish_creates_minimal_key_moment(
     assert session_result is not None
     assert len(session_result.key_moments) == 0
 
-    # Force finish
-    _force_finish(session_manager, ctx.session_id, close_reason="test_interrupted")
+    # Force finish with invalid close_reason should not persist it
+    _force_finish(session_manager, ctx.session_id, close_reason="test_invalid")
 
     # Verify session was finished and has exactly one minimal key moment
     # Session should no longer be active
     session_result_after = session_manager.get_active_session(ctx.session_id)
     assert session_result_after is None
+
+    # Verify close_reason was NOT persisted (invalid value)
+    experiences = session_manager._state_store.list_recent_experiences(limit=1)
+    assert len(experiences) == 1
+    assert experiences[0].experience.close_reason is None
 
 
 def test_force_finish_with_existing_key_moments(
@@ -120,8 +125,8 @@ def test_force_finish_with_existing_key_moments(
     )
     session_manager.append_key_moment_input(ctx.session_id, moment)
 
-    # Force finish
-    _force_finish(session_manager, ctx.session_id, close_reason="test_interrupted")
+    # Force finish with valid close_reason
+    _force_finish(session_manager, ctx.session_id, close_reason="interrupted")
 
     # Session should no longer be active (finished)
     session_result = session_manager.get_active_session(ctx.session_id)
@@ -372,7 +377,7 @@ def test_force_finish_incomplete_coloring_flag(
     assert len(session_result.key_moments) == 0
 
     # Force finish should create minimal moment with incomplete_coloring=True
-    _force_finish(session_manager, ctx.session_id, close_reason="test")
+    _force_finish(session_manager, ctx.session_id, close_reason=None)
 
     # Session should be finished (no longer active)
     session_result_after = session_manager.get_active_session(ctx.session_id)
@@ -556,7 +561,7 @@ def test_force_finish_persists_close_reason(
     session_manager: SessionManager,
     identity_with_narrative: Identity,
 ) -> None:
-    """Test that _force_finish persists close_reason to SessionExperience."""
+    """Test that _force_finish persists close_reason to SessionExperience for valid values."""
     ctx = session_manager.start_session(identity_with_narrative.id)
     moment = KeyMomentInput(
         what_happened="Some work",
@@ -574,3 +579,27 @@ def test_force_finish_persists_close_reason(
     experiences = session_manager._state_store.list_recent_experiences(limit=1)
     assert len(experiences) == 1
     assert experiences[0].experience.close_reason == "interrupted"
+
+
+def test_force_finish_none_close_reason_for_normal_completion(
+    session_manager: SessionManager,
+    identity_with_narrative: Identity,
+) -> None:
+    """Test that _force_finish with None close_reason doesn't persist close_reason field."""
+    ctx = session_manager.start_session(identity_with_narrative.id)
+    moment = KeyMomentInput(
+        what_happened="Normal work",
+        emotional_valence=0.0,
+        emotional_intensity=0.3,
+        depth=EmotionalDepth.SURFACE,
+        why_it_matters="Regular session",
+    )
+    session_manager.append_key_moment_input(ctx.session_id, moment)
+
+    # Force finish with None (normal completion, no interruption)
+    _force_finish(session_manager, ctx.session_id, close_reason=None)
+
+    # Verify SessionExperience has close_reason=None
+    experiences = session_manager._state_store.list_recent_experiences(limit=1)
+    assert len(experiences) == 1
+    assert experiences[0].experience.close_reason is None
