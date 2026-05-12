@@ -105,6 +105,9 @@ class KeyMoment(BaseModel):
     Immutable after creation - no methods to modify.
     """
 
+    # IDENTITY
+    id: UUID = Field(default_factory=uuid4, description="Unique identifier for this key moment")
+
     # WHAT HAPPENED
     what_happened: str = Field(min_length=1, description="Description of what actually happened")
     when: datetime = Field(
@@ -165,6 +168,7 @@ class KeyMoment(BaseModel):
         validate_assignment=True,
         json_schema_extra={
             "example": {
+                "id": "123e4567-e89b-12d3-a456-426614174000",
                 "what_happened": "User asked me to implement a complex feature I had never done before",
                 "when": "2026-04-30T10:30:00Z",
                 "how_i_felt": {

@@ -38,6 +38,9 @@ class InMemoryStateStore(StateStore):
         self._narratives: dict[UUID, NarrativeDocument] = {}
         self._archived_narratives: dict[UUID, list[tuple[NarrativeDocument, str, datetime]]] = {}
         self._eigenstates: list[Eigenstate] = []
+        self._key_moments: dict[
+            UUID, tuple[KeyMoment, UUID]
+        ] = {}  # moment_id -> (moment, session_id)
 
     def create_experience(self, record: ExperienceRecord) -> ExperienceRecord:
         """Store experience in memory."""
@@ -244,13 +247,22 @@ class InMemoryStateStore(StateStore):
     # KeyMoment operations
 
     def create_key_moment(self, moment: KeyMoment, session_id: UUID) -> None:
-        """Create a new key moment in storage (stub implementation)."""
-        raise NotImplementedError("KeyMoment operations not yet implemented")
+        """Create a new key moment in storage."""
+        if moment.id in self._key_moments:
+            raise ValueError(f"KeyMoment {moment.id} already exists")
+        self._key_moments[moment.id] = (moment.model_copy(deep=True), session_id)
 
     def list_key_moments(self, session_id: UUID) -> list[KeyMoment]:
-        """List all key moments for a session (stub implementation)."""
-        raise NotImplementedError("KeyMoment operations not yet implemented")
+        """List all key moments for a session."""
+        moments = [moment for moment, sid in self._key_moments.values() if sid == session_id]
+        # Sort by timestamp (when field)
+        moments.sort(key=lambda m: m.when)
+        return [m.model_copy(deep=True) for m in moments]
 
     def get_key_moment(self, moment_id: UUID) -> KeyMoment:
-        """Retrieve a specific key moment by its ID (stub implementation)."""
-        raise NotImplementedError("KeyMoment operations not yet implemented")
+        """Retrieve a specific key moment by its ID."""
+        result = self._key_moments.get(moment_id)
+        if result is None:
+            raise KeyError(f"KeyMoment {moment_id} not found")
+        moment, _ = result
+        return moment.model_copy(deep=True)

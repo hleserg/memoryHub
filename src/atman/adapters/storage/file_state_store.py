@@ -77,6 +77,9 @@ class FileStateStore(StateStore):
         self.experiences_dir = self.workspace / "experiences"
         self.experiences_dir.mkdir(exist_ok=True)
 
+        self.key_moments_dir = self.workspace / "key_moments"
+        self.key_moments_dir.mkdir(exist_ok=True)
+
         # Paths for current state files
         self.identity_path = self.workspace / "identity.json"
         self.narrative_path = self.workspace / "narrative.json"
@@ -378,13 +381,37 @@ class FileStateStore(StateStore):
     # KeyMoment operations
 
     def create_key_moment(self, moment: KeyMoment, session_id: UUID) -> None:
-        """Create a new key moment in storage (stub implementation)."""
-        raise NotImplementedError("KeyMoment operations not yet implemented")
+        """Create a new key moment in storage."""
+        moment_file = self.key_moments_dir / f"{moment.id}.json"
+        if moment_file.exists():
+            raise ValueError(f"KeyMoment with id {moment.id} already exists")
+
+        # Store moment with session_id metadata
+        data = {
+            "moment": moment.model_dump(mode="json"),
+            "session_id": str(session_id),
+        }
+        self._write_json_atomically(moment_file, json.dumps(data, indent=2))
 
     def list_key_moments(self, session_id: UUID) -> list[KeyMoment]:
-        """List all key moments for a session (stub implementation)."""
-        raise NotImplementedError("KeyMoment operations not yet implemented")
+        """List all key moments for a session."""
+        moments: list[KeyMoment] = []
+
+        for moment_file in self.key_moments_dir.glob("*.json"):
+            data = _read_json_file(moment_file)
+            if UUID(data["session_id"]) == session_id:
+                moment = KeyMoment.model_validate(data["moment"])
+                moments.append(moment)
+
+        # Sort by timestamp (when field)
+        moments.sort(key=lambda m: m.when)
+        return moments
 
     def get_key_moment(self, moment_id: UUID) -> KeyMoment:
-        """Retrieve a specific key moment by its ID (stub implementation)."""
-        raise NotImplementedError("KeyMoment operations not yet implemented")
+        """Retrieve a specific key moment by its ID."""
+        moment_file = self.key_moments_dir / f"{moment_id}.json"
+        if not moment_file.exists():
+            raise KeyError(f"KeyMoment {moment_id} not found")
+
+        data = _read_json_file(moment_file)
+        return KeyMoment.model_validate(data["moment"])

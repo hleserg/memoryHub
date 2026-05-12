@@ -401,3 +401,151 @@ def test_archive_narrative_and_list(store: StateStore) -> None:
     assert len(archived) >= 1
     assert archived[0][0].id == narrative.id
     assert "integration test archive" in archived[0][1]
+
+
+# ---------------------------------------------------------------------------
+# KeyMoment operations (E21.2)
+# ---------------------------------------------------------------------------
+
+
+def test_create_and_get_key_moment(store: StateStore) -> None:
+    """Test create_key_moment and get_key_moment."""
+    session_id = uuid4()
+    moment = KeyMoment(
+        what_happened="Test event",
+        how_i_felt=FeltSense(
+            emotional_valence=0.5,
+            emotional_intensity=0.7,
+            depth=EmotionalDepth.MEANINGFUL,
+        ),
+        why_it_matters="Contract test",
+        values_touched=["honesty"],
+    )
+
+    store.create_key_moment(moment, session_id)
+    retrieved = store.get_key_moment(moment.id)
+
+    assert retrieved.id == moment.id
+    assert retrieved.what_happened == "Test event"
+    assert retrieved.why_it_matters == "Contract test"
+
+
+def test_create_key_moment_duplicate_raises(store: StateStore) -> None:
+    """Test that creating duplicate key moment raises ValueError."""
+    session_id = uuid4()
+    moment = KeyMoment(
+        what_happened="Test event",
+        how_i_felt=FeltSense(
+            emotional_valence=0.5,
+            emotional_intensity=0.7,
+            depth=EmotionalDepth.MEANINGFUL,
+        ),
+        why_it_matters="Contract test",
+    )
+
+    store.create_key_moment(moment, session_id)
+
+    with pytest.raises(ValueError, match=r"already exists"):
+        store.create_key_moment(moment, session_id)
+
+
+def test_get_key_moment_not_found_raises(store: StateStore) -> None:
+    """Test that getting non-existent key moment raises KeyError."""
+    fake_id = uuid4()
+
+    with pytest.raises(KeyError, match=r"not found"):
+        store.get_key_moment(fake_id)
+
+
+def test_list_key_moments_empty(store: StateStore) -> None:
+    """Test listing key moments for session with no moments."""
+    session_id = uuid4()
+    moments = store.list_key_moments(session_id)
+
+    assert moments == []
+
+
+def test_list_key_moments_returns_session_moments_only(store: StateStore) -> None:
+    """Test that list_key_moments returns only moments for specified session."""
+    session1 = uuid4()
+    session2 = uuid4()
+
+    moment1 = KeyMoment(
+        what_happened="Session 1 event",
+        how_i_felt=FeltSense(
+            emotional_valence=0.5,
+            emotional_intensity=0.7,
+            depth=EmotionalDepth.MEANINGFUL,
+        ),
+        why_it_matters="Test",
+    )
+    moment2 = KeyMoment(
+        what_happened="Session 2 event",
+        how_i_felt=FeltSense(
+            emotional_valence=0.3,
+            emotional_intensity=0.6,
+            depth=EmotionalDepth.SURFACE,
+        ),
+        why_it_matters="Test",
+    )
+
+    store.create_key_moment(moment1, session1)
+    store.create_key_moment(moment2, session2)
+
+    session1_moments = store.list_key_moments(session1)
+    session2_moments = store.list_key_moments(session2)
+
+    assert len(session1_moments) == 1
+    assert len(session2_moments) == 1
+    assert session1_moments[0].id == moment1.id
+    assert session2_moments[0].id == moment2.id
+
+
+def test_list_key_moments_ordered_by_timestamp(store: StateStore) -> None:
+    """Test that list_key_moments returns moments ordered by timestamp."""
+    session_id = uuid4()
+
+    # Create moments with explicit timestamps
+    now = datetime.now(UTC)
+    moment1 = KeyMoment(
+        what_happened="First event",
+        when=now,
+        how_i_felt=FeltSense(
+            emotional_valence=0.5,
+            emotional_intensity=0.7,
+            depth=EmotionalDepth.MEANINGFUL,
+        ),
+        why_it_matters="Test",
+    )
+    moment2 = KeyMoment(
+        what_happened="Second event",
+        when=now + timedelta(seconds=10),
+        how_i_felt=FeltSense(
+            emotional_valence=0.3,
+            emotional_intensity=0.6,
+            depth=EmotionalDepth.SURFACE,
+        ),
+        why_it_matters="Test",
+    )
+    moment3 = KeyMoment(
+        what_happened="Third event",
+        when=now + timedelta(seconds=20),
+        how_i_felt=FeltSense(
+            emotional_valence=0.8,
+            emotional_intensity=0.9,
+            depth=EmotionalDepth.PROFOUND,
+        ),
+        why_it_matters="Test",
+    )
+
+    # Store in non-chronological order
+    store.create_key_moment(moment2, session_id)
+    store.create_key_moment(moment1, session_id)
+    store.create_key_moment(moment3, session_id)
+
+    moments = store.list_key_moments(session_id)
+
+    assert len(moments) == 3
+    assert moments[0].what_happened == "First event"
+    assert moments[1].what_happened == "Second event"
+    assert moments[2].what_happened == "Third event"
