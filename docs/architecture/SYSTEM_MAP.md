@@ -102,7 +102,7 @@ All paths are absolute relative to the repository root.
 | `adapters/agent/instructions.py` (`build_instructions`) | — | builds dynamic system prompt from current `Identity` + `NarrativeDocument` (truncated per `AtmanDeps.truncate_narrative_*`) |
 | `adapters/agent/tools.py` (`record_key_moment` async, `log_experience`) | — | Pydantic AI tools: `record_key_moment` → `AffectDetector.submit_self_report` when `SessionManager` is configured with affect; `log_experience` redirect stub |
 | `adapters/agent/factory.py` (`build_deps`) | — | Assembles `AtmanDeps`, `SessionManager`, `FileStateStore`, services, optional `AffectDetector` from workspace + `AgentConfig` |
-| `adapters/agent/runner.py` (`AtmanRunner`) | — | pydantic_ai `Agent` wrapper: `ensure_identity`, `run_session`, `chat` REPL; session cleanup on errors |
+| `adapters/agent/runner.py` (`chat`, `_force_finish`) | — | Signal-aware session lifecycle wrapper; SIGTERM/KeyboardInterrupt/EOFError/SystemExit → graceful `_force_finish()`; creates minimal `KeyMoment` if empty; preserves exit codes (E22.2) |
 | `agents_registry.py` (`AgentsRegistry`) | — | PostgreSQL-backed registry of agent instances (app/admin DB URLs); used by `src/run_agent.py` |
 
 ### 1.6. CLI / TUI / Web / Demos
@@ -191,6 +191,7 @@ Connections between two or more parts. These are seams that may break independen
 | `AtmanDeps` ↔ `SessionManager`, `IdentityService`, `ExperienceService`, `MicroReflectionService`, `StateStore` | `adapters/agent/deps.py` | DI container (frozen dataclass) |
 | `record_key_moment` / `log_experience` ↔ `AffectDetector.submit_self_report` / `SessionManager` | `adapters/agent/tools.py` → `affect/detector.py` + `core/services/session_manager.py` | Async Pydantic AI tool → affect write gateway (requires `affect_workspace` + config on `SessionManager`) |
 | `build_instructions` ↔ `StateStore.load_identity` / `load_narrative` | `adapters/agent/instructions.py` → `core/ports/state_store.py` | dynamic system-prompt builder |
+| `chat` / `_force_finish` ↔ `SessionManager` | `adapters/agent/runner.py` → `core/services/session_manager.py` | Signal handler registration + exception boundary; calls `append_key_moment_input()`, `get_active_session()`, `finish_session()` on interruption (E22.2) |
 
 ### 2.3. CLI ↔ service
 
