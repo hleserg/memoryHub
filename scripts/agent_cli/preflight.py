@@ -52,7 +52,9 @@ def _http_probe(base: str, timeout_sec: float) -> tuple[str, dict[str, Any]]:
         with urllib.request.urlopen(req, timeout=timeout_sec) as resp:
             preview = resp.read(512).decode(errors="replace")
             status = int(resp.status) if hasattr(resp, "status") else int(resp.getcode())
-            hint = "<500 indicates server replied (auth may yield 401/403)." if status >= 400 else ""
+            hint = (
+                "<500 indicates server replied (auth may yield 401/403)." if status >= 400 else ""
+            )
             return (
                 status < 500,
                 {"url": url, "status": status, "body_preview_chars": len(preview), "hint": hint},

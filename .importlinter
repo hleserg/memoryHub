@@ -17,3 +17,23 @@ source_modules =
 forbidden_modules =
     atman.eval
 unmatched_ignore_imports_alerting = warn
+
+[importlinter:contract:no-core-to-optional-agent-cli]
+name = Core Atman must not import optional local coding agent
+type = forbidden
+source_modules =
+    atman.core
+    atman.adapters
+    atman.cli
+    atman.cli_experience
+    atman.cli_identity
+    atman.cli_reflection
+    atman.tui
+    atman.web_dashboard
+    atman.affect
+    atman.eval
+    atman.config
+    atman.reflection
+forbidden_modules =
+    atman.agent_cli
+unmatched_ignore_imports_alerting = warn

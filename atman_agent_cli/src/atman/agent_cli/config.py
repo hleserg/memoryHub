@@ -1,7 +1,7 @@
 """
 atman/agent_cli/config.py
 Configuration for the Atman agent CLI.
-Not included in production release — optional dependency [agent].
+Not included in production release — optional dependency extra **`[agent-cli]`** in root `pyproject.toml`.
 """
 
 from __future__ import annotations

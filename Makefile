@@ -1,4 +1,4 @@
-.PHONY: lint format typecheck security test test-fast test-all test-integration audit check all sync-site-content docs-preview demo-experience demo-factual demo-identity demo-reflection demo-session demo-full-corpus demo-webui demo-experience-fast demo-factual-fast demo-identity-fast demo-reflection-fast demo-session-fast demo-full-corpus-fast demo-webui-fast demo-experience-paced demo-factual-paced demo-identity-paced demo-reflection-paced demo-session-paced demo-full-corpus-paced demo-webui-paced webui demo-e2e-scenario playbook-extract playbook-check playbook-audit
+.PHONY: lint format typecheck security typecheck-agent-cli test test-fast test-all test-integration audit check all sync-site-content docs-preview demo-experience demo-factual demo-identity demo-reflection demo-session demo-full-corpus demo-webui demo-experience-fast demo-factual-fast demo-identity-fast demo-reflection-fast demo-session-fast demo-full-corpus-fast demo-webui-fast demo-experience-paced demo-factual-paced demo-identity-paced demo-reflection-paced demo-session-paced demo-full-corpus-paced demo-webui-paced webui demo-e2e-scenario playbook-extract playbook-check playbook-audit agent-preflight agent-wait-llm agent-smoke agent-mock-llm agent-cli-lint agent-check-prep
 
 lint:
 	ruff check src/ tests/ e2e/
@@ -156,7 +156,7 @@ eval-down:
 	$(COMPOSE_EVAL) down
 
 # --- Agent CLI split-tree helpers (preflight / LLM readiness; scripts/agent_cli/README.md).
-.PHONY: agent-preflight agent-wait-llm agent-smoke
+MOCK_LLM_PORT ?= 18080
 
 agent-preflight:
 	PYTHONPATH=atman_agent_cli/src:src python3 scripts/agent_cli/preflight.py
@@ -166,3 +166,15 @@ agent-wait-llm:
 
 agent-smoke:
 	PYTHONPATH=atman_agent_cli/src:src python3 scripts/agent_cli/smoke_imports.py
+
+agent-mock-llm:
+	PYTHONPATH=atman_agent_cli/src:src python3 scripts/agent_cli/mock_openai_llm.py --bind 127.0.0.1 --port $(MOCK_LLM_PORT)
+
+agent-cli-lint:
+	ruff check scripts/agent_cli/
+
+typecheck-agent-cli:
+	pyright --project atman_agent_cli/pyrightconfig.json
+
+agent-check-prep: agent-cli-lint typecheck-agent-cli agent-smoke agent-preflight
+	@echo "Agent prep gates done (scripts + permissive pyright + smoke + preflight)."

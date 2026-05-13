@@ -22,17 +22,11 @@ export PYTHONPATH="atman_agent_cli/src:src"
 
 ### Install extras
 
-Once the workspace `pyproject.toml` defines **`[agent-cli]`**:
-
 ```bash
 pip install -e ".[agent-cli]"
 ```
 
-Until that lands in root `pyproject.toml`, install the editable core package plus optional libs you need (`textual`, `requests`, embedding/RAG stacks, etc.), or mirror the dependency list drafted in [`atman_agent_cli/src/atman/agent_cli/__init__.py`](../../atman_agent_cli/src/atman/agent_cli/__init__.py):
-
-```bash
-pip install -e ".[dev]"
-```
+If you trimmed optional deps intentionally, **`pip install -e ".[dev]"`** keeps the editable core alive while you bolt on subsets (`requests`, embedding stacks, …).
 
 ## Scripts
 
@@ -41,6 +35,7 @@ pip install -e ".[dev]"
 | [`preflight.py`](preflight.py) | Layout, Python ≥3.12, `atman` + `atman.agent_cli` imports (with bootstrap), optional dependency inventory, HTTP probe to `{ATMAN_LLM_URL}/v1/models` |
 | [`wait_for_llm.py`](wait_for_llm.py) | Poll until `/v1/models`, `/health`, or `/` answers |
 | [`smoke_imports.py`](smoke_imports.py) | Fast import smoke + **AgentConfig** field count (no network, no dirs created) |
+| [`mock_openai_llm.py`](mock_openai_llm.py) | Loopback stub OpenAI server for coder=llamacpp while real inference trains |
 
 ## Example commands (from repo root)
 

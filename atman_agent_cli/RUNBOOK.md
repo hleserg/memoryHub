@@ -77,9 +77,22 @@ Re-run **`wait_for_llm.py`** after server restarts — models may load asynchron
 
 ---
 
+## Mock LLM stub (`mock_openai_llm.py`)
+
+For UI / plumbing checks without GGUF inference:
+
+```bash
+python3 scripts/agent_cli/mock_openai_llm.py --bind 127.0.0.1 --port 18080
+export ATMAN_LLM_URL=http://127.0.0.1:18080
+```
+
+The stub answers `/v1/models` and streams `/v1/chat/completions` SSE compatible with `_llamacpp_stream`. Optionally `--stub-file replies.txt`.
+
+---
+
 ## Separation from core `atman`
 
 - **Psychology layer** APIs, ports, adapters, and evaluation harnesses stay under **`src/atman`**.
 - **Agent CLI UX** (`atman/agent_cli/*`) orchestrates repos, watchers, babysit workflows, embeddings, Telegram hooks, etc. — optional, higher-layer surface.
-- **Import guardrails**: production-ish modules gate against accidental `agent_cli` imports (`importlint` sketch in packaged `__init__.py`).
+- **Import guardrails**: `.importlinter` contract `no-core-to-optional-agent-cli` forbids enumerated `src/atman/*` namespaces from importing **`atman.agent_cli`**.
 - Scripts under `scripts/agent_cli/` purposely **avoid pytest** — they bootstrap split trees for humans and notebooks.
