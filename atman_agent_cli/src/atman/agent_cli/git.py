@@ -2,10 +2,10 @@
 atman/agent_cli/git.py
 Git operations: branch guard, commits, PR lifecycle via GitHub API.
 """
+
 from __future__ import annotations
 
 import re
-import time
 import subprocess
 from pathlib import Path
 from typing import Any
@@ -14,13 +14,13 @@ import requests
 
 from .config import AgentConfig
 
-
 # ── Git helpers ───────────────────────────────────────────────────────────────
+
 
 def run_git(args: list[str], cwd: Path) -> tuple[int, str, str]:
     """Run a git command. Returns (returncode, stdout, stderr)."""
     result = subprocess.run(
-        ["git"] + args,
+        ["git", *args],
         cwd=cwd,
         capture_output=True,
         text=True,
@@ -114,6 +114,11 @@ def resolve_conflicts_auto(repo: Path) -> tuple[bool, list[str]]:
 
 # ── Branch Guard ─────────────────────────────────────────────────────────────
 
+
+class BranchGuardError(Exception):
+    """Raised when a git operation violates branch protection rules."""
+
+
 class BranchGuard:
     """
     Enforces branch hygiene rules:
@@ -162,8 +167,25 @@ class BranchGuard:
         messages.append(f"Continuing on branch '{branch}'")
         return branch, messages
 
+    def safe_push(self, branch: str | None = None, remote: str = "origin") -> tuple[bool, str]:
+        """
+        Push with protection against pushing to the main integration branch.
+
+        Raises BranchGuardError when attempting to push directly to ``main``/``master``
+        or the configured main branch.
+        """
+        _ = remote  # Reserved for callers; ``push_branch`` relies on upstream defaults.
+        branch = branch or current_branch(self.repo)
+        if branch in (self.cfg.main_branch, "master", "main"):
+            raise BranchGuardError(
+                f"Direct push to '{branch}' is forbidden. "
+                "Create a PR: BranchGuard.safe_push() blocked."
+            )
+        return push_branch(branch, self.repo)
+
 
 # ── GitHub PR Manager ────────────────────────────────────────────────────────
+
 
 class PRManager:
     """Manages PR lifecycle via GitHub API."""
@@ -202,13 +224,16 @@ class PRManager:
         base: str | None = None,
         draft: bool = False,
     ) -> dict:
-        return self._post(f"repos/{self.repo}/pulls", {
-            "title": title,
-            "body": body,
-            "head": branch,
-            "base": base or self.cfg.main_branch,
-            "draft": draft,
-        })
+        return self._post(
+            f"repos/{self.repo}/pulls",
+            {
+                "title": title,
+                "body": body,
+                "head": branch,
+                "base": base or self.cfg.main_branch,
+                "draft": draft,
+            },
+        )
 
     def get_pr(self, pr_number: int) -> dict:
         return self._get(f"repos/{self.repo}/pulls/{pr_number}")
@@ -228,11 +253,13 @@ class PRManager:
         # CI checks
         checks = self._get(f"repos/{self.repo}/commits/{sha}/check-runs")
         check_runs = checks.get("check_runs", [])
-        ci_status = "passing" if all(
-            c["conclusion"] == "success" for c in check_runs if c["status"] == "completed"
-        ) else "failing" if any(
-            c["conclusion"] in ("failure", "error") for c in check_runs
-        ) else "pending"
+        ci_status = (
+            "passing"
+            if all(c["conclusion"] == "success" for c in check_runs if c["status"] == "completed")
+            else "failing"
+            if any(c["conclusion"] in ("failure", "error") for c in check_runs)
+            else "pending"
+        )
         failed_checks = [
             {"name": c["name"], "url": c["html_url"]}
             for c in check_runs
@@ -299,27 +326,39 @@ class PRManager:
         """Post a review. event: COMMENT | APPROVE | REQUEST_CHANGES."""
         pr = self.get_pr(pr_number)
         sha = pr["head"]["sha"]
-        return self._post(f"repos/{self.repo}/pulls/{pr_number}/reviews", {
-            "commit_id": sha,
-            "body": body,
-            "event": event,
-            "comments": comments,
-        })
+        return self._post(
+            f"repos/{self.repo}/pulls/{pr_number}/reviews",
+            {
+                "commit_id": sha,
+                "body": body,
+                "event": event,
+                "comments": comments,
+            },
+        )
 
     def reply_to_comment(self, pr_number: int, comment_id: int, body: str) -> dict:
-        return self._post(f"repos/{self.repo}/pulls/{pr_number}/comments", {
-            "body": body,
-            "in_reply_to": comment_id,
-        })
+        return self._post(
+            f"repos/{self.repo}/pulls/{pr_number}/comments",
+            {
+                "body": body,
+                "in_reply_to": comment_id,
+            },
+        )
 
     def merge_pr(self, pr_number: int, method: str = "squash") -> dict:
         pr = self.get_pr(pr_number)
-        return self._put(f"repos/{self.repo}/pulls/{pr_number}/merge", {
-            "merge_method": method,
-            "commit_title": pr["title"],
-        })
+        return self._put(
+            f"repos/{self.repo}/pulls/{pr_number}/merge",
+            {
+                "merge_method": method,
+                "commit_title": pr["title"],
+            },
+        )
 
     def add_reviewer(self, pr_number: int, reviewers: list[str]) -> None:
-        self._post(f"repos/{self.repo}/pulls/{pr_number}/requested_reviewers", {
-            "reviewers": reviewers,
-        })
+        self._post(
+            f"repos/{self.repo}/pulls/{pr_number}/requested_reviewers",
+            {
+                "reviewers": reviewers,
+            },
+        )

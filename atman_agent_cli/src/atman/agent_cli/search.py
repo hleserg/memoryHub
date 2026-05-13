@@ -10,12 +10,15 @@ Strategy:
 
 Install: pip install duckduckgo-search
 """
+
 from __future__ import annotations
 
+import json
 import re
 import time
-from dataclasses import dataclass, field
-
+from dataclasses import asdict, dataclass, field
+from datetime import UTC, datetime
+from pathlib import Path
 
 # ── Priority site registry ────────────────────────────────────────────────────
 
@@ -23,27 +26,31 @@ from dataclasses import dataclass, field
 # Agent searches these first, expands if results are thin.
 DEV_SITES: list[dict] = [
     # Code & docs
-    {"domain": "github.com",            "label": "GitHub",          "tags": ["code", "repos", "issues"]},
-    {"domain": "stackoverflow.com",     "label": "Stack Overflow",  "tags": ["qa", "python", "errors"]},
-    {"domain": "docs.python.org",       "label": "Python Docs",     "tags": ["python", "stdlib", "docs"]},
-    {"domain": "pypi.org",              "label": "PyPI",            "tags": ["packages", "libraries"]},
-    {"domain": "readthedocs.io",        "label": "ReadTheDocs",     "tags": ["docs", "libraries"]},
-    {"domain": "realpython.com",        "label": "Real Python",     "tags": ["python", "tutorials"]},
-    {"domain": "pydantic.dev",          "label": "Pydantic Docs",   "tags": ["pydantic", "validation"]},
-    {"domain": "fastapi.tiangolo.com",  "label": "FastAPI Docs",    "tags": ["api", "fastapi"]},
+    {"domain": "github.com", "label": "GitHub", "tags": ["code", "repos", "issues"]},
+    {"domain": "stackoverflow.com", "label": "Stack Overflow", "tags": ["qa", "python", "errors"]},
+    {"domain": "docs.python.org", "label": "Python Docs", "tags": ["python", "stdlib", "docs"]},
+    {"domain": "pypi.org", "label": "PyPI", "tags": ["packages", "libraries"]},
+    {"domain": "readthedocs.io", "label": "ReadTheDocs", "tags": ["docs", "libraries"]},
+    {"domain": "realpython.com", "label": "Real Python", "tags": ["python", "tutorials"]},
+    {"domain": "pydantic.dev", "label": "Pydantic Docs", "tags": ["pydantic", "validation"]},
+    {"domain": "fastapi.tiangolo.com", "label": "FastAPI Docs", "tags": ["api", "fastapi"]},
     # AI/ML
-    {"domain": "huggingface.co",        "label": "Hugging Face",    "tags": ["models", "ml", "transformers"]},
-    {"domain": "arxiv.org",             "label": "arXiv",           "tags": ["papers", "research", "ml"]},
-    {"domain": "docs.anthropic.com",    "label": "Anthropic Docs",  "tags": ["claude", "anthropic", "api"]},
+    {"domain": "huggingface.co", "label": "Hugging Face", "tags": ["models", "ml", "transformers"]},
+    {"domain": "arxiv.org", "label": "arXiv", "tags": ["papers", "research", "ml"]},
+    {
+        "domain": "docs.anthropic.com",
+        "label": "Anthropic Docs",
+        "tags": ["claude", "anthropic", "api"],
+    },
     # Tooling
-    {"domain": "docs.docker.com",       "label": "Docker Docs",     "tags": ["docker", "containers"]},
-    {"domain": "docs.github.com",       "label": "GitHub Docs",     "tags": ["github", "actions", "ci"]},
-    {"domain": "mypy.readthedocs.io",   "label": "mypy",            "tags": ["types", "mypy"]},
-    {"domain": "docs.astral.sh",        "label": "Astral (ruff/uv)","tags": ["ruff", "uv", "linting"]},
-    {"domain": "textual.textualize.io", "label": "Textual Docs",    "tags": ["textual", "tui"]},
+    {"domain": "docs.docker.com", "label": "Docker Docs", "tags": ["docker", "containers"]},
+    {"domain": "docs.github.com", "label": "GitHub Docs", "tags": ["github", "actions", "ci"]},
+    {"domain": "mypy.readthedocs.io", "label": "mypy", "tags": ["types", "mypy"]},
+    {"domain": "docs.astral.sh", "label": "Astral (ruff/uv)", "tags": ["ruff", "uv", "linting"]},
+    {"domain": "textual.textualize.io", "label": "Textual Docs", "tags": ["textual", "tui"]},
     # General dev reference
-    {"domain": "developer.mozilla.org", "label": "MDN",             "tags": ["web", "js", "html", "css"]},
-    {"domain": "devdocs.io",            "label": "DevDocs",         "tags": ["reference", "docs"]},
+    {"domain": "developer.mozilla.org", "label": "MDN", "tags": ["web", "js", "html", "css"]},
+    {"domain": "devdocs.io", "label": "DevDocs", "tags": ["reference", "docs"]},
 ]
 
 # Site domains in priority order (for site: query building)
@@ -62,7 +69,7 @@ class SearchResult:
     title: str
     url: str
     snippet: str = ""
-    content: str = ""   # fetched full content
+    content: str = ""  # fetched full content
     domain: str = ""
     source: str = "ddg"
 
@@ -81,7 +88,7 @@ class SearchResult:
 class SearchSession:
     query: str
     results: list[SearchResult] = field(default_factory=list)
-    expanded: bool = False   # True if we had to fall back to general web
+    expanded: bool = False  # True if we had to fall back to general web
     searched_at: str = field(default_factory=lambda: time.strftime("%Y-%m-%dT%H:%M:%S"))
 
     def to_context(self, max_results: int = 3) -> str:
@@ -101,18 +108,20 @@ class SearchSession:
 
 # ── Search functions ──────────────────────────────────────────────────────────
 
+
 def _ddg_search(query: str, max_results: int = MAX_RESULTS) -> list[dict]:
     """Raw DuckDuckGo search. Returns list of {title, href, body}."""
     try:
         from duckduckgo_search import DDGS
+
         with DDGS() as ddgs:
             return list(ddgs.text(query, max_results=max_results))
     except ImportError:
         raise RuntimeError(
             "duckduckgo-search not installed: pip install duckduckgo-search"
-        )
+        ) from None
     except Exception as e:
-        raise RuntimeError(f"DuckDuckGo search error: {e}")
+        raise RuntimeError(f"DuckDuckGo search error: {e}") from e
 
 
 def _build_site_query(base_query: str, domains: list[str]) -> str:
@@ -124,7 +133,8 @@ def _build_site_query(base_query: str, domains: list[str]) -> str:
 def _fetch_result_content(url: str) -> str:
     """Fetch content from a URL using web.py."""
     try:
-        from .web import fetch_url, is_github_url, fetch_github_raw
+        from .web import fetch_github_raw, fetch_url, is_github_url
+
         if is_github_url(url):
             page = fetch_github_raw(url)
         else:
@@ -201,21 +211,22 @@ def search(
     try:
         raw = _ddg_search(site_query, max_results=MAX_RESULTS)
     except RuntimeError as e:
-        session.results.append(SearchResult(
-            title="Search error", url="", snippet=str(e)
-        ))
+        session.results.append(SearchResult(title="Search error", url="", snippet=str(e)))
         return session
 
     # Convert to SearchResult
     for item in raw:
         from urllib.parse import urlparse
+
         domain = urlparse(item.get("href", "")).netloc
-        session.results.append(SearchResult(
-            title=item.get("title", ""),
-            url=item.get("href", ""),
-            snippet=item.get("body", ""),
-            domain=domain,
-        ))
+        session.results.append(
+            SearchResult(
+                title=item.get("title", ""),
+                url=item.get("href", ""),
+                snippet=item.get("body", ""),
+                domain=domain,
+            )
+        )
 
     # Step 2: Fetch content from top results
     if fetch_content:
@@ -244,18 +255,21 @@ def _search_general(
         return session
 
     from urllib.parse import urlparse
+
     for item in raw:
         domain = urlparse(item.get("href", "")).netloc
         # Skip if already in results
         existing_urls = {r.url for r in session.results}
         if item.get("href") in existing_urls:
             continue
-        session.results.append(SearchResult(
-            title=item.get("title", ""),
-            url=item.get("href", ""),
-            snippet=item.get("body", ""),
-            domain=domain,
-        ))
+        session.results.append(
+            SearchResult(
+                title=item.get("title", ""),
+                url=item.get("href", ""),
+                snippet=item.get("body", ""),
+                domain=domain,
+            )
+        )
 
     if fetch_content:
         _fetch_contents(session)
@@ -311,7 +325,9 @@ def extract_search_query(text: str, llm_extract_fn=None) -> str:
     # Strip common preambles
     text = re.sub(
         r"^(найди|поищи|погугли|look up|search for|find|покажи|объясни|explain)\s*",
-        "", text.strip(), flags=re.IGNORECASE
+        "",
+        text.strip(),
+        flags=re.IGNORECASE,
     )
     text = re.sub(r"^(мне|me|please|пожалуйста)\s+", "", text, flags=re.IGNORECASE)
     return text.strip()
@@ -327,12 +343,56 @@ def add_search_domain(domain: str, label: str = "", tags: list[str] | None = Non
     global _extra_domains
     if domain not in [s["domain"] for s in DEV_SITES] and domain not in _extra_domains:
         _extra_domains.append(domain)
-        DEV_SITES.append({
-            "domain": domain,
-            "label": label or domain,
-            "tags": tags or [],
-        })
+        DEV_SITES.append(
+            {
+                "domain": domain,
+                "label": label or domain,
+                "tags": tags or [],
+            }
+        )
 
 
 def get_known_sites() -> list[dict]:
     return DEV_SITES
+
+
+SEARCH_HISTORY_PATH = Path.home() / ".atman" / "agent_memory" / "search_history.jsonl"
+
+
+@dataclass
+class SearchHistoryEntry:
+    query: str
+    timestamp: str  # ISO
+    results_count: int
+    session_id: str
+
+
+class SearchHistory:
+    def __init__(self, path: Path | str = SEARCH_HISTORY_PATH):
+        self.path = Path(path)
+
+    def record(self, query: str, results_count: int, session_id: str = "") -> None:
+        entry = SearchHistoryEntry(
+            query=query,
+            timestamp=datetime.now(UTC).isoformat(),
+            results_count=results_count,
+            session_id=session_id,
+        )
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        with self.path.open("a", encoding="utf-8") as f:
+            f.write(json.dumps(asdict(entry)) + "\n")
+
+    def load_recent(self, n: int = 10) -> list[SearchHistoryEntry]:
+        if not self.path.exists():
+            return []
+        lines = [ln for ln in self.path.read_text().splitlines() if ln.strip()]
+        return [SearchHistoryEntry(**json.loads(ln)) for ln in lines[-n:]]
+
+    def format_list(self, entries: list[SearchHistoryEntry]) -> str:
+        if not entries:
+            return "(no search history)"
+        lines = ["Recent searches:"]
+        for i, e in enumerate(entries, 1):
+            date = e.timestamp[:10]
+            lines.append(f"  {i}. [{date}] {e.query} ({e.results_count} results)")
+        return "\n".join(lines)

@@ -364,10 +364,16 @@ Give concise, actionable plans. Be specific about files and patterns to use."""
     def _rerank_cohere(self, query: str, passages: list[str], top_n: int) -> list[float]:
         try:
             co = _get_cohere_client(self.secrets.cohere_api_key)
+            model = COHERE_RERANK_MODEL
+            ac = getattr(self, "_agent_cfg", None)
+            if ac is not None:
+                override = getattr(ac, "cohere_rerank_model", None)
+                if isinstance(override, str) and override.strip():
+                    model = override.strip()
             resp = co.rerank(
                 query=query,
                 documents=passages,
-                model=COHERE_RERANK_MODEL,
+                model=model,
                 top_n=top_n,
             )
             scores = [0.0] * len(passages)
@@ -422,6 +428,100 @@ Give concise, actionable plans. Be specific about files and patterns to use."""
             ("embedder", self.cfg.embedder, " | ".join(EMBEDDER_PROVIDERS)),
             ("reranker", self.cfg.reranker, " | ".join(RERANKER_PROVIDERS)),
         ]
+
+    def update_llm_url(self, new_url: str) -> None:
+        """Update llama.cpp server URL without restart."""
+        self.llm_url = new_url
+        ac = getattr(self, "_agent_cfg", None)
+        if ac is not None:
+            ac.llm_url = new_url
+            ac.save_settings()
+
+    def get_sidebar_info(self) -> dict[str, str]:
+        """Compact provider summary for TUI sidebars."""
+        parts = self.llm_url.split("/")
+        host = parts[2] if len(parts) > 2 else self.llm_url
+        return {
+            "coder": f"{self.cfg.coder} @ {host}",
+            "planner": self.cfg.planner,
+            "embedder": self.cfg.embedder,
+            "reranker": self.cfg.reranker,
+        }
+
+    def plan_with_documents(
+        self,
+        user_message: str,
+        rag_chunks: list,
+    ) -> tuple[str, list[dict]]:
+        """
+        Planner with optional RAG chunks as grounded documents (Cohere citations).
+
+        Returns (answer text, citations) where each citation is
+        {"source": "path:line", "text": "..."}.
+        """
+        if self.cfg.planner != "cohere":
+            context = "\n\n".join(
+                f"[{c.path}:{c.start_line}]\n{getattr(c, 'window_content', c.content)}"
+                for c in rag_chunks
+            )
+            full_message = f"{context}\n\n{user_message}"
+            return self._route_planner(full_message), []
+
+        try:
+            co = _get_cohere_client(self.secrets.cohere_api_key)
+
+            def _chunk_metadata(chunk: object) -> dict:
+                md = getattr(chunk, "metadata", None)
+                if isinstance(md, dict):
+                    return md
+                return {}
+
+            response = co.chat(
+                model="command-a-03-2025",
+                message=user_message,
+                documents=[
+                    {
+                        "id": str(i),
+                        "data": {
+                            "text": getattr(c, "window_content", c.content),
+                            "source": f"{c.path}:{c.start_line}",
+                            "type": _chunk_metadata(c).get("type", "code"),
+                        },
+                    }
+                    for i, c in enumerate(rag_chunks)
+                ],
+                preamble=self.SYSTEM_PLANNER,
+            )
+
+            answer = getattr(response, "text", "") or ""
+
+            citations: list[dict[str, str]] = []
+            raw_citations = getattr(response, "citations", None) or []
+            for citation in raw_citations:
+                doc_ids = getattr(citation, "document_ids", None) or []
+                start = getattr(citation, "start", None)
+                end = getattr(citation, "end", None)
+                if start is None or end is None:
+                    continue
+                snippet = answer[start:end]
+                for doc_id in doc_ids:
+                    try:
+                        idx = int(doc_id)
+                        if idx < len(rag_chunks):
+                            chunk = rag_chunks[idx]
+                            citations.append(
+                                {
+                                    "source": f"{chunk.path}:{chunk.start_line}",
+                                    "text": snippet,
+                                }
+                            )
+                    except (ValueError, TypeError):
+                        continue
+
+            return answer, citations
+
+        except Exception as e:
+            return f"[Cohere error: {e}]", []
 
     def _build_messages(self, prompt: str, context: str) -> list[dict]:
         content = f"<context>\n{context}\n</context>\n\n{prompt}" if context else prompt

@@ -15,20 +15,22 @@ Key facts are saved to AgentMemory for future retrieval.
 Session summary is a compact narrative of what happened.
 Tail gives immediate conversational continuity.
 """
+
 from __future__ import annotations
 
-import re
 import json
+import re
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from .memory import AgentMemory, Plan
+    from .memory import AgentMemory, Plan, SessionSummary
     from .providers import ProviderRouter
 
 
 # ── Token counting ────────────────────────────────────────────────────────────
+
 
 def count_tokens(text: str, model: str = "gpt-3.5-turbo") -> int:
     """
@@ -38,6 +40,7 @@ def count_tokens(text: str, model: str = "gpt-3.5-turbo") -> int:
     """
     try:
         import tiktoken
+
         try:
             enc = tiktoken.encoding_for_model(model)
         except KeyError:
@@ -59,6 +62,7 @@ def count_messages_tokens(messages: list[dict]) -> int:
 
 # ── Thresholds ────────────────────────────────────────────────────────────────
 
+
 @dataclass
 class ContextLimits:
     """
@@ -66,15 +70,16 @@ class ContextLimits:
     Defaults are conservative — works for most 8K–128K models.
     Override via AgentConfig or /config context_limit.
     """
-    total: int = 8192           # total context window of the model
-    reserved_output: int = 2048 # tokens reserved for model's response
-    warning_ratio: float = 0.80 # warn at 80% of available input space
-    critical_ratio: float = 0.90 # compress at 90%
+
+    total: int = 8192  # total context window of the model
+    reserved_output: int = 2048  # tokens reserved for model's response
+    warning_ratio: float = 0.80  # warn at 80% of available input space
+    critical_ratio: float = 0.90  # compress at 90%
 
     # Compression budget
-    summary_tokens: int = 512   # target size of session summary
-    tail_messages: int = 6      # how many recent messages to keep verbatim
-    facts_tokens: int = 400     # target size of extracted facts block
+    summary_tokens: int = 512  # target size of session summary
+    tail_messages: int = 6  # how many recent messages to keep verbatim
+    facts_tokens: int = 400  # target size of extracted facts block
 
     @property
     def available_input(self) -> int:
@@ -130,13 +135,15 @@ Return JSON array of fact strings. Max {max_tokens} tokens total.
 
 # ── Context snapshot ──────────────────────────────────────────────────────────
 
+
 @dataclass
 class ContextSnapshot:
     """Result of compression — what goes into the new context."""
-    plan_text: str              # full serialized plan
-    summary: str                # LLM-generated session summary
-    key_facts: list[str]        # extracted technical facts
-    tail_messages: list[dict]   # last N messages verbatim
+
+    plan_text: str  # full serialized plan
+    summary: str  # LLM-generated session summary
+    key_facts: list[str]  # extracted technical facts
+    tail_messages: list[dict]  # last N messages verbatim
     compressed_at: str = field(default_factory=lambda: datetime.now().isoformat())
     tokens_before: int = 0
     tokens_after: int = 0
@@ -169,6 +176,7 @@ class ContextSnapshot:
 
 # ── Main context manager ──────────────────────────────────────────────────────
 
+
 class ContextManager:
     """
     Tracks token usage and triggers compression when approaching limits.
@@ -190,8 +198,8 @@ class ContextManager:
     def __init__(
         self,
         limits: ContextLimits,
-        router: "ProviderRouter",
-        memory: "AgentMemory",
+        router: ProviderRouter,
+        memory: AgentMemory,
     ) -> None:
         self.limits = limits
         self.router = router
@@ -206,7 +214,7 @@ class ContextManager:
         tokens_used: int
         tokens_available: int
         pct: float
-        level: str   # "ok" | "warning" | "critical"
+        level: str  # "ok" | "warning" | "critical"
         should_compress: bool
 
         @property
@@ -220,9 +228,9 @@ class ContextManager:
     def check(
         self,
         messages: list[dict],
-        current_plan: "Plan | None" = None,
+        current_plan: Plan | None = None,
         extra_context: str = "",
-    ) -> "ContextManager.Status":
+    ) -> ContextManager.Status:
         """
         Check current token usage. Call after every message.
         Returns Status with compression recommendation.
@@ -261,7 +269,7 @@ class ContextManager:
     def compress(
         self,
         messages: list[dict],
-        current_plan: "Plan | None" = None,
+        current_plan: Plan | None = None,
     ) -> ContextSnapshot:
         """
         Compress current context into a snapshot.
@@ -271,8 +279,16 @@ class ContextManager:
         tokens_before = self._last_token_count
 
         # Separate tail from body
-        tail = messages[-self.limits.tail_messages:] if len(messages) > self.limits.tail_messages else messages
-        body = messages[:-self.limits.tail_messages] if len(messages) > self.limits.tail_messages else []
+        tail = (
+            messages[-self.limits.tail_messages :]
+            if len(messages) > self.limits.tail_messages
+            else messages
+        )
+        body = (
+            messages[: -self.limits.tail_messages]
+            if len(messages) > self.limits.tail_messages
+            else []
+        )
 
         body_text = self._messages_to_text(body)
         task = current_plan.task if current_plan else "unknown task"
@@ -312,10 +328,12 @@ class ContextManager:
         messages: list[dict] = []
 
         # Context header as system message
-        messages.append({
-            "role": "system",
-            "content": snapshot.to_context_header(),
-        })
+        messages.append(
+            {
+                "role": "system",
+                "content": snapshot.to_context_header(),
+            }
+        )
 
         # Tail messages verbatim
         messages.extend(snapshot.tail_messages)
@@ -335,16 +353,17 @@ class ContextManager:
             parts.append(f"{role}: {content}")
         return "\n\n".join(parts)
 
-    def _serialize_plan(self, plan: "Plan | None") -> str:
+    def _serialize_plan(self, plan: Plan | None) -> str:
         if not plan:
             return ""
-        from .memory import STEP_DONE, STEP_BLOCKED, STEP_IN_PROGRESS
+        from .memory import STEP_BLOCKED, STEP_DONE, STEP_IN_PROGRESS
+
         icons = {STEP_DONE: "✅", STEP_BLOCKED: "🚫", STEP_IN_PROGRESS: "⚡"}
         lines = [f"PLAN: {plan.task}", f"Status: {plan.status}", "Steps:"]
         for i, step in enumerate(plan.steps):
             state = plan.get_state(i)
             icon = icons.get(state, "⬜")
-            line = f"  {icon} {i+1}. {step}"
+            line = f"  {icon} {i + 1}. {step}"
             notes = plan.get_notes(i)
             if notes:
                 line += f" [{notes[:60]}]"
@@ -369,7 +388,7 @@ class ContextManager:
             if count_tokens(result) > self.limits.summary_tokens * 1.5:
                 # Hard truncate
                 words = result.split()
-                result = " ".join(words[:self.limits.summary_tokens * 3 // 4])
+                result = " ".join(words[: self.limits.summary_tokens * 3 // 4])
             return result
         except Exception as e:
             return f"[Summary generation failed: {e}]\nWorking on: {task}"
@@ -400,7 +419,7 @@ class ContextManager:
         self,
         facts: list[str],
         task: str,
-        plan: "Plan | None",
+        plan: Plan | None,
     ) -> None:
         """Save extracted facts to AgentMemory for future retrieval."""
         tags = ["agent", "session", f"compression-{self._compression_count}"]
@@ -417,6 +436,64 @@ class ContextManager:
                 f"Saved {len(facts)} facts from session context.",
                 tags=tags,
             )
+
+    async def generate_session_summary(
+        self,
+        session_id: str,
+        started_at: datetime,
+        message_history: list[dict],
+        router: ProviderRouter,
+        outcome: str = "completed",
+    ) -> SessionSummary:
+        """Build a structured session summary via the planner/analysis model."""
+        from .memory import SessionSummary
+
+        history_text = "\n".join(
+            f"{m['role']}: {m.get('content', '')[:300]}" for m in message_history[-30:]
+        )
+        prompt = f"""Analyze this conversation and extract a structured summary.
+
+Conversation:
+{history_text}
+
+Return JSON with these exact fields:
+- task_description: one sentence what was being worked on
+- files_changed: list of file paths mentioned as changed
+- decisions_made: list of key decisions made (max 5)
+- open_questions: list of unresolved questions (max 3)
+- next_suggested_step: one sentence what to do next
+
+Return only valid JSON, no markdown."""
+
+        raw = router.analyze(prompt)
+        try:
+            data = json.loads(raw)
+        except json.JSONDecodeError:
+            match = re.search(r"\{.*\}", raw, re.DOTALL)
+            if match:
+                try:
+                    data = json.loads(match.group())
+                except json.JSONDecodeError:
+                    data = {}
+            else:
+                data = {}
+
+        ended = datetime.now(UTC).isoformat()
+        started_iso = (
+            started_at.isoformat() if hasattr(started_at, "isoformat") else str(started_at)
+        )
+
+        return SessionSummary(
+            session_id=session_id,
+            started_at=started_iso,
+            ended_at=ended,
+            task_description=data.get("task_description", ""),
+            files_changed=data.get("files_changed", []),
+            decisions_made=data.get("decisions_made", []),
+            open_questions=data.get("open_questions", []),
+            next_suggested_step=data.get("next_suggested_step", ""),
+            outcome=outcome,
+        )
 
     # ── Display helpers ───────────────────────────────────────────────────────
 

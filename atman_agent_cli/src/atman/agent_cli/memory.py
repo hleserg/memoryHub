@@ -4,16 +4,18 @@ Agent memory backed by Atman FactualMemory + ExperienceStore.
 Stores plans, discussion context, decisions, task history.
 Falls back to local JSONL if Atman not available.
 """
+
 from __future__ import annotations
 
 import json
 import uuid
+from dataclasses import asdict, dataclass, field
 from datetime import datetime
 from pathlib import Path
-from dataclasses import dataclass, field, asdict
 from typing import Any
 
 from .config import AgentConfig
+from .main_watcher import CommitEvent
 
 
 @dataclass
@@ -22,6 +24,7 @@ class WorkSession:
     Full context of a work session: discussion → plan → implementation → PR.
     Stored alongside the Plan so context is never lost.
     """
+
     id: str = field(default_factory=lambda: str(uuid.uuid4())[:8])
     plan_id: str = ""
     task: str = ""
@@ -30,7 +33,7 @@ class WorkSession:
     discussion: list[dict] = field(default_factory=list)  # [{"role": ..., "content": ...}]
 
     # What was built
-    commits: list[str] = field(default_factory=list)      # commit SHAs or messages
+    commits: list[str] = field(default_factory=list)  # commit SHAs or messages
     branch: str = ""
     pr_number: int | None = None
     pr_url: str = ""
@@ -38,7 +41,7 @@ class WorkSession:
 
     # Outcome
     merged: bool = False
-    outcome_notes: str = ""        # why something didn't merge, what was fixed, etc.
+    outcome_notes: str = ""  # why something didn't merge, what was fixed, etc.
 
     created_at: str = field(default_factory=lambda: datetime.now().isoformat())
     updated_at: str = field(default_factory=lambda: datetime.now().isoformat())
@@ -47,7 +50,13 @@ class WorkSession:
         self.updated_at = datetime.now().isoformat()
 
     def summary(self) -> str:
-        status = "merged" if self.merged else f"PR #{self.pr_number}" if self.pr_number else "in progress"
+        status = (
+            "merged"
+            if self.merged
+            else f"PR #{self.pr_number}"
+            if self.pr_number
+            else "in progress"
+        )
         return (
             f"Task: {self.task} | "
             f"Branch: {self.branch} | "
@@ -57,21 +66,21 @@ class WorkSession:
         )
 
 
-
 # Step states
-STEP_PENDING    = "pending"
-STEP_DONE       = "done"
-STEP_BLOCKED    = "blocked"   # tried, couldn't complete
+STEP_PENDING = "pending"
+STEP_DONE = "done"
+STEP_BLOCKED = "blocked"  # tried, couldn't complete
 STEP_IN_PROGRESS = "in_progress"
 
 
 @dataclass
 class StepMeta:
     """Rich metadata for a single plan step."""
-    state: str = STEP_PENDING          # pending | done | blocked | in_progress
-    blocked_reason: str = ""           # why it couldn't be done
-    attempts: int = 0                  # how many times we tried
-    notes: str = ""                    # what was done / result summary
+
+    state: str = STEP_PENDING  # pending | done | blocked | in_progress
+    blocked_reason: str = ""  # why it couldn't be done
+    attempts: int = 0  # how many times we tried
+    notes: str = ""  # what was done / result summary
     started_at: str = ""
     finished_at: str = ""
 
@@ -86,7 +95,7 @@ class StepMeta:
         }
 
     @classmethod
-    def from_dict(cls, d: dict) -> "StepMeta":
+    def from_dict(cls, d: dict) -> StepMeta:
         return cls(**{k: v for k, v in d.items() if k in cls.__dataclass_fields__})
 
 
@@ -106,7 +115,7 @@ class Plan:
     discussion: list[dict] = field(default_factory=list)
     branch: str = ""
     pr_number: int | None = None
-    status: str = "active"   # active | done | abandoned
+    status: str = "active"  # active | done | abandoned
     created_at: str = field(default_factory=lambda: datetime.now().isoformat())
     updated_at: str = field(default_factory=lambda: datetime.now().isoformat())
 
@@ -171,27 +180,21 @@ class Plan:
 
     def next_pending_index(self) -> int | None:
         """Find the first pending (not done, not blocked) step."""
-        for i, step in enumerate(self.steps):
+        for i, _step in enumerate(self.steps):
             if self.get_state(i) == STEP_PENDING:
                 return i
         return None
 
     def blocked_indices_before(self, current_index: int) -> list[int]:
         """Return indices of blocked steps that come before current_index."""
-        return [
-            i for i in range(current_index)
-            if self.get_state(i) == STEP_BLOCKED
-        ]
+        return [i for i in range(current_index) if self.get_state(i) == STEP_BLOCKED]
 
     def next_step(self) -> str | None:
         idx = self.next_pending_index()
         return self.steps[idx] if idx is not None else None
 
     def all_done_or_blocked(self) -> bool:
-        return all(
-            self.get_state(i) in (STEP_DONE, STEP_BLOCKED)
-            for i in range(len(self.steps))
-        )
+        return all(self.get_state(i) in (STEP_DONE, STEP_BLOCKED) for i in range(len(self.steps)))
 
     @property
     def progress(self) -> tuple[int, int]:
@@ -200,8 +203,10 @@ class Plan:
 
     def progress_summary(self) -> str:
         icons = {
-            STEP_DONE: "✅", STEP_BLOCKED: "🚫",
-            STEP_IN_PROGRESS: "⚡", STEP_PENDING: "⬜",
+            STEP_DONE: "✅",
+            STEP_BLOCKED: "🚫",
+            STEP_IN_PROGRESS: "⚡",
+            STEP_PENDING: "⬜",
         }
         return " ".join(icons.get(self.get_state(i), "?") for i in range(len(self.steps)))
 
@@ -228,8 +233,9 @@ class AgentMemory:
     def _try_init_atman(self) -> bool:
         """Try to initialize Atman memory components."""
         try:
-            from atman.core.services.experience_service import ExperienceService
             from atman.adapters.storage.file_state_store import FileStateStore
+            from atman.core.services.experience_service import ExperienceService
+
             store = FileStateStore(base_path=self.cfg.memory_path / "atman_store")
             self._experience_service = ExperienceService(store=store)
             return True
@@ -263,13 +269,14 @@ class AgentMemory:
     def _store_in_atman(self, plan: Plan) -> None:
         """Persist plan summary as Atman fact for long-term memory."""
         try:
-            from atman.core.models.fact import FactRecord
             from atman.adapters.memory.file_backend import FileBackend
+            from atman.core.models.fact import FactRecord
+
             backend = FileBackend(base_path=self.cfg.memory_path / "atman_facts")
             fact = FactRecord(
                 content=f"Agent plan '{plan.id}': {plan.task}. "
-                        f"Steps: {'; '.join(plan.steps)}. "
-                        f"Status: {plan.status}.",
+                f"Steps: {'; '.join(plan.steps)}. "
+                f"Status: {plan.status}.",
                 source="agent_cli",
                 tags=["agent", "plan", plan.id],
             )
@@ -302,8 +309,8 @@ class AgentMemory:
     def _store_session_in_atman(self, session: WorkSession) -> None:
         """Store work session as Atman experience for long-term recall."""
         try:
-            from atman.core.models.experience import SessionExperience, KeyMoment
             from atman.adapters.storage.jsonl_experience_store import JsonlExperienceStore
+            from atman.core.models.experience import KeyMoment, SessionExperience
 
             store = JsonlExperienceStore(base_path=self.cfg.memory_path / "atman_experiences")
             exp = SessionExperience(
@@ -377,9 +384,9 @@ class AgentMemory:
         if query:
             q = query.lower()
             sessions = [
-                s for s in sessions
-                if q in s.task.lower()
-                or any(q in turn["content"].lower() for turn in s.discussion)
+                s
+                for s in sessions
+                if q in s.task.lower() or any(q in turn["content"].lower() for turn in s.discussion)
             ]
         return sessions[:limit]
 
@@ -504,38 +511,38 @@ class AgentMemory:
 
     # ── Changeset storage (no LLM, called from sync service) ──────────────────
 
-    def save_changeset_from_event(self, event: "CommitEvent") -> None:
+    def save_changeset_from_event(self, event: CommitEvent) -> None:
         """
         Adapter: converts MainWatcher CommitEvent → changeset record.
         Called from the on_change callback — no LLM, fire-and-forget.
         """
-        from dataclasses import asdict
         all_files = event.files_added + event.files_changed + event.files_deleted
         record = {
-            "from_sha":      event.prev_sha,
-            "to_sha":        event.sha,
-            "branch":        "main",
-            "synced_at":     event.timestamp,
-            "commit_log":    event.commit_messages,
+            "from_sha": event.prev_sha,
+            "to_sha": event.sha,
+            "branch": "main",
+            "synced_at": event.timestamp,
+            "commit_log": event.commit_messages,
             "files_changed": all_files,
-            "files_added":   event.files_added,
+            "files_added": event.files_added,
             "files_deleted": event.files_deleted,
-            "diff_stat":     f"+{event.insertions}/-{event.deletions} in {len(all_files)} files",
-            "authors":       [event.author] if event.author else [],
-            "triggered_by":  event.source,
-            "pr_number":     event.pr_number,
-            "pr_title":      event.pr_title or "",
+            "diff_stat": f"+{event.insertions}/-{event.deletions} in {len(all_files)} files",
+            "authors": [event.author] if event.author else [],
+            "triggered_by": event.source,
+            "pr_number": event.pr_number,
+            "pr_title": event.pr_title or "",
         }
         changesets_file = self.cfg.memory_path / "changesets.jsonl"
         with open(changesets_file, "a") as f:
             f.write(json.dumps(record, ensure_ascii=False) + "\n")
 
-    def save_changeset(self, changeset: "Changeset") -> None:
+    def save_changeset(self, changeset: Any) -> None:
         """
         Persist a main-branch changeset. Called by MainSyncService — no LLM.
         Stores timestamp so agent always knows what's fresh vs stale.
         """
         from dataclasses import asdict
+
         record = asdict(changeset)
         changesets_file = self.cfg.memory_path / "changesets.jsonl"
         with open(changesets_file, "a") as f:
@@ -578,3 +585,53 @@ class AgentMemory:
                 + (" ..." if len(r.get("files_changed", [])) > 8 else "")
             )
         return "\n".join(parts)
+
+
+SUMMARIES_PATH = Path.home() / ".atman" / "agent_memory" / "session_summaries.jsonl"
+
+
+@dataclass
+class SessionSummary:
+    session_id: str
+    started_at: str  # ISO datetime
+    ended_at: str  # ISO datetime
+    task_description: str
+    files_changed: list[str]
+    decisions_made: list[str]
+    open_questions: list[str]
+    next_suggested_step: str
+    outcome: str  # completed | blocked | abandoned
+
+
+class SessionSummaryStore:
+    def __init__(self, path: Path = SUMMARIES_PATH):
+        self.path = path
+
+    def save(self, summary: SessionSummary) -> None:
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        with self.path.open("a", encoding="utf-8") as f:
+            f.write(json.dumps(asdict(summary)) + "\n")
+
+    def load_last(self, n: int = 1) -> list[SessionSummary]:
+        if not self.path.exists():
+            return []
+        lines = [ln for ln in self.path.read_text().splitlines() if ln.strip()]
+        return [SessionSummary(**json.loads(ln)) for ln in lines[-n:]]
+
+    def format_for_prompt(self, summary: SessionSummary) -> str:
+        lines = [
+            f"=== Previous Session ({summary.started_at[:10]}) ===",
+            f"Task: {summary.task_description}",
+            f"Outcome: {summary.outcome}",
+        ]
+        if summary.files_changed:
+            lines.append(f"Files changed: {', '.join(summary.files_changed)}")
+        if summary.decisions_made:
+            lines.append("Decisions:")
+            lines.extend(f"  - {d}" for d in summary.decisions_made)
+        if summary.open_questions:
+            lines.append("Open questions:")
+            lines.extend(f"  - {q}" for q in summary.open_questions)
+        if summary.next_suggested_step:
+            lines.append(f"Suggested next step: {summary.next_suggested_step}")
+        return "\n".join(lines)

@@ -24,49 +24,79 @@ Layout:
 
 Install: pip install textual
 """
+
 from __future__ import annotations
 
-import os
-import time
-import threading
 import asyncio
+import os
+import re
+import requests
+import time
+import uuid
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import ClassVar
+from typing import Any, ClassVar
 
-from textual import work, on
+from rich.text import Text
+from textual import on, work
 from textual.app import App, ComposeResult
 from textual.binding import Binding
-from textual.containers import Container, Horizontal, Vertical, ScrollableContainer
+from textual.containers import Container, Horizontal
 from textual.css.query import NoMatches
 from textual.reactive import reactive
 from textual.widget import Widget
 from textual.widgets import (
-    DataTable, Footer, Header, Input, Label, Log,
-    RichLog, Static, TabbedContent, TabPane,
+    DataTable,
+    Footer,
+    Header,
+    Input,
+    RichLog,
+    Static,
+    TabbedContent,
+    TabPane,
 )
-from rich.text import Text
-from rich.markdown import Markdown
-from rich.panel import Panel
 
 from .config import AgentConfig
-from .memory import AgentMemory, Plan
+from .context_manager import ContextLimits, ContextManager
+from .executor import ExecutorInterrupted, PlanExecutor, auto_plan
 from .git import (
-    BranchGuard, PRManager, commit_all, current_branch,
-    get_diff, is_branch_merged, pull_main, push_branch, run_git,
+    BranchGuard,
+    BranchGuardError,
+    PRManager,
+    commit_all,
+    current_branch,
+    get_diff,
+    push_branch,
+    run_git,
 )
-from .rag import RAGIndex
 from .main_watcher import MainWatcher
-from .webhook import WebhookServer
-from .secrets import get_secrets
+from .memory import AgentMemory, Plan, SessionSummaryStore
 from .providers import (
-    ProviderConfig, ProviderRouter,
-    CODER_PROVIDERS, PLANNER_PROVIDERS, EMBEDDER_PROVIDERS, RERANKER_PROVIDERS,
+    CODER_PROVIDERS,
+    EMBEDDER_PROVIDERS,
+    PLANNER_PROVIDERS,
+    RERANKER_PROVIDERS,
+    ProviderConfig,
+    ProviderRouter,
 )
-from .executor import PlanExecutor, auto_plan
-from .web import extract_urls, fetch_all_urls, format_pages_for_context, is_github_url, fetch_github_raw
-from .search import search, has_search_intent, extract_search_query, add_search_domain, get_known_sites
-from .context_manager import ContextManager, ContextLimits, count_tokens
-
+from .queue import AgentStatusBar, QueueScreen, QueueTask, TaskQueue
+from .rag import RAGIndex
+from .search import (
+    SearchHistory,
+    add_search_domain,
+    extract_search_query,
+    get_known_sites,
+    has_search_intent,
+    search,
+)
+from .secrets import get_secrets
+from .web import (
+    extract_urls,
+    fetch_github_raw,
+    format_pages_for_context,
+    is_github_url,
+)
+from .webhook import WebhookServer
 
 # ── CSS ───────────────────────────────────────────────────────────────────────
 
@@ -158,10 +188,11 @@ Screen {
 
 # ── Status sidebar ────────────────────────────────────────────────────────────
 
+
 class StatusSidebar(Static):
     """Right panel: current plan, branch, PR status."""
 
-    def __init__(self, agent: "AtmanApp") -> None:
+    def __init__(self, agent: AtmanApp) -> None:
         super().__init__()
         self._agent = agent
 
@@ -218,7 +249,7 @@ class StatusSidebar(Static):
 
         # Token usage
         agent_app = agent
-        if hasattr(agent_app, 'ctx') and hasattr(agent_app, '_messages'):
+        if hasattr(agent_app, "ctx") and hasattr(agent_app, "_messages"):
             status = agent_app.ctx.check(agent_app._messages, agent_app.current_plan)
             bar = agent_app.ctx.usage_bar(status.tokens_used)
             color = status.color
@@ -238,6 +269,7 @@ class StatusSidebar(Static):
 
 # ── Chat pane ─────────────────────────────────────────────────────────────────
 
+
 class ChatPane(Widget):
     def compose(self) -> ComposeResult:
         yield RichLog(id="chat-log", highlight=True, markup=True, wrap=True)
@@ -252,15 +284,16 @@ class ChatPane(Widget):
             log.write(Text(text))
 
     def write_chunk(self, chunk: str) -> None:
-        """Write a streaming chunk without newline."""
+        """Write a streaming chunk without markup (LLM streams)."""
         log = self.query_one("#chat-log", RichLog)
-        log.write(Text(chunk), shrink=False)
+        log.write(chunk, shrink=False, markup=False)
 
     def separator(self) -> None:
         self.write("[dim]" + "─" * 60 + "[/dim]")
 
 
 # ── Plans tab ─────────────────────────────────────────────────────────────────
+
 
 class PlansTab(Widget):
     def compose(self) -> ComposeResult:
@@ -277,15 +310,31 @@ class PlansTab(Widget):
         t.clear()
         for p in plans:
             done, total = p.progress
-            status_style = {
-                "active": "green", "done": "dim", "abandoned": "red"
-            }.get(p.status, "white")
+            status_style = {"active": "green", "done": "dim", "abandoned": "red"}.get(
+                p.status, "white"
+            )
             t.add_row(
                 p.id,
                 p.task[:40],
                 f"[{status_style}]{p.status}[/{status_style}]",
                 f"{done}/{total}",
                 p.branch or "—",
+                key=p.id,
+            )
+
+    def on_data_table_row_selected(self, event: DataTable.RowSelected) -> None:
+        if event.row_key is None:
+            return
+        plan_id = str(event.row_key.value)
+        plans = self.app.memory.list_plans()
+        selected = next((pl for pl in plans if pl.id == plan_id), None)
+        if selected:
+            self.app.current_plan = selected
+            done, total = selected.progress
+            self.app.query_one(ChatPane).write(
+                f"\n[bold]Plan selected:[/bold] {selected.task}\n"
+                f"  Progress: {done}/{total}\n"
+                f"[dim]Press Ctrl+A and send any message to execute[/dim]"
             )
 
 
@@ -357,13 +406,12 @@ class SettingsTab(Widget):
 
     DEFAULT_CSS = SETTINGS_CSS
 
-    def __init__(self, app: "AtmanApp") -> None:
+    def __init__(self, app: AtmanApp) -> None:
         super().__init__()
         self._app = app
 
     def compose(self) -> ComposeResult:
-        from textual.widgets import Select, Switch, Button
-        from textual.widgets import Input as TInput
+        from textual.widgets import Button, Select, Switch
 
         cfg = self._app.cfg
         pcfg = self._app.provider_cfg
@@ -389,19 +437,27 @@ class SettingsTab(Widget):
             with Horizontal(classes="settings-row"):
                 yield Static("Model name", classes="settings-label")
                 yield Input(value=cfg.llm_model, id="inp-llm-model", classes="settings-input")
-            yield Static("Model name sent to llama.cpp /v1/chat/completions", classes="settings-hint")
+            yield Static(
+                "Model name sent to llama.cpp /v1/chat/completions", classes="settings-hint"
+            )
 
             with Horizontal(classes="settings-row"):
                 yield Static("Temperature", classes="settings-label")
-                yield Input(value=str(cfg.llm_temperature), id="inp-llm-temp", classes="settings-input")
+                yield Input(
+                    value=str(cfg.llm_temperature), id="inp-llm-temp", classes="settings-input"
+                )
 
             with Horizontal(classes="settings-row"):
                 yield Static("Max tokens (output)", classes="settings-label")
-                yield Input(value=str(cfg.llm_max_tokens), id="inp-llm-maxtok", classes="settings-input")
+                yield Input(
+                    value=str(cfg.llm_max_tokens), id="inp-llm-maxtok", classes="settings-input"
+                )
 
             with Horizontal(classes="settings-row"):
                 yield Static("Timeout (s)", classes="settings-label")
-                yield Input(value=str(cfg.llm_timeout), id="inp-llm-timeout", classes="settings-input")
+                yield Input(
+                    value=str(cfg.llm_timeout), id="inp-llm-timeout", classes="settings-input"
+                )
 
         # ── Planner ────────────────────────────────────────────────
         with Container(classes="settings-section"):
@@ -421,8 +477,8 @@ class SettingsTab(Widget):
                 yield Select(
                     [
                         ("command-r-plus", "command-r-plus"),
-                        ("command-r",      "command-r"),
-                        ("command",        "command"),
+                        ("command-r", "command-r"),
+                        ("command", "command"),
                     ],
                     value=cfg.cohere_model,
                     id="sel-cohere-model",
@@ -431,7 +487,11 @@ class SettingsTab(Widget):
 
             with Horizontal(classes="settings-row"):
                 yield Static("Cohere temperature", classes="settings-label")
-                yield Input(value=str(cfg.cohere_temperature), id="inp-cohere-temp", classes="settings-input")
+                yield Input(
+                    value=str(cfg.cohere_temperature),
+                    id="inp-cohere-temp",
+                    classes="settings-input",
+                )
 
         # ── Embedder & Reranker ────────────────────────────────────
         with Container(classes="settings-section"):
@@ -458,7 +518,9 @@ class SettingsTab(Widget):
             with Horizontal(classes="settings-row"):
                 yield Static("RAG candidates (top-K)", classes="settings-label")
                 yield Input(value=str(cfg.rag_top_k), id="inp-rag-topk", classes="settings-input")
-            yield Static("BGE-M3 retrieves this many candidates before reranking", classes="settings-hint")
+            yield Static(
+                "BGE-M3 retrieves this many candidates before reranking", classes="settings-hint"
+            )
 
             with Horizontal(classes="settings-row"):
                 yield Static("Final results (top-N)", classes="settings-label")
@@ -480,12 +542,23 @@ class SettingsTab(Widget):
 
             with Horizontal(classes="settings-row"):
                 yield Static("Poll interval (s)", classes="settings-label")
-                yield Input(value=str(cfg.babysit_poll_interval), id="inp-babysit-poll", classes="settings-input")
+                yield Input(
+                    value=str(cfg.babysit_poll_interval),
+                    id="inp-babysit-poll",
+                    classes="settings-input",
+                )
 
             with Horizontal(classes="settings-row"):
                 yield Static("Max fix attempts", classes="settings-label")
-                yield Input(value=str(cfg.babysit_max_fix_attempts), id="inp-babysit-max", classes="settings-input")
-            yield Static("How many times babysit tries to fix CI/conflicts before giving up", classes="settings-hint")
+                yield Input(
+                    value=str(cfg.babysit_max_fix_attempts),
+                    id="inp-babysit-max",
+                    classes="settings-input",
+                )
+            yield Static(
+                "How many times babysit tries to fix CI/conflicts before giving up",
+                classes="settings-hint",
+            )
 
         # ── Context window ────────────────────────────────────────
         with Container(classes="settings-section"):
@@ -493,7 +566,9 @@ class SettingsTab(Widget):
 
             with Horizontal(classes="settings-row"):
                 yield Static("Token limit", classes="settings-label")
-                yield Input(value=str(cfg.context_limit), id="inp-ctx-limit", classes="settings-input")
+                yield Input(
+                    value=str(cfg.context_limit), id="inp-ctx-limit", classes="settings-input"
+                )
             yield Static(
                 "Total context window of your model. "
                 "DeepSeek-R1-14B Q4_K_M: try 8192–16384 depending on VRAM.",
@@ -532,7 +607,10 @@ class SettingsTab(Widget):
 
         # ── Secrets ────────────────────────────────────────────────
         with Container(classes="settings-section"):
-            yield Static("🔑 API Keys  (masked, saved to ~/.atman/.secrets)", classes="settings-section-title")
+            yield Static(
+                "🔑 API Keys  (masked, saved to ~/.atman/.secrets)",
+                classes="settings-section-title",
+            )
             yield Static("", id="secrets-status")
             yield Static(
                 "[dim]Enter key and press Enter to save. Values are write-only here.[/dim]",
@@ -540,18 +618,30 @@ class SettingsTab(Widget):
             )
             with Horizontal(classes="settings-row"):
                 yield Static("Anthropic API key", classes="settings-label-dim")
-                yield Input(placeholder="sk-ant-... (leave blank to keep existing)", password=True,
-                           id="inp-anthropic-key", classes="settings-input")
+                yield Input(
+                    placeholder="sk-ant-... (leave blank to keep existing)",
+                    password=True,
+                    id="inp-anthropic-key",
+                    classes="settings-input",
+                )
             with Horizontal(classes="settings-row"):
                 yield Static("Cohere API key", classes="settings-label-dim")
-                yield Input(placeholder="leave blank to keep existing", password=True,
-                           id="inp-cohere-key", classes="settings-input")
+                yield Input(
+                    placeholder="leave blank to keep existing",
+                    password=True,
+                    id="inp-cohere-key",
+                    classes="settings-input",
+                )
             with Horizontal(classes="settings-row"):
                 yield Static("GitHub token", classes="settings-label-dim")
-                yield Input(placeholder="ghp_... (leave blank to keep existing)", password=True,
-                           id="inp-github-token", classes="settings-input")
+                yield Input(
+                    placeholder="ghp_... (leave blank to keep existing)",
+                    password=True,
+                    id="inp-github-token",
+                    classes="settings-input",
+                )
 
-        from textual.widgets import Button
+
         yield Button("💾  Save all settings", id="btn-save-settings", variant="primary")
         yield Static("", id="settings-save-status")
 
@@ -575,13 +665,13 @@ class SettingsTab(Widget):
 
     def on_select_changed(self, event) -> None:
         """Live-apply provider switches immediately."""
-        from textual.widgets import Select
+
         sel_id = event.select.id
         val = event.value
 
         provider_map = {
-            "sel-coder":    "coder",
-            "sel-planner":  "planner",
+            "sel-coder": "coder",
+            "sel-planner": "planner",
             "sel-embedder": "embedder",
             "sel-reranker": "reranker",
         }
@@ -616,6 +706,7 @@ class SettingsTab(Widget):
         def get_select(widget_id: str) -> str:
             try:
                 from textual.widgets import Select
+
                 return str(self.query_one(f"#{widget_id}", Select).value)
             except NoMatches:
                 return ""
@@ -633,11 +724,11 @@ class SettingsTab(Widget):
                 errors.append(f"{attr}: invalid int '{val}'")
 
         # LLM
-        cfg.llm_url   = get_input("inp-llm-url")   or cfg.llm_url
-        cfg.llm_model = get_input("inp-llm-model")  or cfg.llm_model
+        cfg.llm_url = get_input("inp-llm-url") or cfg.llm_url
+        cfg.llm_model = get_input("inp-llm-model") or cfg.llm_model
         set_float("llm_temperature", get_input("inp-llm-temp") or str(cfg.llm_temperature))
-        set_int("llm_max_tokens",    get_input("inp-llm-maxtok") or str(cfg.llm_max_tokens))
-        set_int("llm_timeout",       get_input("inp-llm-timeout") or str(cfg.llm_timeout))
+        set_int("llm_max_tokens", get_input("inp-llm-maxtok") or str(cfg.llm_max_tokens))
+        set_int("llm_timeout", get_input("inp-llm-timeout") or str(cfg.llm_timeout))
 
         # Update router llm_url live
         self._app.router.llm_url = cfg.llm_url
@@ -651,8 +742,13 @@ class SettingsTab(Widget):
         set_int("rag_top_n", get_input("inp-rag-topn") or str(cfg.rag_top_n))
 
         # Babysit
-        set_int("babysit_poll_interval",    get_input("inp-babysit-poll") or str(cfg.babysit_poll_interval))
-        set_int("babysit_max_fix_attempts", get_input("inp-babysit-max")  or str(cfg.babysit_max_fix_attempts))
+        set_int(
+            "babysit_poll_interval", get_input("inp-babysit-poll") or str(cfg.babysit_poll_interval)
+        )
+        set_int(
+            "babysit_max_fix_attempts",
+            get_input("inp-babysit-max") or str(cfg.babysit_max_fix_attempts),
+        )
         # babysit_require_approval already set live via Switch
 
         # Context window
@@ -671,13 +767,13 @@ class SettingsTab(Widget):
             self._app.ctx.limits.critical_ratio = cfg.context_critical_ratio
 
         # GitHub
-        cfg.github_repo  = get_input("inp-github-repo")   or cfg.github_repo
-        cfg.main_branch  = get_input("inp-main-branch")   or cfg.main_branch
+        cfg.github_repo = get_input("inp-github-repo") or cfg.github_repo
+        cfg.main_branch = get_input("inp-main-branch") or cfg.main_branch
 
         # API Keys — only save if non-empty
         anthropic_key = get_input("inp-anthropic-key")
-        cohere_key    = get_input("inp-cohere-key")
-        github_token  = get_input("inp-github-token")
+        cohere_key = get_input("inp-cohere-key")
+        github_token = get_input("inp-github-token")
         if anthropic_key:
             self._app.secrets.set_persistent("ANTHROPIC_API_KEY", anthropic_key)
         if cohere_key:
@@ -706,9 +802,7 @@ class SettingsTab(Widget):
 
     def _set_status(self, msg: str, color: str = "white") -> None:
         try:
-            self.query_one("#settings-save-status", Static).update(
-                f"[{color}]{msg}[/{color}]"
-            )
+            self.query_one("#settings-save-status", Static).update(f"[{color}]{msg}[/{color}]")
         except NoMatches:
             pass
 
@@ -766,7 +860,7 @@ class SetupTab(Widget):
 
     STEP_ICONS = {"ok": "✅", "error": "❌", "running": "⚡", "pending": "⬜", "warn": "⚠️"}
 
-    def __init__(self, app: "AtmanApp") -> None:
+    def __init__(self, app: AtmanApp) -> None:
         super().__init__()
         self._app = app
         self._orchestrator = None
@@ -780,8 +874,9 @@ class SetupTab(Widget):
         }
 
     def compose(self) -> ComposeResult:
-        from textual.widgets import Button, RichLog as TRichLog
+        from textual.widgets import Button
         from tunnel import TunnelState
+
         state = TunnelState.load()
 
         yield Static(
@@ -807,7 +902,9 @@ class SetupTab(Widget):
 
         # ── Step 1: Prerequisites ────────────────────────────────────────
         with Container(classes="setup-step", id="step-prereqs"):
-            yield Static("⬜ Step 1 — Prerequisites", id="step-prereqs-title", classes="setup-step-title")
+            yield Static(
+                "⬜ Step 1 — Prerequisites", id="step-prereqs-title", classes="setup-step-title"
+            )
             yield Static(
                 "[dim]Checks: Python packages, cloudflared binary, GitHub token set.[/dim]"
             )
@@ -816,18 +913,28 @@ class SetupTab(Widget):
 
         # ── Step 2: Tunnel ───────────────────────────────────────────────
         with Container(classes="setup-step", id="step-tunnel"):
-            yield Static("⬜ Step 2 — Start Cloudflare Tunnel", id="step-tunnel-title", classes="setup-step-title")
+            yield Static(
+                "⬜ Step 2 — Start Cloudflare Tunnel",
+                id="step-tunnel-title",
+                classes="setup-step-title",
+            )
             yield Static(
                 "[dim]Runs: [cyan]cloudflared tunnel --url http://localhost:9876[/cyan]\n"
                 "Gives you a free temporary public URL. No account needed.\n"
                 "⚠ URL changes on restart → webhook is re-registered automatically.[/dim]"
             )
-            yield Button("Start tunnel", id="btn-start-tunnel", classes="setup-btn", variant="primary")
+            yield Button(
+                "Start tunnel", id="btn-start-tunnel", classes="setup-btn", variant="primary"
+            )
             yield Static("", id="tunnel-result")
 
         # ── Step 3: Webhook ──────────────────────────────────────────────
         with Container(classes="setup-step", id="step-webhook"):
-            yield Static("⬜ Step 3 — Register GitHub Webhook", id="step-webhook-title", classes="setup-step-title")
+            yield Static(
+                "⬜ Step 3 — Register GitHub Webhook",
+                id="step-webhook-title",
+                classes="setup-step-title",
+            )
             yield Static(
                 "[dim]Calls GitHub API to create a webhook pointing to your tunnel URL.\n"
                 "Events: pull_request, check_run\n"
@@ -838,7 +945,11 @@ class SetupTab(Widget):
 
         # ── Step 4: Runner ───────────────────────────────────────────────
         with Container(classes="setup-step", id="step-runner"):
-            yield Static("⬜ Step 4 — GitHub Self-Hosted Runner", id="step-runner-title", classes="setup-step-title")
+            yield Static(
+                "⬜ Step 4 — GitHub Self-Hosted Runner",
+                id="step-runner-title",
+                classes="setup-step-title",
+            )
             yield Static(
                 "[dim]Downloads GitHub Actions runner binary (~100MB).\n"
                 "Registers it with your repo. Starts it as a background process.\n"
@@ -851,7 +962,11 @@ class SetupTab(Widget):
 
         # ── Step 5: CI workflow ──────────────────────────────────────────
         with Container(classes="setup-step", id="step-workflow"):
-            yield Static("⬜ Step 5 — Write CI Workflow File", id="step-workflow-title", classes="setup-step-title")
+            yield Static(
+                "⬜ Step 5 — Write CI Workflow File",
+                id="step-workflow-title",
+                classes="setup-step-title",
+            )
             yield Static(
                 "[dim]Creates [cyan].github/workflows/ai-review.yml[/cyan]\n"
                 "This tells GitHub Actions to run the AI review on every PR.\n\n"
@@ -866,7 +981,9 @@ class SetupTab(Widget):
 
         # ── Step 6: Test ─────────────────────────────────────────────────
         with Container(classes="setup-step", id="step-test"):
-            yield Static("⬜ Step 6 — Verify Everything", id="step-test-title", classes="setup-step-title")
+            yield Static(
+                "⬜ Step 6 — Verify Everything", id="step-test-title", classes="setup-step-title"
+            )
             yield Static(
                 "[dim]Checks: tunnel reachable, webhook active on GitHub,\n"
                 "runner showing as online in GitHub API.[/dim]"
@@ -877,8 +994,12 @@ class SetupTab(Widget):
         # ── Setup All ────────────────────────────────────────────────────
         yield Static("\n──────────────────────────────────────────────────────────")
         with Horizontal():
-            yield Button("🚀  Setup Everything", id="btn-setup-all", variant="success", classes="setup-btn")
-            yield Button("⏹  Stop Tunnel & Runner", id="btn-stop-all", variant="error", classes="setup-btn")
+            yield Button(
+                "🚀  Setup Everything", id="btn-setup-all", variant="success", classes="setup-btn"
+            )
+            yield Button(
+                "⏹  Stop Tunnel & Runner", id="btn-stop-all", variant="error", classes="setup-btn"
+            )
 
         # ── Live log ─────────────────────────────────────────────────────
         yield Static("\n[bold]Live log:[/bold]")
@@ -912,14 +1033,16 @@ class SetupTab(Widget):
         icon = self.STEP_ICONS.get(status, "?")
         labels = {
             "prereqs": "Step 1 — Prerequisites",
-            "tunnel":  "Step 2 — Cloudflare Tunnel",
+            "tunnel": "Step 2 — Cloudflare Tunnel",
             "webhook": "Step 3 — GitHub Webhook",
-            "runner":  "Step 4 — Self-hosted Runner",
-            "workflow":"Step 5 — CI Workflow File",
-            "test":    "Step 6 — Verification",
+            "runner": "Step 4 — Self-hosted Runner",
+            "workflow": "Step 5 — CI Workflow File",
+            "test": "Step 6 — Verification",
         }
         label = labels.get(step, step)
-        color = {"ok": "green", "error": "red", "running": "yellow", "warn": "yellow"}.get(status, "dim")
+        color = {"ok": "green", "error": "red", "running": "yellow", "warn": "yellow"}.get(
+            status, "dim"
+        )
         try:
             self.query_one(f"#step-{step}-title", Static).update(
                 f"[{color}]{icon} {label}[/{color}]"
@@ -928,9 +1051,7 @@ class SetupTab(Widget):
             pass
         if detail:
             try:
-                self.query_one(f"#{step}-result", Static).update(
-                    f"  [{color}]{detail}[/{color}]"
-                )
+                self.query_one(f"#{step}-result", Static).update(f"  [{color}]{detail}[/{color}]")
             except NoMatches:
                 pass
         self._refresh_overview()
@@ -943,15 +1064,14 @@ class SetupTab(Widget):
             icon = self.STEP_ICONS.get(self._step_status.get(k, "pending"), "⬜")
             parts.append(f"{icon} {s}")
         try:
-            self.query_one("#setup-steps-overview", Static).update(
-                "  " + "   ".join(parts) + "\n"
-            )
+            self.query_one("#setup-steps-overview", Static).update("  " + "   ".join(parts) + "\n")
         except NoMatches:
             pass
 
     def _get_orchestrator(self):
         if not self._orchestrator:
             from .tunnel import SetupOrchestrator
+
             self._orchestrator = SetupOrchestrator(
                 github_token=self._app.secrets.github_token,
                 repo=self._app.cfg.github_repo,
@@ -987,10 +1107,13 @@ class SetupTab(Widget):
 
         # cloudflared
         from .tunnel import is_cloudflared_installed
+
         if is_cloudflared_installed():
             self.call_from_thread(self._log, "cloudflared: found", "ok")
         else:
-            self.call_from_thread(self._log, "cloudflared: not found (will install automatically)", "warn")
+            self.call_from_thread(
+                self._log, "cloudflared: not found (will install automatically)", "warn"
+            )
 
         # GitHub token
         if self._app.secrets.github_token:
@@ -1019,9 +1142,7 @@ class SetupTab(Widget):
         ok = orch.start_tunnel()
         if ok:
             url = orch.tunnel_url
-            self.call_from_thread(
-                self._set_step, "tunnel", "ok", f"Running → {url}"
-            )
+            self.call_from_thread(self._set_step, "tunnel", "ok", f"Running → {url}")
         else:
             self.call_from_thread(self._set_step, "tunnel", "error", "Tunnel failed to start")
 
@@ -1032,8 +1153,10 @@ class SetupTab(Widget):
         ok = orch.register_webhook()
         if ok:
             self.call_from_thread(
-                self._set_step, "webhook", "ok",
-                f"Webhook #{orch.state.webhook_id} registered on GitHub"
+                self._set_step,
+                "webhook",
+                "ok",
+                f"Webhook #{orch.state.webhook_id} registered on GitHub",
             )
         else:
             self.call_from_thread(self._set_step, "webhook", "error", "Failed — check GitHub token")
@@ -1057,21 +1180,24 @@ class SetupTab(Widget):
         ok = orch.write_workflow()
         if ok:
             self.call_from_thread(
-                self._set_step, "workflow", "ok",
-                ".github/workflows/ai-review.yml written — commit and push!"
+                self._set_step,
+                "workflow",
+                "ok",
+                ".github/workflows/ai-review.yml written — commit and push!",
             )
             self.call_from_thread(
                 self._log,
                 "⚠ Don't forget:\n"
                 "  1. git add .github/workflows/ai-review.yml && git commit -m 'ci: add AI review'\n"
                 "  2. Add secrets on GitHub (COHERE_API_KEY / ANTHROPIC_API_KEY)",
-                "warn"
+                "warn",
             )
 
     @work(thread=True)
     def _run_verify(self) -> None:
         self.call_from_thread(self._set_step, "test", "running", "Verifying...")
         from .tunnel import TunnelState, list_registered_runners
+
         state = TunnelState.load()
         issues = []
 
@@ -1087,9 +1213,7 @@ class SetupTab(Widget):
             issues.append("no tunnel URL")
 
         # Runner online?
-        runners = list_registered_runners(
-            self._app.secrets.github_token, self._app.cfg.github_repo
-        )
+        runners = list_registered_runners(self._app.secrets.github_token, self._app.cfg.github_repo)
         online = [r for r in runners if r.get("status") == "online"]
         if online:
             names = ", ".join(r["name"] for r in online)
@@ -1129,6 +1253,7 @@ class SetupTab(Widget):
 
 # ── Changes tab ───────────────────────────────────────────────────────────────
 
+
 class ChangesTab(Widget):
     def compose(self) -> ComposeResult:
         yield Static("[bold]Recent changes in main[/bold]", classes="status-label")
@@ -1157,6 +1282,7 @@ class ChangesTab(Widget):
 
 # ── Main App ──────────────────────────────────────────────────────────────────
 
+
 class AtmanApp(App):
     """Atman Agent — Textual TUI."""
 
@@ -1164,15 +1290,17 @@ class AtmanApp(App):
     TITLE = "atman-agent"
 
     BINDINGS: ClassVar[list[Binding]] = [
-        Binding("ctrl+p", "set_mode('plan')",    "Plan",    show=True),
-        Binding("ctrl+a", "set_mode('agent')",   "Agent",   show=True),
+        Binding("ctrl+p", "set_mode('plan')", "Plan", show=True),
+        Binding("ctrl+a", "set_mode('agent')", "Agent", show=True),
         Binding("ctrl+b", "set_mode('babysit')", "Babysit", show=True),
-        Binding("ctrl+r", "set_mode('review')",  "Review",  show=True),
-        Binding("ctrl+k", "show_config",         "Config",  show=True),
-        Binding("ctrl+u", "show_setup",          "Setup",   show=True),
-        Binding("ctrl+s", "manual_sync",         "Sync",    show=True),
-        Binding("ctrl+i", "rebuild_index",       "Index",   show=False),
-        Binding("ctrl+q", "quit",                "Quit",    show=True),
+        Binding("ctrl+r", "set_mode('review')", "Review", show=True),
+        Binding("ctrl+k", "show_config", "Config", show=True),
+        Binding("ctrl+u", "show_setup", "Setup", show=True),
+        Binding("ctrl+s", "manual_sync", "Sync", show=True),
+        Binding("ctrl+i", "rebuild_index", "Index", show=False),
+        Binding("ctrl+c", "interrupt_executor", "Stop", show=False),
+        Binding("q", "open_queue", "Queue", show=True),
+        Binding("ctrl+q", "quit", "Quit", show=True),
     ]
 
     mode: reactive[str] = reactive("agent")
@@ -1192,7 +1320,8 @@ class AtmanApp(App):
         self.memory = AgentMemory(cfg)
         self.branch_guard = BranchGuard(cfg)
         self.pr_manager = PRManager(cfg)
-        self.rag = RAGIndex(cfg)
+        self.rag = RAGIndex(cfg, planner=self.router)
+        self.router._agent_cfg = cfg
 
         # Background watcher — daemon thread, no LLM, richer event model
         self.watcher = MainWatcher(
@@ -1215,25 +1344,35 @@ class AtmanApp(App):
         self.ctx = ContextManager(ctx_limits, self.router, self.memory)
         self._current_executor: PlanExecutor | None = None
 
+        self.task_queue = TaskQueue()
+        self.telegram: Any = None
+        self._telegram_startup_task: asyncio.Task[Any] | None = None
+        self._pending_issue_url: str | None = ""
+        self._pending_issue_content: str | None = ""
+        self._session_start = datetime.now(UTC)
+        self._session_id = str(uuid.uuid4())
+
     def compose(self) -> ComposeResult:
         yield Header(show_clock=True)
         with TabbedContent(id="tabs"):
-            with TabPane("Chat", id="tab-chat"):
-                with Horizontal(id="main-horizontal"):
-                    with Container(id="chat-pane"):
-                        yield ChatPane(id="chat-widget")
-                    yield StatusSidebar(self, id="status-sidebar")
+            with TabPane("Chat", id="tab-chat"), Horizontal(id="main-horizontal"):
+                with Container(id="chat-pane"):
+                    yield ChatPane(id="chat-widget")
+                yield StatusSidebar(self, id="status-sidebar")
             with TabPane("Plans", id="tab-plans"):
                 yield PlansTab(id="plans-tab")
+            with TabPane("Queue", id="tab-queue"):
+                yield Static("Press Q to open queue manager", id="queue-placeholder")
             with TabPane("Settings", id="tab-settings"):
                 yield SettingsTab(self, id="settings-tab")
             with TabPane("Setup CI", id="tab-setup"):
                 yield SetupTab(self, id="setup-tab")
             with TabPane("Changes", id="tab-changes"):
                 yield ChangesTab(id="changes-tab")
+        yield AgentStatusBar(id="status-bar")
         yield Footer()
 
-    def on_mount(self) -> None:
+    async def on_mount(self) -> None:
         # Start background watcher (daemon thread, no LLM)
         self.watcher.start_background(interval=60)
 
@@ -1251,20 +1390,68 @@ class AtmanApp(App):
         self._refresh_all()
         self._update_header()
 
+        try:
+            bar = self.query_one(AgentStatusBar)
+            br = current_branch(self.cfg.repo_path)
+            bar.update_status(
+                branch=br,
+                chunks=int(self.rag.stats.get("chunks", 0)),
+                tokens_limit=int(self.ctx.limits.total),
+            )
+        except (NoMatches, Exception):
+            pass
+
+        last_summaries = SessionSummaryStore().load_last(1)
+        if last_summaries:
+            prev_ctx = SessionSummaryStore().format_for_prompt(last_summaries[0])
+            self._messages.insert(0, {"role": "system", "content": prev_ctx})
+
+        telegram_token = self.secrets.get("telegram_token", "")
+        if telegram_token:
+            try:
+                from .telegram import TelegramBot
+
+                allowed_ids_raw = os.getenv("ATMAN_TELEGRAM_ALLOWED_IDS", "")
+                allowed_ids = [int(x) for x in allowed_ids_raw.split(",") if x.strip().isdigit()]
+
+                async def _on_tg_msg(txt: str, _cid: int) -> None:
+                    self.call_from_thread(self._inject_telegram_message, txt)
+
+                async def _on_tg_file(path: Path, _mime: str, _cid: int) -> None:
+                    self.call_from_thread(self._notify_file_received, path)
+
+                self.telegram = TelegramBot(
+                    token=telegram_token,
+                    allowed_ids=allowed_ids,
+                    on_message=_on_tg_msg,
+                    on_file=_on_tg_file,
+                )
+                self._telegram_startup_task = asyncio.create_task(self.telegram.start())
+                self._chat_write("[dim]Telegram bot started[/dim]")
+            except Exception as e:
+                self.telegram = None
+                self._chat_write(f"[dim]Telegram not available: {e}[/dim]")
+        else:
+            self.telegram = None
+
         # Welcome message
-        self._chat_write("[bold cyan]Atman Agent[/bold cyan] — type [green]/help[/green] or start chatting")
+        self._chat_write(
+            "[bold cyan]Atman Agent[/bold cyan] — type [green]/help[/green] or start chatting"
+        )
         self._chat_write(f"[dim]Mode: {self.mode} · Index: {self.rag.stats['chunks']} chunks[/dim]")
 
         # Warn if no index
         if not self.rag.stats["chunks"]:
-            self._chat_write("[yellow]⚠ No RAG index. Press Ctrl+I or type /index to build.[/yellow]")
+            self._chat_write(
+                "[yellow]⚠ No RAG index. Press Ctrl+I or type /index to build.[/yellow]"
+            )
 
         # Resume hint
         plan = self.memory.get_active_plan()
         if plan:
             done, total = plan.progress
             self._chat_write(
-                f"[dim]Active plan: \"{plan.task[:50]}\" [{done}/{total}] — "
+                f'[dim]Active plan: "{plan.task[:50]}" [{done}/{total}] — '
                 f"type [bold]/resume[/bold][/dim]"
             )
 
@@ -1316,10 +1503,10 @@ class AtmanApp(App):
 
         # Echo input
         self._chat_write(f"\n[bold cyan]>[/bold cyan] {text}")
-        self._add_to_history("user", text)   # track for context window
+        self._add_to_history("user", text)  # track for context window
 
         if text.lower() in ("/quit", "/exit", "/q"):
-            self.exit()
+            asyncio.get_running_loop().create_task(self.action_quit())
             return
 
         if text.startswith("/"):
@@ -1331,26 +1518,31 @@ class AtmanApp(App):
 
     def _handle_slash(self, text: str) -> None:
         parts = text.split(None, 1)
-        cmd  = parts[0].lower()
+        cmd = parts[0].lower()
         args = parts[1] if len(parts) > 1 else ""
 
         dispatch = {
-            "/help":     self._cmd_help,
-            "/mode":     self._cmd_mode,
-            "/status":   self._cmd_status,
-            "/plans":    self._cmd_plans,
-            "/resume":   self._cmd_resume,
-            "/index":    self._cmd_index,
-            "/diff":     self._cmd_diff,
-            "/memory":   self._cmd_memory,
-            "/babysit":  self._cmd_babysit,
-            "/review":   self._cmd_review,
+            "/help": self._cmd_help,
+            "/mode": self._cmd_mode,
+            "/status": self._cmd_status,
+            "/plans": self._cmd_plans,
+            "/resume": self._cmd_resume,
+            "/index": self._cmd_index,
+            "/diff": self._cmd_diff,
+            "/memory": self._cmd_memory,
+            "/babysit": self._cmd_babysit,
+            "/review": self._cmd_review,
             "/finalize": self._cmd_finalize,
-            "/sync":     self._cmd_sync,
-            "/changes":  self._cmd_changes,
-            "/config":   self._cmd_config,
-            "/search":   self._cmd_search,
-            "/sites":    self._cmd_sites,
+            "/sync": self._cmd_sync,
+            "/changes": self._cmd_changes,
+            "/config": self._cmd_config,
+            "/search": self._cmd_search,
+            "/sites": self._cmd_sites,
+            "/commit": self._cmd_commit,
+            "/push": self._cmd_push,
+            "/ask": self._cmd_ask,
+            "/task": self._cmd_take_issue,
+            "/export": self._cmd_export,
         }
         handler = dispatch.get(cmd)
         if handler:
@@ -1374,12 +1566,19 @@ class AtmanApp(App):
   [green]/status[/green]                            — git + PR status
   [green]/config[/green]                            — show/change providers & secrets
   [green]/finalize[/green]                          — extract plan from discussion
+  [green]/commit [message][/green]                  — preview stat and commit (or `/commit diff`)
+  [green]/push[/green]                             — push branch (branch guard protected)
+  [green]/ask <question>[/green]                   — read-only codebase Q&A via RAG
+  [green]/task[/green]                             — take last GitHub issue as plan
+  [green]/export [epic#][/green]                     — export plan as epic markdown
+  [green]/search[/green]                           — recent history; `/search q` searches
 
 [bold]Keyboard shortcuts:[/bold]
   Ctrl+P  Plan mode    Ctrl+A  Agent mode
   Ctrl+B  Babysit      Ctrl+R  Review
   Ctrl+K  Config tab   Ctrl+S  Sync now
   Ctrl+I  Rebuild index  Ctrl+Q  Quit
+  Q       Task queue manager
 """)
 
     def _cmd_mode(self, args: str) -> None:
@@ -1412,9 +1611,11 @@ class AtmanApp(App):
         )
         for i, (step, is_done) in enumerate(zip(plan.steps, plan.steps_done)):
             icon = "✅" if is_done else "⬜"
-            self._chat_write(f"  {icon} {i+1}. {step}")
+            self._chat_write(f"  {icon} {i + 1}. {step}")
         self._refresh_sidebar()
-        self._chat_write("\n[dim]Switch to agent mode (Ctrl+A) and send any message to execute[/dim]")
+        self._chat_write(
+            "\n[dim]Switch to agent mode (Ctrl+A) and send any message to execute[/dim]"
+        )
 
     def _cmd_index(self, _: str) -> None:
         self._rebuild_index_worker()
@@ -1432,8 +1633,13 @@ class AtmanApp(App):
         if sessions:
             self._chat_write("\n[bold]Past work sessions:[/bold]")
             for s in sessions:
-                status = "[green]merged[/green]" if s.merged else \
-                         f"[blue]PR #{s.pr_number}[/blue]" if s.pr_number else "[dim]open[/dim]"
+                status = (
+                    "[green]merged[/green]"
+                    if s.merged
+                    else f"[blue]PR #{s.pr_number}[/blue]"
+                    if s.pr_number
+                    else "[dim]open[/dim]"
+                )
                 self._chat_write(
                     f"  [cyan]{s.id}[/cyan] [{s.created_at[:10]}] {s.task[:50]} "
                     f"{status} · {len(s.discussion)} turns"
@@ -1502,6 +1708,11 @@ class AtmanApp(App):
 
         if subcmd == "set" and len(parts) >= 3:
             key, value = parts[1], parts[2]
+            if key == "llm_url":
+                self.cfg.llm_url = value
+                self.router.update_llm_url(value)
+                self._chat_write(f"[green]✓[/green] llm_url → {value}")
+                return
             # Special case: context_limit updates ContextManager live
             if key == "context_limit":
                 try:
@@ -1550,10 +1761,184 @@ class AtmanApp(App):
         self._chat_write(
             "\n[dim]/config coder claude-sonnet  — switch coder[/dim]\n"
             "[dim]/config set anthropic_api_key sk-ant-...  — set key[/dim]\n"
-            "[dim]/config set context_limit 32768  — change token limit[/dim]"
+            "[dim]/config set context_limit 32768  — change token limit[/dim]\n"
+            "[dim]/config set llm_url http://localhost:8080  — llama.cpp URL[/dim]"
         )
         self.query_one("#tabs", TabbedContent).active = "tab-settings"
         self._refresh_config_tab()
+
+    def _rag_plan_context(self, query: str) -> str:
+        if not self.rag.stats["chunks"]:
+            return ""
+        if hasattr(self.rag, "search_fusion") and self.rag.planner:
+            chunks = self.rag.search_fusion(query)
+        else:
+            chunks = self.rag.search(query)
+        return self.rag.format_context(chunks)
+
+    def _cmd_commit(self, args: str) -> None:
+        """/commit [message] or /commit diff — preview stat and commit with confirmation."""
+        if args.strip() == "diff":
+            diff_txt = get_diff(self.cfg.repo_path)
+            self._chat_write(f"```diff\n{diff_txt[:5000]}\n```")
+            return
+        self._commit_worker(args.strip())
+
+    @work(thread=True, exclusive=False)
+    def _commit_worker(self, message: str) -> None:
+        try:
+            _, stat, _ = run_git(["diff", "--staged", "--stat"], self.cfg.repo_path)
+            _, unstaged, _ = run_git(["status", "--porcelain"], self.cfg.repo_path)
+
+            if not stat.strip() and not unstaged.strip():
+                self.call_from_thread(self._chat_write, "[dim]Nothing to commit[/dim]")
+                return
+
+            if unstaged.strip() and not stat.strip():
+                run_git(["add", "-A"], self.cfg.repo_path)
+                _, stat, _ = run_git(["diff", "--staged", "--stat"], self.cfg.repo_path)
+
+            self.call_from_thread(
+                self._chat_write,
+                f"\n[bold]Staged changes:[/bold]\n```\n{stat}\n```",
+            )
+
+            branch = current_branch(self.cfg.repo_path)
+            if branch in ("main", "master", self.cfg.main_branch):
+                _, msgs = self.branch_guard.check_and_prepare(message or "agent-changes")
+                for m_msg in msgs:
+                    self.call_from_thread(self._chat_write, f"[dim]{m_msg}[/dim]")
+
+            commit_msg = message
+            if not commit_msg:
+                prompt = (
+                    f"Write a concise git commit message (one line) for these changes:\n{stat}\n"
+                    "Follow conventional commits: feat/fix/refactor/chore/docs: <description>"
+                )
+                commit_msg = self.router.analyze(prompt).strip().split("\n")[0]
+                self.call_from_thread(self._chat_write, f"[dim]Message: {commit_msg}[/dim]")
+
+            ok, out = commit_all(commit_msg, self.cfg.repo_path)
+            if ok:
+                self.call_from_thread(self._chat_write, f"[green]✓ Committed:[/green] {commit_msg}")
+            else:
+                self.call_from_thread(self._chat_write, f"[red]Commit failed:[/red] {out}")
+
+        except Exception as e:
+            self.call_from_thread(self._chat_write, f"[red]Commit error: {e}[/red]")
+
+    def _cmd_push(self, _: str) -> None:
+        """Push current branch respecting BranchGuard.safe_push."""
+        try:
+            ok, msg = self.branch_guard.safe_push()
+            if ok:
+                self._chat_write(f"[green]✓[/green] Pushed ({msg.strip()[:200]})")
+            else:
+                self._chat_write(f"[red]Push failed:[/red] {msg}")
+        except BranchGuardError as e:
+            self._chat_write(f"[red]{e}[/red]")
+
+    def _cmd_ask(self, args: str) -> None:
+        """/ask <question> — read-only RAG query."""
+        if not args.strip():
+            self._chat_write("[dim]Usage: /ask <question about the codebase>[/dim]")
+            return
+        self._ask_worker(args.strip())
+
+    @work(thread=True, exclusive=False)
+    def _ask_worker(self, question: str) -> None:
+        try:
+            if not self.rag.stats["chunks"]:
+                self.call_from_thread(
+                    self._chat_write, "[dim]RAG index empty. Run /index first.[/dim]"
+                )
+                return
+
+            self.call_from_thread(
+                self._chat_write,
+                f"\n[bold cyan]◆ Searching codebase for:[/bold cyan] {question}",
+            )
+
+            if hasattr(self.rag, "search_fusion") and self.rag.planner:
+                chunks = self.rag.search_fusion(question)
+            else:
+                chunks = self.rag.search(question)
+
+            text: str
+            citations: list[dict[str, str]]
+            if hasattr(self.router, "plan_with_documents"):
+                text, citations = self.router.plan_with_documents(question, chunks)
+            else:
+                context = self.rag.format_context(chunks)
+                prompt = "Answer this question about the codebase based on the context:\n\n"
+                text = self.router.analyze(f"{context}\n\n{prompt}{question}")
+                citations = []
+
+            self.call_from_thread(self._chat_write, text)
+
+            if citations:
+                sources = ", ".join(f"{c['source']}" for c in citations[:5])
+                self.call_from_thread(self._chat_write, f"\n[dim]📎 Sources: {sources}[/dim]")
+
+        except Exception as e:
+            self.call_from_thread(self._chat_write, f"[red]Ask error: {e}[/red]")
+
+    def _cmd_take_issue(self, _: str) -> None:
+        """Take pending GitHub issue payload as plan."""
+        if not getattr(self, "_pending_issue_content", None):
+            self._chat_write("[dim]No pending issue. Send a GitHub issue URL first.[/dim]")
+            return
+        content = str(self._pending_issue_content or "")
+        checkboxes = re.findall(r"- \[ \] (.+)", content)
+        if checkboxes:
+            steps = checkboxes
+            task = content.split("\n")[0][:100]
+        else:
+            task = content.split("\n")[0][:100]
+            steps = []
+
+        self.current_plan = self.memory.create_plan(
+            task=task,
+            steps=steps,
+            discussion=[{"role": "user", "content": content}],
+        )
+        self._chat_write(f"[green]✓ Issue taken as task:[/green] {task}")
+        if steps:
+            for i, step in enumerate(steps, 1):
+                self._chat_write(f"  {i}. {step}")
+        self._refresh_sidebar()
+        self._pending_issue_content = ""
+        self._pending_issue_url = None
+
+    def _cmd_export(self, args: str) -> None:
+        """Export current plan as epic markdown."""
+        if not self.current_plan or not self.current_plan.steps:
+            self._chat_write("[dim]No active plan to export. Use /finalize first.[/dim]")
+            return
+
+        epic_num = args.strip() or "00"
+        slug = self.current_plan.task[:30].lower().replace(" ", "_")
+        slug = "".join(c for c in slug if c.isalnum() or c == "_")
+        filename = f"E{epic_num}_{slug}.md"
+        output_path = self.cfg.repo_path / filename
+
+        lines = [
+            f"# E{epic_num} — {self.current_plan.task}",
+            "",
+            f"**Summary:** {self.current_plan.summary or self.current_plan.task}",
+            "",
+            "## Subtasks",
+            "",
+        ]
+        for i, step in enumerate(self.current_plan.steps, 1):
+            state_v = self.current_plan.get_state(i - 1)
+            check = "x" if state_v == "done" else " "
+            lines.append(f"- [{check}] {step}")
+
+        lines += ["", "## Labels", "", "- agent", "- auto-generated"]
+
+        output_path.write_text("\n".join(lines), encoding="utf-8")
+        self._chat_write(f"[green]✓ Exported:[/green] {filename}")
 
     # ── Message dispatch by mode ──────────────────────────────────────────────
 
@@ -1566,14 +1951,10 @@ class AtmanApp(App):
         """Check token usage; if critical, compress in background."""
         status = self.ctx.check(self._messages, self.current_plan)
         if status.level == "warning":
-            self._chat_write(
-                f"[yellow]⚠ Context {status.display} — approaching limit[/yellow]"
-            )
+            self._chat_write(f"[yellow]⚠ Context {status.display} — approaching limit[/yellow]")
             self._refresh_sidebar()
         elif status.should_compress:
-            self._chat_write(
-                f"[red]◆ Context {status.display} — compressing...[/red]"
-            )
+            self._chat_write(f"[red]◆ Context {status.display} — compressing...[/red]")
             self._compress_context_worker()
 
     @work(thread=True, exclusive=False)
@@ -1590,7 +1971,7 @@ class AtmanApp(App):
                 self._chat_write,
                 f"\n[bold cyan]◆ Context compressed[/bold cyan] "
                 f"[dim]({snapshot.tokens_before:,} → {snapshot.tokens_after:,} tokens · "
-                f"saved {len(snapshot.key_facts)} facts to memory)[/dim]"
+                f"saved {len(snapshot.key_facts)} facts to memory)[/dim]",
             )
             if snapshot.key_facts:
                 self.call_from_thread(self._chat_write, "[dim]  Saved facts:[/dim]")
@@ -1599,23 +1980,21 @@ class AtmanApp(App):
                 if len(snapshot.key_facts) > 3:
                     self.call_from_thread(
                         self._chat_write,
-                        f"  [dim]  ... and {len(snapshot.key_facts)-3} more → /memory[/dim]"
+                        f"  [dim]  ... and {len(snapshot.key_facts) - 3} more → /memory[/dim]",
                     )
 
             # Plan is always preserved
             if self.current_plan:
                 self.call_from_thread(
                     self._chat_write,
-                    f"[dim]  Plan preserved: \"{self.current_plan.task}\" "
-                    f"[{self.current_plan.progress_summary()}][/dim]"
+                    f'[dim]  Plan preserved: "{self.current_plan.task}" '
+                    f"[{self.current_plan.progress_summary()}][/dim]",
                 )
 
             self.call_from_thread(self._refresh_sidebar)
 
         except Exception as e:
-            self.call_from_thread(
-                self._chat_write, f"[red]Compression error: {e}[/red]"
-            )
+            self.call_from_thread(self._chat_write, f"[red]Compression error: {e}[/red]")
 
     def _handle_message(self, text: str) -> None:
         if self._busy:
@@ -1648,8 +2027,10 @@ class AtmanApp(App):
     def action_set_mode(self, mode: str) -> None:
         self.mode = mode
         mode_colors = {
-            "plan": "yellow", "agent": "green",
-            "babysit": "cyan", "review": "magenta",
+            "plan": "yellow",
+            "agent": "green",
+            "babysit": "cyan",
+            "review": "magenta",
         }
         c = mode_colors.get(mode, "white")
         self._chat_write(f"[{c}]◆ Switched to {mode} mode[/{c}]")
@@ -1661,8 +2042,7 @@ class AtmanApp(App):
             next_step = self.current_plan.next_step()
             if next_step:
                 self._chat_write(
-                    f"[dim]Next step: {next_step} — "
-                    f"send any message to execute plan[/dim]"
+                    f"[dim]Next step: {next_step} — send any message to execute plan[/dim]"
                 )
 
     def action_show_config(self) -> None:
@@ -1678,6 +2058,58 @@ class AtmanApp(App):
     def action_rebuild_index(self) -> None:
         self._rebuild_index_worker()
 
+    def action_interrupt_executor(self) -> None:
+        if self._current_executor:
+            self._current_executor.stop()
+            self._chat_write("[yellow]⏹ Interrupting... (will stop at next step)[/yellow]")
+        else:
+            self._chat_write("[dim]No executor running[/dim]")
+
+    def action_open_queue(self) -> None:
+        self.push_screen(
+            QueueScreen(queue=self.task_queue, on_start=self._start_from_queue),
+        )
+
+    def _start_from_queue(self, task: QueueTask) -> None:
+        self.current_plan = self.memory.create_plan(
+            task=task.title,
+            steps=[task.description] if task.description else [],
+        )
+        self.action_set_mode("agent")
+        self._chat_write(f"\n[green]◆ Starting from queue:[/green] {task.title}")
+        self._refresh_sidebar()
+
+    async def action_quit(self) -> None:
+        if self._messages and hasattr(self, "_session_start"):
+            try:
+                summary = await self.ctx.generate_session_summary(
+                    session_id=getattr(self, "_session_id", "unknown"),
+                    started_at=self._session_start,
+                    message_history=self._messages,
+                    router=self.router,
+                    outcome="completed",
+                )
+                SessionSummaryStore().save(summary)
+            except Exception:
+                pass
+        telegram = getattr(self, "telegram", None)
+        t_task = getattr(self, "_telegram_startup_task", None)
+        if t_task is not None and not t_task.done():
+            t_task.cancel()
+        if telegram is not None:
+            try:
+                await telegram.stop()
+            except Exception:
+                pass
+        self.exit()
+
+    def _inject_telegram_message(self, text: str) -> None:
+        self._chat_write(f"\n[cyan]📱 Telegram:[/cyan] {text}")
+        self._handle_message(text)
+
+    def _notify_file_received(self, path: Path | str) -> None:
+        self._chat_write(f"\n[cyan]📎 File received:[/cyan] {path}")
+
     # ── Workers (run in threads, update UI via call_from_thread) ─────────────
 
     def _search_and_dispatch(self, text: str) -> None:
@@ -1690,29 +2122,30 @@ class AtmanApp(App):
         try:
             query = extract_search_query(original_text)
             self.call_from_thread(
-                self._chat_write,
-                f"[dim]◆ Searching dev sites for: [bold]{query}[/bold][/dim]"
+                self._chat_write, f"[dim]◆ Searching dev sites for: [bold]{query}[/bold][/dim]"
             )
 
             session = search(query, fetch_content=True)
 
             if session.expanded:
                 self.call_from_thread(
-                    self._chat_write,
-                    "[dim]  Dev sites thin — expanded to general web[/dim]"
+                    self._chat_write, "[dim]  Dev sites thin — expanded to general web[/dim]"
                 )
 
             good_results = [r for r in session.results if r.ok]
+            SearchHistory().record(
+                query=query,
+                results_count=len(good_results),
+                session_id=getattr(self, "_session_id", ""),
+            )
             if good_results:
                 for r in good_results[:3]:
                     self.call_from_thread(
-                        self._chat_write,
-                        f"  [green]✓[/green] [{r.domain}] {r.title}"
+                        self._chat_write, f"  [green]✓[/green] [{r.domain}] {r.title}"
                     )
             else:
                 self.call_from_thread(
-                    self._chat_write,
-                    "[yellow]⚠ No useful results found[/yellow]"
+                    self._chat_write, "[yellow]⚠ No useful results found[/yellow]"
                 )
 
             # Inject search results into context and dispatch
@@ -1724,13 +2157,13 @@ class AtmanApp(App):
             if self.mode == "plan":
                 if not self.current_plan:
                     self.current_plan = self.memory.create_plan(
-                        task=original_text, steps=[],
+                        task=original_text,
+                        steps=[],
                         discussion=[{"role": "user", "content": enriched}],
                     )
                 else:
                     self.memory.append_to_discussion(self.current_plan, "user", enriched)
-                context = self.rag.format_context(self.rag.search(original_text)) \
-                          if self.rag.stats["chunks"] else ""
+                context = self._rag_plan_context(original_text)
                 history = self.memory.get_discussion_history(self.current_plan)
                 self.call_from_thread(self._chat_write, "\n[bold cyan]◆ Thinking...[/bold cyan]")
                 response = self.router.discuss(enriched, history, context)
@@ -1745,9 +2178,11 @@ class AtmanApp(App):
             self._busy = False
 
     def _cmd_search(self, args: str) -> None:
-        """/search <query> — search dev sites directly."""
+        """/search <query> — search dev sites; no args shows recent history."""
         if not args.strip():
-            self._chat_write("[dim]Usage: /search <query>[/dim]")
+            history = SearchHistory().load_recent(10)
+            self._chat_write(SearchHistory().format_list(history))
+            self._chat_write("[dim]/search <query> — new search[/dim]")
             return
         self._search_worker(args.strip())
 
@@ -1759,17 +2194,16 @@ class AtmanApp(App):
             domain = parts[1].lstrip("https://").lstrip("http://").rstrip("/")
             label = " ".join(parts[2:]) if len(parts) > 2 else domain
             add_search_domain(domain, label)
-            self._chat_write(f"[green]✓[/green] Added [cyan]{domain}[/cyan] to search priority list")
+            self._chat_write(
+                f"[green]✓[/green] Added [cyan]{domain}[/cyan] to search priority list"
+            )
             return
 
         sites = get_known_sites()
         self._chat_write(f"\n[bold]Known dev sites ({len(sites)}):[/bold]")
         for s in sites:
             tags = ", ".join(s["tags"]) if s["tags"] else ""
-            self._chat_write(
-                f"  [cyan]{s['domain']:<35}[/cyan] "
-                f"[dim]{s['label']:<20}[/dim] {tags}"
-            )
+            self._chat_write(f"  [cyan]{s['domain']:<35}[/cyan] [dim]{s['label']:<20}[/dim] {tags}")
         self._chat_write("\n[dim]/sites add <domain> [label] — add a site[/dim]")
 
     def _fetch_urls_and_dispatch(self, text: str, urls: list[str]) -> None:
@@ -1782,7 +2216,7 @@ class AtmanApp(App):
         try:
             self.call_from_thread(
                 self._chat_write,
-                f"[dim]◆ Fetching {len(urls)} URL{'s' if len(urls) > 1 else ''}...[/dim]"
+                f"[dim]◆ Fetching {len(urls)} URL{'s' if len(urls) > 1 else ''}...[/dim]",
             )
 
             pages = []
@@ -1793,27 +2227,38 @@ class AtmanApp(App):
                     page = fetch_github_raw(url, self.secrets.github_token)
                 else:
                     from .web import fetch_url
+
                     page = fetch_url(url)
 
                 if page.ok:
                     preview = page.content[:120].replace("\n", " ")
                     self.call_from_thread(
                         self._chat_write,
-                        f"  [green]✓[/green] {page.title or page.domain} — {preview}..."
+                        f"  [green]✓[/green] {page.title or page.domain} — {preview}...",
                     )
                 else:
                     self.call_from_thread(
-                        self._chat_write,
-                        f"  [yellow]⚠[/yellow] {url}: {page.error}"
+                        self._chat_write, f"  [yellow]⚠[/yellow] {url}: {page.error}"
                     )
                 pages.append(page)
+
+            for page in pages:
+                if page.ok and "github.com" in page.url and "/issues/" in page.url:
+                    self.call_from_thread(
+                        self._chat_write,
+                        "\n[dim]GitHub issue loaded. Take as task? Type [bold]/task[/bold] "
+                        "to start.[/dim]",
+                    )
+                    self._pending_issue_url = page.url
+                    self._pending_issue_content = page.content
+                    break
 
             web_context = format_pages_for_context([p for p in pages if p.ok])
 
             if not web_context:
                 self.call_from_thread(
                     self._chat_write,
-                    "[yellow]Could not fetch any URLs — proceeding without web context[/yellow]"
+                    "[yellow]Could not fetch any URLs — proceeding without web context[/yellow]",
                 )
                 web_context = ""
 
@@ -1829,14 +2274,14 @@ class AtmanApp(App):
             if self.mode == "plan":
                 if not self.current_plan:
                     self.current_plan = self.memory.create_plan(
-                        task=original_text, steps=[],
+                        task=original_text,
+                        steps=[],
                         discussion=[{"role": "user", "content": enriched}],
                     )
                 else:
                     self.memory.append_to_discussion(self.current_plan, "user", enriched)
 
-                context = self.rag.format_context(self.rag.search(original_text)) \
-                          if self.rag.stats["chunks"] else ""
+                context = self._rag_plan_context(original_text)
                 history = self.memory.get_discussion_history(self.current_plan)
                 self.call_from_thread(self._chat_write, "\n[bold cyan]◆ Thinking...[/bold cyan]")
                 response = self.router.discuss(enriched, history, context)
@@ -1846,31 +2291,27 @@ class AtmanApp(App):
             elif self.mode == "agent":
                 # Run agent task with web content already in the message
                 self._busy = False  # reset so _agent_task_worker can proceed
-                self.call_from_thread(
-                    lambda: self._agent_task_worker(enriched)
-                )
+                self.call_from_thread(lambda: self._agent_task_worker(enriched))
                 return  # _agent_task_worker will set _busy=False itself
 
         finally:
             self._busy = False
 
-
+    @work(thread=True, exclusive=False)
+    def _agent_task_worker(self, task: str) -> None:
         self._busy = True
         try:
-            # Branch guard
             try:
                 branch, msgs = self.branch_guard.check_and_prepare(task)
-                for m in msgs:
-                    self.call_from_thread(self._chat_write, f"[dim]  {m}[/dim]")
+                for m_msg in msgs:
+                    self.call_from_thread(self._chat_write, f"[dim]  {m_msg}[/dim]")
             except RuntimeError as e:
                 self.call_from_thread(self._chat_write, f"[red]Branch error: {e}[/red]")
                 return
 
             if self.current_plan and self.current_plan.status == "active":
-                # Execute existing plan
                 self._run_executor(self.current_plan)
             else:
-                # Auto-plan first, then execute
                 self.call_from_thread(self._chat_write, "\n[bold cyan]◆ Planning...[/bold cyan]")
                 summary, steps = auto_plan(task, self.router, self.rag)
                 self.call_from_thread(self._chat_write, f"[dim]{summary}[/dim]")
@@ -1896,12 +2337,28 @@ class AtmanApp(App):
         Create and run a PlanExecutor, bridging output to Textual UI.
         Called from a worker thread.
         """
+
         def output(text: str, markup: bool = True) -> None:
-            self.call_from_thread(self._chat_write, text) if markup else \
-            self.call_from_thread(self._chat_write, text)
-            # sidebar refresh on step completion markers
+            if markup:
+                self.call_from_thread(self._chat_write, text)
+            else:
+                self.call_from_thread(self.query_one(ChatPane).write_chunk, text)
             if "✅" in text or "🚫" in text or "↩" in text:
                 self.call_from_thread(self._refresh_sidebar)
+
+        try:
+            bar = self.query_one(AgentStatusBar)
+            done, total = plan.progress
+            bar.update_status(
+                busy=True,
+                task=plan.task,
+                branch=current_branch(self.cfg.repo_path),
+                plan_step=done,
+                plan_total=total,
+                chunks=int(self.rag.stats.get("chunks", 0)),
+            )
+        except Exception:
+            pass
 
         executor = PlanExecutor(
             plan=plan,
@@ -1911,15 +2368,27 @@ class AtmanApp(App):
             output=output,
         )
         self._current_executor = executor
-        executor.run()
-        self._current_executor = None
+        try:
+            executor.run()
+        except ExecutorInterrupted:
+            self.call_from_thread(
+                self._chat_write,
+                "[yellow]⏹ Plan execution interrupted[/yellow]",
+            )
+        finally:
+            self._current_executor = None
+            try:
+                bar_done = self.query_one(AgentStatusBar)
+                bar_done.update_status(busy=False)
+            except Exception:
+                pass
 
         # After plan finishes — offer commit if there are changes
         _, out, _ = run_git(["status", "--porcelain"], self.cfg.repo_path)
         if out.strip():
             self.call_from_thread(
                 self._chat_write,
-                "\n[dim]Changes detected. Type /commit to commit, or keep editing.[/dim]"
+                "\n[dim]Changes detected. Type /commit to commit, or keep editing.[/dim]",
             )
         self.call_from_thread(self._refresh_sidebar)
 
@@ -1929,14 +2398,14 @@ class AtmanApp(App):
         try:
             if not self.current_plan:
                 self.current_plan = self.memory.create_plan(
-                    task=message, steps=[],
+                    task=message,
+                    steps=[],
                     discussion=[{"role": "user", "content": message}],
                 )
             else:
                 self.memory.append_to_discussion(self.current_plan, "user", message)
 
-            context = self.rag.format_context(self.rag.search(message)) \
-                      if self.rag.stats["chunks"] else ""
+            context = self._rag_plan_context(message)
 
             self.call_from_thread(self._chat_write, "\n[bold cyan]◆ Thinking...[/bold cyan]")
             history = self.memory.get_discussion_history(self.current_plan)
@@ -1949,7 +2418,7 @@ class AtmanApp(App):
             if any(kw in response.lower() for kw in ["step 1", "1.", "## steps"]):
                 self.call_from_thread(
                     self._chat_write,
-                    "\n[dim]Plan emerging — type [bold]/finalize[/bold] to save it.[/dim]"
+                    "\n[dim]Plan emerging — type [bold]/finalize[/bold] to save it.[/dim]",
                 )
             self.call_from_thread(self._refresh_sidebar)
 
@@ -1960,10 +2429,11 @@ class AtmanApp(App):
     def _finalize_worker(self) -> None:
         self._busy = True
         try:
-            import json, re
+            import json
+            import re
+
             history_text = "\n".join(
-                f"{m['role'].upper()}: {m['content']}"
-                for m in self.current_plan.discussion
+                f"{m['role'].upper()}: {m['content']}" for m in self.current_plan.discussion
             )
             extract_prompt = (
                 f"Extract a structured plan from this discussion:\n\n{history_text}\n\n"
@@ -1982,10 +2452,15 @@ class AtmanApp(App):
             self.current_plan.steps_done = [False] * len(steps)
             self.memory.update_plan(self.current_plan)
 
-            self.call_from_thread(self._chat_write, f"\n[green]✓ Plan saved:[/green] {self.current_plan.task}")
+            self.call_from_thread(
+                self._chat_write, f"\n[green]✓ Plan saved:[/green] {self.current_plan.task}"
+            )
             for i, step in enumerate(steps, 1):
                 self.call_from_thread(self._chat_write, f"  {i}. {step}")
-            self.call_from_thread(self._chat_write, "\n[dim]Press Ctrl+A to switch to agent mode and execute, or send any message[/dim]")
+            self.call_from_thread(
+                self._chat_write,
+                "\n[dim]Press Ctrl+A to switch to agent mode and execute, or send any message[/dim]",
+            )
             self.call_from_thread(self._refresh_sidebar)
 
         except Exception as e:
@@ -2000,7 +2475,7 @@ class AtmanApp(App):
             self.call_from_thread(
                 self._chat_write,
                 f"\n[bold blue]◆ Babysitting PR #{pr_number}[/bold blue]\n"
-                "[dim]  Priority: review comments → conflicts → CI → merge[/dim]"
+                "[dim]  Priority: review comments → conflicts → CI → merge[/dim]",
             )
             max_attempts = self.cfg.babysit_max_fix_attempts
             for attempt in range(max_attempts):
@@ -2009,17 +2484,23 @@ class AtmanApp(App):
                 branch = pr["head"]["ref"]
 
                 ci = status["ci_status"]
-                ci_color = {"passing": "green", "failing": "red", "pending": "yellow"}.get(ci, "white")
+                ci_color = {"passing": "green", "failing": "red", "pending": "yellow"}.get(
+                    ci, "white"
+                )
                 self.call_from_thread(
                     self._chat_write,
-                    f"  [dim]#{attempt+1}[/dim] CI:[{ci_color}]{ci}[/{ci_color}]  "
+                    f"  [dim]#{attempt + 1}[/dim] CI:[{ci_color}]{ci}[/{ci_color}]  "
                     f"Reviews:{'✅' if status['approved'] else '⏳'}  "
-                    f"Merge:{status.get('mergeable_state','?')}"
+                    f"Merge:{status.get('mergeable_state', '?')}",
                 )
 
                 if status["unresolved_comments"]:
-                    self.call_from_thread(self._chat_write, "  [bold]Resolving review comments...[/bold]")
-                    self._resolve_review_comments_sync(pr_number, status["unresolved_comments"], branch)
+                    self.call_from_thread(
+                        self._chat_write, "  [bold]Resolving review comments...[/bold]"
+                    )
+                    self._resolve_review_comments_sync(
+                        pr_number, status["unresolved_comments"], branch
+                    )
                     time.sleep(5)
                     continue
 
@@ -2028,7 +2509,7 @@ class AtmanApp(App):
                     # simplified: let user know
                     self.call_from_thread(
                         self._chat_write,
-                        "[yellow]⚠ Merge conflicts detected — resolving...[/yellow]"
+                        "[yellow]⚠ Merge conflicts detected — resolving...[/yellow]",
                     )
                     time.sleep(5)
                     continue
@@ -2037,8 +2518,8 @@ class AtmanApp(App):
                     self.call_from_thread(self._chat_write, "  [bold]Fixing CI failures...[/bold]")
                     logs = self.pr_manager.get_ci_logs(pr_number)
                     analysis = self.router.analyze(
-                        f"Analyze CI failures and suggest fixes:\n" +
-                        "\n".join(f"=== {l['name']} ===\n{l['log']}" for l in logs)[:4000]
+                        "Analyze CI failures and suggest fixes:\n"
+                        + "\n".join(f"=== {l['name']} ===\n{l['log']}" for l in logs)[:4000]
                     )
                     self.call_from_thread(self._chat_write, analysis)
                     time.sleep(10)
@@ -2047,7 +2528,7 @@ class AtmanApp(App):
                 if ci == "pending":
                     self.call_from_thread(
                         self._chat_write,
-                        f"  [dim]CI pending — waiting {self.cfg.babysit_poll_interval}s...[/dim]"
+                        f"  [dim]CI pending — waiting {self.cfg.babysit_poll_interval}s...[/dim]",
                     )
                     time.sleep(self.cfg.babysit_poll_interval)
                     continue
@@ -2057,8 +2538,8 @@ class AtmanApp(App):
                     if need_approval and not status["approved"]:
                         self.call_from_thread(
                             self._chat_write,
-                            f"  [dim]CI green but waiting for approval "
-                            f"(disable in Settings → Babysit → Require PR approval)[/dim]"
+                            "  [dim]CI green but waiting for approval "
+                            "(disable in Settings → Babysit → Require PR approval)[/dim]",
                         )
                         time.sleep(self.cfg.babysit_poll_interval)
                         continue
@@ -2081,7 +2562,7 @@ class AtmanApp(App):
 
             self.call_from_thread(
                 self._chat_write,
-                f"[yellow]⚠ Max attempts reached — PR #{pr_number} needs manual attention[/yellow]"
+                f"[yellow]⚠ Max attempts reached — PR #{pr_number} needs manual attention[/yellow]",
             )
         except Exception as e:
             self.call_from_thread(self._chat_write, f"[red]Babysit error: {e}[/red]")
@@ -2102,7 +2583,7 @@ class AtmanApp(App):
             review_parts = []
             for chunk in self.router.code_stream(
                 f"Review this PR for the Atman project.\n"
-                f"PR: {pr['title']}\n{pr.get('body','')}\n\nDiff:\n{diff[:5000]}"
+                f"PR: {pr['title']}\n{pr.get('body', '')}\n\nDiff:\n{diff[:5000]}"
             ):
                 self.call_from_thread(self._chat_write, chunk)
                 review_parts.append(chunk)
@@ -2111,7 +2592,7 @@ class AtmanApp(App):
             self.call_from_thread(
                 self._chat_write,
                 "\n[dim]Type [bold]/config[/bold] to check your GitHub token, "
-                "then the review will be posted.[/dim]"
+                "then the review will be posted.[/dim]",
             )
             try:
                 self.pr_manager.post_review(pr_number, review_text[:65000], [], "COMMENT")
@@ -2130,7 +2611,7 @@ class AtmanApp(App):
             _, log_out, _ = run_git(["log", "--oneline", "-5"], self.cfg.repo_path)
             self.call_from_thread(
                 self._chat_write,
-                f"\n[bold]Branch:[/bold] {branch}\n[bold]Recent commits:[/bold]\n{log_out}"
+                f"\n[bold]Branch:[/bold] {branch}\n[bold]Recent commits:[/bold]\n{log_out}",
             )
             pr = self.pr_manager.get_pr_by_branch(branch)
             if pr:
@@ -2142,7 +2623,7 @@ class AtmanApp(App):
                     f"\n[bold]PR #{pr['number']}:[/bold] {pr['title']}\n"
                     f"  CI: [{ci_c}]{ci}[/{ci_c}] · "
                     f"{'✅ approved' if status['approved'] else '⏳ pending'} · "
-                    f"{status.get('mergeable_state','?')}"
+                    f"{status.get('mergeable_state', '?')}",
                 )
         except Exception as e:
             self.call_from_thread(self._chat_write, f"[red]Status error: {e}[/red]")
@@ -2153,7 +2634,7 @@ class AtmanApp(App):
         n = self.rag.build(self.cfg.repo_path)
         self.call_from_thread(
             self._chat_write,
-            f"[green]✓[/green] Indexed {n} chunks from {self.rag.stats['files']} files"
+            f"[green]✓[/green] Indexed {n} chunks from {self.rag.stats['files']} files",
         )
         self.call_from_thread(self._refresh_sidebar)
         self.call_from_thread(self._update_header)
@@ -2168,12 +2649,10 @@ class AtmanApp(App):
                 self._chat_write,
                 f"[green]✓[/green] {event.commits_count} commit(s) · "
                 f"+{event.insertions}/-{event.deletions} · {len(all_files)} files\n"
-                + "\n".join(f"  [dim]{m}[/dim]" for m in event.commit_messages[:5])
+                + "\n".join(f"  [dim]{m}[/dim]" for m in event.commit_messages[:5]),
             )
             records = self.memory.recall_recent_changes(limit=10)
-            self.call_from_thread(
-                lambda: self.query_one(ChangesTab).refresh_changes(records)
-            )
+            self.call_from_thread(lambda: self.query_one(ChangesTab).refresh_changes(records))
         else:
             last_sha = self.watcher.last_seen_sha
             state_time = self.watcher._state.last_sync_at
@@ -2181,12 +2660,14 @@ class AtmanApp(App):
                 self._chat_write,
                 f"[dim]Main is up to date "
                 f"(SHA: {last_sha[:8] if last_sha else 'none'} · "
-                f"last: {state_time[:16] if state_time else 'never'})[/dim]"
+                f"last: {state_time[:16] if state_time else 'never'})[/dim]",
             )
 
     # ── Sync helpers (called from worker threads) ─────────────────────────────
 
-    def _resolve_review_comments_sync(self, pr_number: int, comments: list[dict], branch: str) -> None:
+    def _resolve_review_comments_sync(
+        self, pr_number: int, comments: list[dict], branch: str
+    ) -> None:
         for comment in comments:
             path = comment.get("path", "")
             body = comment.get("body", "")
@@ -2222,14 +2703,13 @@ class AtmanApp(App):
         except NoMatches:
             pass
 
-    def _chat_separator(self) -> None:
-        self._chat_write("[dim]" + "─" * 60 + "[/dim]")
-
 
 # ── Entry point ───────────────────────────────────────────────────────────────
 
+
 def main() -> None:
     import argparse
+
     parser = argparse.ArgumentParser(description="Atman Agent CLI (Textual TUI)")
     parser.add_argument("--repo", type=Path, default=Path.cwd())
     parser.add_argument("--mode", choices=("plan", "agent", "babysit", "review"), default="agent")
