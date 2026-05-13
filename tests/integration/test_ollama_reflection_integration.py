@@ -2,7 +2,11 @@
 Integration tests for OllamaReflectionModel against a live Ollama instance.
 
 All tests are marked ``requires_ollama`` and auto-skip when Ollama is
-unreachable (see ``tests/conftest.py``).
+unreachable or the default chat model is not listed in ``/api/tags``
+(see ``tests/conftest.py``; override with ``ATMAN_OLLAMA_MODEL``).
+
+Tests are also marked ``slow`` so ``pytest -m "not slow"`` (CI quick gate)
+does not depend on live inference; run this module explicitly for smoke checks.
 """
 
 from datetime import UTC, datetime
@@ -87,6 +91,7 @@ def _make_narrative() -> NarrativeDocument:
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.slow
 @pytest.mark.requires_ollama
 class TestOllamaReflectionIntegration:
     """Smoke tests against a live Ollama instance with qwen3.5:9b."""

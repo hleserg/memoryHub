@@ -418,7 +418,7 @@ def start_runner(log: Log = _noop) -> bool:
 
     time.sleep(3)
     if _runner_proc.poll() is None:
-        log("Runner started (PID {_runner_proc.pid})", "ok")
+        log(f"Runner started (PID {_runner_proc.pid})", "ok")
         return True
     log("Runner exited immediately — check configuration", "error")
     return False

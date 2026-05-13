@@ -58,7 +58,7 @@ class TestOllamaReflectionModelInit:
         model = OllamaReflectionModel()
         try:
             assert model.base_url == "http://localhost:11434"
-            assert model.model == "qwen3.5:9b"
+            assert model.model == "gemma3:27b-it-qat"
             assert not model._closed
         finally:
             model.close()

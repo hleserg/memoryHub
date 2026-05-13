@@ -559,7 +559,7 @@ class RAGIndex:
         nn = top_n_arg or self.cfg.rag_top_n
         toks_li = query_txt.split()
         sym_hits = self.symbol_search(toks_li[0]) if toks_li else []
-        cand_hybrid = [c for _, c in self._hybrid_rank(query_txt, top_k_need=kk)]
+        cand_hybrid = [c for c, _ in self._hybrid_rank(query_txt, top_k_need=kk)]
         seen_ids: set[str] = set()
         ordered: list[Chunk] = []
         for ck in sym_hits + cand_hybrid:

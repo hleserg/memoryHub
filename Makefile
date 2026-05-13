@@ -130,7 +130,7 @@ playbook-audit:
 .PHONY: lint-boundary verify-prod-isolation eval-db-init eval-db-migrate eval-db-downgrade eval-db-test eval-up eval-down
 
 lint-boundary:
-	lint-imports
+	python3 -c "from importlinter.cli import lint_imports_command; lint_imports_command()"
 
 verify-prod-isolation:
 	bash scripts/infra/verify_prod_isolation.sh

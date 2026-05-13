@@ -520,6 +520,55 @@ class AtmanRunner:
         if self._reader_thread is not None:
             self._reader_thread.join(timeout=1.0)
 
+    def _check_token_usage(
+        self,
+        input_tokens: int,
+        context_limit: int,
+    ) -> tuple[set[int], bool]:
+        """
+        Check token usage against thresholds and update triggered warnings.
+
+        E22.3 Token monitoring implementation: progressive warnings at 70%, 80%, 90%
+        and force-close at 95%. Uses independent 'if' statements (not 'elif') so
+        multiple thresholds can fire in a single call if usage jumps across boundaries.
+
+        Args:
+            input_tokens: Current input tokens from agent.run() result
+            context_limit: Maximum context size from ModelConfig
+
+        Returns:
+            tuple[set[int], bool]: (newly_triggered_thresholds, should_force_close)
+                - newly_triggered_thresholds: Set of thresholds that fired this call
+                - should_force_close: True if 95% threshold was crossed (requires break)
+        """
+        if context_limit <= 0:
+            return (set(), False)
+
+        ratio = input_tokens / context_limit
+        newly_triggered: set[int] = set()
+        should_force_close = False
+
+        # Check thresholds in order: 70%, 80%, 90%, 95%
+        # Order matters: check lower thresholds first, then 95% (which triggers force-close) last
+        if ratio >= 0.70 and 70 not in self._triggered:
+            self._triggered.add(70)
+            newly_triggered.add(70)
+
+        if ratio >= 0.80 and 80 not in self._triggered:
+            self._triggered.add(80)
+            newly_triggered.add(80)
+
+        if ratio >= 0.90 and 90 not in self._triggered:
+            self._triggered.add(90)
+            newly_triggered.add(90)
+
+        if ratio >= 0.95 and 95 not in self._triggered:
+            self._triggered.add(95)
+            newly_triggered.add(95)
+            should_force_close = True
+
+        return (newly_triggered, should_force_close)
+
     def _do_restart(
         self,
         session_manager: SessionManager,
@@ -802,6 +851,65 @@ class AtmanRunner:
                         _LOG.exception("Failed to restart session %s", session_id)
                         break  # Exit loop on restart failure
 
+                # E22.3: Token monitoring - check context usage and warn/force-close
+                # Note: inline implementation matches token_monitor.py logic but is
+                # integrated directly here for tight coupling with chat loop control flow
+                usage = result.usage() if hasattr(result, "usage") else None
+                if usage and usage.input_tokens:
+                    context_limit = self._config.model.context_limit
+                    input_tokens = usage.input_tokens
+
+                    # Check token usage thresholds (extracted method for testability)
+                    newly_triggered, should_force_close = self._check_token_usage(
+                        input_tokens, context_limit
+                    )
+
+                    # Display agent's response FIRST (before warnings), so user sees
+                    # the actual content before meta-information about session state
+                    print_plain(str(result.output))
+                    print_plain("")
+
+                    # Display warnings for newly triggered thresholds
+                    remaining = context_limit - input_tokens
+                    if 70 in newly_triggered:
+                        print_warn(
+                            f"\n⚠️  Context 70% full ({input_tokens}/{context_limit} tokens). "
+                            f"~{remaining} tokens remaining. "
+                            f"When ready — call restart_session.\n"
+                        )
+                    if 80 in newly_triggered:
+                        print_warn(
+                            f"\n⚠️  Context 80% full ({input_tokens}/{context_limit} tokens). "
+                            f"~{remaining} tokens remaining.\n"
+                        )
+                    if 90 in newly_triggered:
+                        print_warn(
+                            f"\n⚠️  Context 90% full ({input_tokens}/{context_limit} tokens). "
+                            f"~{remaining} tokens remaining.\n"
+                        )
+
+                    # Handle force-close at 95%
+                    if should_force_close:
+                        _LOG.warning(
+                            "Context 95%% full (%d/%d tokens) - forcing session close",
+                            input_tokens,
+                            context_limit,
+                        )
+                        print_warn(
+                            f"\n⚠️  Context 95% full ({input_tokens}/{context_limit} tokens). "
+                            "Forcing session close.\n"
+                        )
+                        try:
+                            _force_finish(session_manager, session_id, "forced")
+                        except Exception as exc:
+                            _LOG.exception("Failed to force-finish session %s", session_id)
+                            print_err(f"Force-finish failed: {exc!s}")
+                        break  # Exit main loop
+                else:
+                    # No token usage info or no thresholds triggered - show response normally
+                    print_plain(str(result.output))
+                    print_plain("")
+
                 # E22.5: Check for wait request (agent-triggered timeout adjustment)
                 wait_requested, wait_minutes = _check_wait_requested(result.new_messages())
 
@@ -810,22 +918,10 @@ class AtmanRunner:
                     _LOG.info("Wait requested by agent: %d minutes (timeout reset)", wait_minutes)
                     print_info(f"\n⏱️  Timer reset to {wait_minutes} minutes (agent request).\n")
 
-                # Normal flow: display output and update history
-                print_plain(str(result.output))
-                print_plain("")
-
-                output_text = str(result.output or "")
-                thinking_text = _extract_thinking_from_messages(result.new_messages())
-
-                # Passive NLP affect analysis — anomaly/divergence detection
-                await _run_affect_detector(
-                    output_text, thinking_text, session_manager, session_id
-                )
-
                 # Auto-record value-based refusals as key moments (silent, no agent nudging)
                 with contextlib.suppress(Exception):
                     _auto_record_refusal_if_needed(
-                        output=output_text,
+                        output=str(result.output or ""),
                         session_manager=session_manager,
                         session_id=session_id,
                     )

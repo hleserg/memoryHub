@@ -351,14 +351,14 @@ class TestOllamaEmbeddingAdapter:
     # ==========================================================================
 
     def test_default_base_url_from_env(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        """Base URL can be set via OLLAMA_HOST env var."""
-        monkeypatch.setenv("OLLAMA_HOST", "http://ollama.custom:8080")
+        """Base URL can be set via EMBEDDING_OLLAMA_HOST env var."""
+        monkeypatch.setenv("EMBEDDING_OLLAMA_HOST", "http://ollama.custom:8080")
         adapter = OllamaEmbeddingAdapter()
         assert adapter.base_url == "http://ollama.custom:8080"
 
     def test_default_model_from_env(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        """Model can be set via OLLAMA_EMBED_MODEL env var."""
-        monkeypatch.setenv("OLLAMA_EMBED_MODEL", "nomic-embed-text")
+        """Model can be set via EMBEDDING_MODEL env var."""
+        monkeypatch.setenv("EMBEDDING_MODEL", "nomic-embed-text")
         adapter = OllamaEmbeddingAdapter()
         assert adapter.model == "nomic-embed-text"
         assert adapter.model_name() == "nomic-embed-text"

@@ -6,7 +6,7 @@ CLI Integration Notes:
   At startup use: repo_root, work_dir = SafeFileExplorer.get_work_dir()
   Show in TUI header: atman-agent — {work_dir.name} — {branch}
   Command /pwd → show work_dir and repo_root.
-  If agent calls write() outside repo → catch PermissionError → warn + prompt [y/N].
+  If agent calls write() outside repo → catch RepoAccessDenied (PermissionError) → warn + prompt [y/N].
 """
 
 from __future__ import annotations
@@ -16,7 +16,7 @@ from collections.abc import Callable
 from pathlib import Path
 
 
-class PermissionError(Exception):
+class RepoAccessDenied(PermissionError):
     """Raised when a mutating operation is denied (outside repo or unconfirmed exec)."""
 
 
@@ -66,7 +66,7 @@ class SafeFileExplorer:
         """Write only inside repo_root."""
         p = Path(path).resolve()
         if not p.is_relative_to(self.repo_root):
-            raise PermissionError(f"Write outside repo is forbidden: {p}")
+            raise RepoAccessDenied(f"Write outside repo is forbidden: {p}")
         p.parent.mkdir(parents=True, exist_ok=True)
         p.write_text(content, encoding="utf-8")
 
@@ -74,7 +74,7 @@ class SafeFileExplorer:
         """Delete only inside repo_root."""
         p = Path(path).resolve()
         if not p.is_relative_to(self.repo_root):
-            raise PermissionError(f"Delete outside repo is forbidden: {p}")
+            raise RepoAccessDenied(f"Delete outside repo is forbidden: {p}")
         p.unlink()
 
     def execute(self, cmd: str, confirm_callback: Callable[[], bool] | None = None) -> str:
@@ -83,7 +83,7 @@ class SafeFileExplorer:
         confirm_callback: callable() -> bool. If None — always refuse.
         """
         if confirm_callback is None or not confirm_callback():
-            raise PermissionError("Execution requires explicit user confirmation")
+            raise RepoAccessDenied("Execution requires explicit user confirmation")
         result = subprocess.run(cmd, shell=True, capture_output=True, text=True, check=False)
         return result.stdout + result.stderr
 

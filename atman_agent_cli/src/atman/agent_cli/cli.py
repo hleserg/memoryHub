@@ -1076,7 +1076,7 @@ class SetupTab(Widget):
                 github_token=self._app.secrets.github_token,
                 repo=self._app.cfg.github_repo,
                 repo_path=self._app.cfg.repo_path,
-                webhook_port=self._app.cfg.babysit_poll_interval,  # reuse port from config
+                webhook_port=int(os.getenv("ATMAN_WEBHOOK_PORT", "9876")),
                 log=lambda msg, level="info": self.call_from_thread(self._log, msg, level),
             )
         return self._orchestrator
@@ -1100,8 +1100,7 @@ class SetupTab(Widget):
         elif btn_id == "btn-stop-all":
             self._run_stop_all()
 
-    @work(thread=True)
-    def _run_check_prereqs(self) -> None:
+    def _setup_check_prereqs_sync(self) -> None:
         self.call_from_thread(self._set_step, "prereqs", "running", "Checking...")
         errors = []
 
@@ -1136,7 +1135,10 @@ class SetupTab(Widget):
             self.call_from_thread(self._set_step, "prereqs", "ok", "All prerequisites met")
 
     @work(thread=True)
-    def _run_start_tunnel(self) -> None:
+    def _run_check_prereqs(self) -> None:
+        self._setup_check_prereqs_sync()
+
+    def _setup_start_tunnel_sync(self) -> None:
         self.call_from_thread(self._set_step, "tunnel", "running", "Starting...")
         orch = self._get_orchestrator()
         ok = orch.start_tunnel()
@@ -1147,7 +1149,10 @@ class SetupTab(Widget):
             self.call_from_thread(self._set_step, "tunnel", "error", "Tunnel failed to start")
 
     @work(thread=True)
-    def _run_register_webhook(self) -> None:
+    def _run_start_tunnel(self) -> None:
+        self._setup_start_tunnel_sync()
+
+    def _setup_register_webhook_sync(self) -> None:
         self.call_from_thread(self._set_step, "webhook", "running", "Registering...")
         orch = self._get_orchestrator()
         ok = orch.register_webhook()
@@ -1162,7 +1167,10 @@ class SetupTab(Widget):
             self.call_from_thread(self._set_step, "webhook", "error", "Failed — check GitHub token")
 
     @work(thread=True)
-    def _run_setup_runner(self) -> None:
+    def _run_register_webhook(self) -> None:
+        self._setup_register_webhook_sync()
+
+    def _setup_runner_sync(self) -> None:
         self.call_from_thread(self._set_step, "runner", "running", "Installing...")
         orch = self._get_orchestrator()
         ok = orch.setup_runner()
@@ -1174,7 +1182,10 @@ class SetupTab(Widget):
             self.call_from_thread(self._set_step, "runner", "error", "Runner setup failed")
 
     @work(thread=True)
-    def _run_write_workflow(self) -> None:
+    def _run_setup_runner(self) -> None:
+        self._setup_runner_sync()
+
+    def _setup_write_workflow_sync(self) -> None:
         self.call_from_thread(self._set_step, "workflow", "running", "Writing...")
         orch = self._get_orchestrator()
         ok = orch.write_workflow()
@@ -1194,7 +1205,10 @@ class SetupTab(Widget):
             )
 
     @work(thread=True)
-    def _run_verify(self) -> None:
+    def _run_write_workflow(self) -> None:
+        self._setup_write_workflow_sync()
+
+    def _setup_verify_sync(self) -> None:
         self.call_from_thread(self._set_step, "test", "running", "Verifying...")
         from .tunnel import TunnelState, list_registered_runners
 
@@ -1228,19 +1242,23 @@ class SetupTab(Widget):
             self.call_from_thread(self._set_step, "test", "ok", "All checks passed 🎉")
 
     @work(thread=True)
+    def _run_verify(self) -> None:
+        self._setup_verify_sync()
+
+    @work(thread=True)
     def _run_setup_all(self) -> None:
         self.call_from_thread(self._log, "=== Starting full setup ===", "info")
-        self._run_check_prereqs()
+        self._setup_check_prereqs_sync()
         time.sleep(1)
-        self._run_start_tunnel()
+        self._setup_start_tunnel_sync()
         time.sleep(2)
-        self._run_register_webhook()
+        self._setup_register_webhook_sync()
         time.sleep(1)
-        self._run_setup_runner()
+        self._setup_runner_sync()
         time.sleep(2)
-        self._run_write_workflow()
+        self._setup_write_workflow_sync()
         time.sleep(1)
-        self._run_verify()
+        self._setup_verify_sync()
         self.call_from_thread(self._log, "=== Setup complete ===", "ok")
 
     def _run_stop_all(self) -> None:

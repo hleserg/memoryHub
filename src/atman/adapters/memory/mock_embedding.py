@@ -60,7 +60,7 @@ class MockEmbeddingAdapter(EmbeddingPort):
     @override
     def model_name(self) -> str:
         """Return model identifier."""
-        return "mock-embedding:768d"
+        return "mock-embedding:1024d"
 
     @override
     def similarity(self, vec1: list[float], vec2: list[float]) -> float:

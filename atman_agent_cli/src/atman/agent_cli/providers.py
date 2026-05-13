@@ -357,7 +357,7 @@ Give concise, actionable plans. Be specific about files and patterns to use."""
         try:
             pairs = [[query, p] for p in passages]
             scores = self._reranker.compute_score(pairs, normalize=True)
-            return scores if isinstance(scores, list) else list(scores)
+            return scores if isinstance(scores, list) else [scores]
         except Exception:
             return [0.0] * len(passages)
 

@@ -253,13 +253,16 @@ class PRManager:
         # CI checks
         checks = self._get(f"repos/{self.repo}/commits/{sha}/check-runs")
         check_runs = checks.get("check_runs", [])
-        ci_status = (
-            "passing"
-            if all(c["conclusion"] == "success" for c in check_runs if c["status"] == "completed")
-            else "failing"
-            if any(c["conclusion"] in ("failure", "error") for c in check_runs)
-            else "pending"
-        )
+        completed = [c for c in check_runs if c.get("status") == "completed"]
+        incomplete = [c for c in check_runs if c.get("status") != "completed"]
+        if any(c.get("conclusion") in ("failure", "error") for c in completed):
+            ci_status = "failing"
+        elif incomplete:
+            ci_status = "pending"
+        elif completed and all(c.get("conclusion") == "success" for c in completed):
+            ci_status = "passing"
+        else:
+            ci_status = "pending"
         failed_checks = [
             {"name": c["name"], "url": c["html_url"]}
             for c in check_runs

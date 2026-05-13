@@ -33,7 +33,7 @@ class EmbeddingPort(ABC):
 
 ### Key Design Decisions
 
-1. **Dimension Consistency**: All adapters must return vectors of the configured dimension (2560 for qwen3-embedding:4b)
+1. **Dimension Consistency**: All adapters must return vectors of the configured dimension (1024 for bge-m3)
 2. **Determinism**: Mock adapter uses `hash(text) % 2^31` seeding for reproducible test results
 3. **Model Traceability**: `model_name()` enables tracking which model generated each embedding
 
@@ -43,10 +43,10 @@ Embedding configuration is controlled via environment variables:
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `EMBEDDING_BACKEND` | `mock` | Backend to use: `ollama` or `mock` |
-| `EMBEDDING_MODEL` | `qwen3-embedding:4b` | Ollama model name |
-| `EMBEDDING_DIMENSION` | `768` | Expected vector dimension |
-| `EMBEDDING_OLLAMA_HOST` | `http://localhost:11434` | Ollama API endpoint |
+| `EMBEDDING_BACKEND` | `ollama` | Backend to use: `ollama` or `mock` |
+| `EMBEDDING_MODEL` | `bge-m3` | Ollama model name |
+| `EMBEDDING_DIMENSION` | `1024` | Expected vector dimension |
+| `EMBEDDING_OLLAMA_HOST` | `http://localhost:11434` | Ollama API endpoint (legacy: `OLLAMA_HOST`) |
 | `EMBEDDING_TIMEOUT` | `30.0` | Request timeout in seconds |
 
 Configuration is loaded via Pydantic Settings (`src/atman/config.py`) with `.env` file support.
@@ -69,18 +69,18 @@ from atman.adapters.memory.ollama_embedding import OllamaEmbeddingAdapter
 
 adapter = OllamaEmbeddingAdapter(
     base_url="http://localhost:11434",
-    model="qwen3-embedding:4b",
+    model="bge-m3",
     timeout=30.0,
 )
 
 embedding = adapter.embed("semantic search query")
-assert len(embedding) == 2560
-assert adapter.model_name() == "qwen3-embedding:4b"
+assert len(embedding) == 1024
+assert adapter.model_name() == "bge-m3"
 ```
 
 **Requirements:**
 - Running Ollama instance
-- Model pulled: `ollama pull qwen3-embedding:4b`
+- Model pulled: `ollama pull bge-m3`
 
 ### MockEmbeddingAdapter
 
@@ -89,7 +89,7 @@ Deterministic test adapter with no external dependencies.
 **Features:**
 - Same text always produces same embedding
 - Different texts produce different embeddings
-- 2560-dimensional unit vectors
+- 1024-dimensional unit vectors
 - LCG-based deterministic generation
 
 **Usage:**
@@ -101,19 +101,19 @@ adapter = MockEmbeddingAdapter()
 embedding1 = adapter.embed("hello world")
 embedding2 = adapter.embed("hello world")
 assert embedding1 == embedding2  # Deterministic
-assert adapter.dimension() == 2560
-assert adapter.model_name() == "mock-embedding:768d"
+assert adapter.dimension() == 1024
+assert adapter.model_name() == "mock-embedding:1024d"
 ```
 
-## Model Choice: qwen3-embedding:4b
+## Model Choice: BGE-M3
 
-The default embedding model is `qwen3-embedding:4b` for the following reasons:
+The default embedding model is `bge-m3` for the following reasons:
 
-| Criterion | qwen3-embedding:4b |
-|-----------|-------------------|
-| **Dimension** | 2560 |
-| **Quality** | Good performance on MTEB benchmarks |
-| **Speed** | ~50ms per query on consumer GPU |
+| Criterion | bge-m3 |
+|-----------|--------|
+| **Dimension** | 1024 |
+| **Quality** | Excellent multilingual performance on MTEB benchmarks |
+| **Speed** | ~40ms per query on consumer GPU |
 | **Size** | 1.5B parameters, ~600MB |
 | **License** | Apache 2.0 (commercial use OK) |
 | **Multilingual** | Strong CJK + English support |
@@ -284,7 +284,7 @@ RuntimeError: Empty embedding received from Ollama
 
 **Solution:** Pull the model:
 ```bash
-ollama pull qwen3-embedding:4b
+ollama pull bge-m3
 ```
 
 ### Dimension Mismatch
@@ -298,5 +298,5 @@ ValueError: Vectors must have same dimension
 ## References
 
 - Issue: [#391](https://github.com/hleserg/atman/issues/391) - Epic E25
-- Model: [qwen3-embedding:4b](https://ollama.com/library/qwen3-embedding)
+- Model: [bge-m3](https://ollama.com/library/bge-m3)
 - Ollama API: [embed endpoint](https://github.com/ollama/ollama/blob/main/docs/api.md#generate-embeddings)

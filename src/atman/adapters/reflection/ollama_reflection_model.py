@@ -53,22 +53,29 @@ class OllamaReflectionModel(ReflectionModel):
         """
         Initialize OllamaReflectionModel with configuration from environment.
 
+        Reads from LLM_MODEL and LLM_OLLAMA_HOST environment variables,
+        falling back to legacy ATMAN_OLLAMA_* variables for compatibility.
+
         Raises:
             ValueError: If ATMAN_OLLAMA_BASE_URL has invalid scheme
         """
-        base_url = os.getenv("ATMAN_OLLAMA_BASE_URL", "http://localhost:11434")
+        # Try new LLM_OLLAMA_HOST first, fall back to ATMAN_OLLAMA_BASE_URL for compatibility
+        base_url = os.getenv(
+            "LLM_OLLAMA_HOST", os.getenv("ATMAN_OLLAMA_BASE_URL", "http://localhost:11434")
+        )
         parsed_url = urlparse(base_url)
         if parsed_url.scheme not in ("http", "https"):
             raise ValueError(
-                f"Invalid URL scheme in ATMAN_OLLAMA_BASE_URL: {parsed_url.scheme}. "
+                f"Invalid URL scheme in LLM_OLLAMA_HOST: {parsed_url.scheme}. "
                 "Expected 'http' or 'https'."
             )
 
         self.base_url = base_url
-        self.model = os.getenv("ATMAN_OLLAMA_MODEL", "qwen3.5:9b")
+        # Try new LLM_MODEL first, fall back to ATMAN_OLLAMA_MODEL for compatibility
+        self.model = os.getenv("LLM_MODEL", os.getenv("ATMAN_OLLAMA_MODEL", "gemma3:27b-it-qat"))
         self._client = httpx.Client(
             base_url=self.base_url,
-            timeout=httpx.Timeout(60.0, connect=5.0),
+            timeout=httpx.Timeout(120.0, connect=5.0),
         )
         self._closed = False
 
