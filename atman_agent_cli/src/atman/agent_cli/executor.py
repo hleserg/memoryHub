@@ -17,27 +17,59 @@ The engine always auto-plans before starting:
 All output goes through a callback so it works in both
 Textual (call_from_thread) and headless (CI review mode).
 """
+
 from __future__ import annotations
 
-import re
 import json
-from datetime import datetime
-from typing import Callable
+import re
+import threading
+from collections.abc import Callable
+from enum import Enum
 
 from .memory import (
-    AgentMemory, Plan,
-    STEP_PENDING, STEP_DONE, STEP_BLOCKED, STEP_IN_PROGRESS,
+    STEP_BLOCKED,
+    STEP_DONE,
+    AgentMemory,
+    Plan,
 )
 from .providers import ProviderRouter
 from .rag import RAGIndex
 
-
-# Output callback type: fn(text, markup=True)
+# Output callback: ``fn(text, markup=False)`` for Rich-safe streaming from worker threads.
 Output = Callable[[str, bool], None]
 
 
-def _noop(text: str, markup: bool = True) -> None:
+class ExecutorInterrupted(Exception):
+    """Raised when execution is cancelled via ``stop()`` between phases."""
+
+    def __init__(self, step_index: int) -> None:
+        self.step_index = step_index
+        super().__init__(f"Executor interrupted at step {step_index}")
+
+
+def _noop(text: str, markup: bool = False) -> None:
     pass
+
+
+class RecoveryAction(Enum):
+    MISSING_DEPENDENCY = "missing_dependency"
+    AMBIGUOUS_REQUIREMENT = "ambiguous_requirement"
+    EXTERNAL_UNAVAILABLE = "external_service_unavailable"
+    INSUFFICIENT_CONTEXT = "insufficient_context"
+    UNKNOWN = "unknown"
+
+
+BLOCK_ANALYSIS_PROMPT = """Analyze why this plan step is blocked and categorize the reason.
+
+Step: {step}
+Blocked reason: {reason}
+Recent context:
+{recent}
+
+Return JSON only:
+{{"category": "missing_dependency|ambiguous_requirement|external_service_unavailable|insufficient_context|unknown",
+  "detail": "specific explanation",
+  "suggestion": "what to do next"}}"""
 
 
 # ── Feasibility check ─────────────────────────────────────────────────────────
@@ -116,7 +148,7 @@ def _plan_overview(plan: Plan) -> str:
     for i, step in enumerate(plan.steps):
         state = plan.get_state(i)
         icon = {"done": "✅", "blocked": "🚫", "in_progress": "⚡", "pending": "⬜"}.get(state, "?")
-        lines.append(f"  {icon} {i+1}. {step}")
+        lines.append(f"  {icon} {i + 1}. {step}")
     return "\n".join(lines)
 
 
@@ -126,7 +158,7 @@ def _completed_summary(plan: Plan, up_to: int | None = None) -> str:
     for i in range(limit):
         if plan.get_state(i) == STEP_DONE:
             notes = plan.get_notes(i) or "(done)"
-            lines.append(f"  {i+1}. {plan.steps[i]}: {notes[:100]}")
+            lines.append(f"  {i + 1}. {plan.steps[i]}: {notes[:100]}")
     return "\n".join(lines) if lines else "  (none yet)"
 
 
@@ -135,7 +167,7 @@ def _blocked_summary(plan: Plan) -> str:
     for i in range(len(plan.steps)):
         if plan.get_state(i) == STEP_BLOCKED:
             reason = plan.get_blocked_reason(i) or "unknown"
-            lines.append(f"  {i+1}. {plan.steps[i]}: {reason[:100]}")
+            lines.append(f"  {i + 1}. {plan.steps[i]}: {reason[:100]}")
     return "\n".join(lines) if lines else "  (none)"
 
 
@@ -183,6 +215,7 @@ def auto_plan(task: str, router: ProviderRouter, rag: RAGIndex) -> tuple[str, li
 
 # ── Main execution engine ─────────────────────────────────────────────────────
 
+
 class PlanExecutor:
     """
     Executes a Plan step by step with smart retry logic.
@@ -198,7 +231,7 @@ class PlanExecutor:
         7. if failed → block, continue
     """
 
-    MAX_BLOCK_REASSESS = 3   # max times we retry a previously blocked step
+    MAX_BLOCK_REASSESS = 3  # max times we retry a previously blocked step
 
     def __init__(
         self,
@@ -213,10 +246,16 @@ class PlanExecutor:
         self.rag = rag
         self.memory = memory
         self.out = output
-        self._stop = False
+        self._stop_event = threading.Event()
 
     def stop(self) -> None:
-        self._stop = True
+        self._stop_event.set()
+
+    def reset_stop(self) -> None:
+        self._stop_event.clear()
+
+    def _should_stop(self) -> bool:
+        return self._stop_event.is_set()
 
     def run(self) -> None:
         """Main execution loop."""
@@ -226,7 +265,7 @@ class PlanExecutor:
         iteration = 0
         max_iterations = len(self.plan.steps) * 3  # safety valve
 
-        while not self._stop and not self.plan.all_done_or_blocked():
+        while not self._should_stop() and not self.plan.all_done_or_blocked():
             iteration += 1
             if iteration > max_iterations:
                 self.out("[yellow]⚠ Max iterations reached — stopping[/yellow]")
@@ -240,9 +279,7 @@ class PlanExecutor:
 
         # Final summary
         done, total = self.plan.progress
-        blocked = sum(
-            1 for i in range(total) if self.plan.get_state(i) == STEP_BLOCKED
-        )
+        blocked = sum(1 for i in range(total) if self.plan.get_state(i) == STEP_BLOCKED)
         self.out(f"\n[bold]Plan complete:[/bold] {done}/{total} done, {blocked} blocked")
         self.out(self.plan.progress_summary())
 
@@ -251,7 +288,7 @@ class PlanExecutor:
             for i in range(total):
                 if self.plan.get_state(i) == STEP_BLOCKED:
                     self.out(
-                        f"  🚫 {i+1}. {self.plan.steps[i]}\n"
+                        f"  🚫 {i + 1}. {self.plan.steps[i]}\n"
                         f"     [dim]{self.plan.get_blocked_reason(i)}[/dim]"
                     )
 
@@ -259,11 +296,15 @@ class PlanExecutor:
 
     def _execute_step(self, idx: int) -> None:
         step = self.plan.steps[idx]
-        done, total = self.plan.progress
-        self.out(f"\n[bold]Step {idx+1}/{total}:[/bold] {step}")
+        _done, total = self.plan.progress
+        self.out(f"\n[bold]Step {idx + 1}/{total}:[/bold] {step}")
         self.out(f"[dim]{self.plan.progress_summary()}[/dim]")
 
         # Phase 1: Feasibility assessment
+        if self._should_stop():
+            self.reset_stop()
+            raise ExecutorInterrupted(idx)
+
         self.out("[dim]  ◆ Assessing feasibility...[/dim]")
         feasibility = self._assess_feasibility(idx)
 
@@ -281,6 +322,10 @@ class PlanExecutor:
                 self.out(f"    [dim]· {s}[/dim]")
 
         # Phase 2: Implementation
+        if self._should_stop():
+            self.reset_stop()
+            raise ExecutorInterrupted(idx)
+
         self.plan.mark_step_in_progress(idx)
         self.memory.update_plan(self.plan)
 
@@ -297,20 +342,28 @@ class PlanExecutor:
             f"Implement this plan step for the Atman project.\n\n"
             f"Overall task: {self.plan.task}\n"
             f"Current step: {step}\n"
-            + (f"Sub-steps:\n" + "\n".join(f"  - {s}" for s in mini_plan) + "\n" if mini_plan else "")
+            + (
+                "Sub-steps:\n" + "\n".join(f"  - {s}" for s in mini_plan) + "\n"
+                if mini_plan
+                else ""
+            )
             + f"\nCompleted steps so far:\n{_completed_summary(self.plan, up_to=idx)}"
         )
 
         output_chunks: list[str] = []
         self.out("[dim]  ◆ Implementing...[/dim]")
         for chunk in self.router.code_stream(implementation_prompt, context):
-            self.out(chunk, False)
+            self.out(chunk, markup=False)
             output_chunks.append(chunk)
         self.out("")  # newline after stream
 
         full_output = "".join(output_chunks)
 
         # Phase 3: Self-assessment
+        if self._should_stop():
+            self.reset_stop()
+            raise ExecutorInterrupted(idx)
+
         self.out("[dim]  ◆ Self-assessing...[/dim]")
         assessment = self._assess_result(step, full_output)
         success = assessment.get("success", True)  # default to success if unclear
@@ -327,7 +380,8 @@ class PlanExecutor:
         else:
             self.plan.mark_step_blocked(idx, reason)
             self.memory.update_plan(self.plan)
-            self.out(f"  [red]🚫 Blocked:[/red] {reason}")
+            recovery_msg = self._handle_blocked(idx, reason)
+            self.out(f"  [yellow]{recovery_msg}[/yellow]")
 
     def _check_and_retry_blocked(self, just_completed_idx: int) -> None:
         """
@@ -342,8 +396,10 @@ class PlanExecutor:
 
         # Check from most recent to oldest (closer deps more likely to be unblocked)
         for i in reversed(blocked_before):
-            if self.plan.get_notes(i) and \
-               self.plan.get_notes(i).count("reassess") >= self.MAX_BLOCK_REASSESS:
+            if (
+                self.plan.get_notes(i)
+                and self.plan.get_notes(i).count("reassess") >= self.MAX_BLOCK_REASSESS
+            ):
                 continue  # gave up on this one
 
             result = self._reassess_blocked(i, since_index=just_completed_idx)
@@ -351,7 +407,7 @@ class PlanExecutor:
                 self.plan.unblock_step(i)
                 self.memory.update_plan(self.plan)
                 self.out(
-                    f"  [cyan]↩ Step {i+1} unblocked:[/cyan] {result.get('reason', '')}\n"
+                    f"  [cyan]↩ Step {i + 1} unblocked:[/cyan] {result.get('reason', '')}\n"
                     f"    Will execute before continuing"
                 )
                 # The main loop will pick it up as next_pending (lower index)
@@ -384,7 +440,7 @@ class PlanExecutor:
         for i in range(idx + 1, since_index + 1):
             if self.plan.get_state(i) == STEP_DONE:
                 notes = self.plan.get_notes(i) or "(done)"
-                completed_since.append(f"  {i+1}. {self.plan.steps[i]}: {notes[:80]}")
+                completed_since.append(f"  {i + 1}. {self.plan.steps[i]}: {notes[:80]}")
 
         prompt = REASSESS_PROMPT.format(
             task=self.plan.task,
@@ -395,3 +451,41 @@ class PlanExecutor:
         )
         raw = self.router.analyze(prompt)
         return _parse_json(raw)
+
+    def _handle_blocked(self, idx: int, reason: str) -> str:
+        """Analyse block reason, return human-readable recovery message."""
+        step = self.plan.steps[idx]
+        recent_lines: list[str] = []
+        for i in range(max(0, idx - 3), idx):
+            if self.plan.get_state(i) == STEP_DONE:
+                recent_lines.append(
+                    f"{i + 1}. {self.plan.steps[i]}: {self.plan.get_notes(i) or ''}"
+                )
+        recent = "\n".join(recent_lines) or "(none)"
+
+        prompt = BLOCK_ANALYSIS_PROMPT.format(step=step, reason=reason, recent=recent)
+        raw = self.router.analyze(prompt)
+        data = _parse_json(raw)
+
+        category_raw = str(data.get("category", "unknown"))
+        detail = str(data.get("detail", reason))
+        suggestion = str(data.get("suggestion", ""))
+
+        try:
+            category = RecoveryAction(category_raw)
+        except ValueError:
+            category = RecoveryAction.UNKNOWN
+
+        messages = {
+            RecoveryAction.MISSING_DEPENDENCY: f"Missing: {detail}. Suggest: {suggestion}",
+            RecoveryAction.AMBIGUOUS_REQUIREMENT: f"Need clarification: {detail}",
+            RecoveryAction.EXTERNAL_UNAVAILABLE: (
+                f"Service unavailable: {detail}. Check connection."
+            ),
+            RecoveryAction.INSUFFICIENT_CONTEXT: (
+                f"Need more context: {detail}. Try /ask or provide details."
+            ),
+            RecoveryAction.UNKNOWN: f"Blocked: {detail}",
+        }
+        body = messages.get(category, f"Blocked: {detail}")
+        return f"⚠ {body}"
