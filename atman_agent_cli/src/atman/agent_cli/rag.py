@@ -1,4 +1,7 @@
-"""atman/agent_cli/rag.py — BGE-M3 hybrid retrieval (dense, sparse, ColBERT), AST chunking, symbols."""
+"""atman/agent_cli/rag.py — BGE-M3 hybrid retrieval (dense, sparse, ColBERT), AST chunking, symbols.
+
+Two-stage retrieval may apply local Flag Reranker and/or ProviderRouter Cohere reranking when configured.
+"""
 
 from __future__ import annotations
 
