@@ -238,6 +238,12 @@ class SessionManager:
                 with self._lock:
                     if session_id in self._active_sessions:
                         continue
+                    # In-process crash simulation: session removed from _active_sessions
+                    # but lock file still held by this process. Release it so recovery
+                    # can proceed (a real crash would release all locks automatically).
+                    stale_lock = self._journal_locks.pop(session_id, None)
+                    if stale_lock is not None:
+                        self._release_journal_file(stale_lock, unlink=False)
                 if self._journal_locked_elsewhere(agent_id, session_id):
                     _LOG.debug("Skipping live journal locked by another process: %s", session_id)
                     continue
@@ -893,23 +899,23 @@ class SessionManager:
         parts = []
 
         if session_result.key_insight:
-            parts.append(f"Recently: {session_result.key_insight}")
+            parts.append(session_result.key_insight)
 
         if themes:
-            themes_str = ", ".join(sorted(themes)[:5])  # Limit to 5 themes
-            parts.append(f"This engaged my values around {themes_str}.")
+            themes_str = ", ".join(sorted(themes)[:5])
+            parts.append(f"Затронутые темы: {themes_str}.")
 
         if session_result.key_moments:
             num_moments = len(session_result.key_moments)
             tone = session_result.overall_emotional_tone
-            tone_desc = "positive" if tone > 0.2 else "negative" if tone < -0.2 else "neutral"
+            tone_desc = "позитивный" if tone > 0.2 else "негативный" if tone < -0.2 else "нейтральный"
             parts.append(
-                f"Experienced {num_moments} significant moment{'s' if num_moments > 1 else ''} "
-                f"with an overall {tone_desc} emotional tone."
+                f"Зафиксировано значимых моментов: {num_moments}. "
+                f"Общий эмоциональный тон — {tone_desc}."
             )
 
         if not parts:
-            parts.append("Recently completed a session.")
+            parts.append("Сессия завершена.")
 
         return " ".join(parts)
 

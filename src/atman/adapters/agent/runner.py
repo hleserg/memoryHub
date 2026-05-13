@@ -27,7 +27,7 @@ from typing import TYPE_CHECKING, Any
 from uuid import UUID
 
 from pydantic_ai import Agent
-from pydantic_ai.messages import ModelRequest, UserPromptPart
+from pydantic_ai.messages import ModelRequest, ThinkingPart, UserPromptPart
 
 from atman.adapters.agent.config import AgentConfig
 from atman.adapters.agent.deps import AtmanDeps
@@ -43,6 +43,35 @@ if TYPE_CHECKING:
 
 _LOG = logging.getLogger(__name__)
 _refusal_config = RefusalDetectorConfig()
+
+
+def _extract_thinking_from_messages(messages: list) -> str | None:
+    """Extract ThinkingPart content from new messages after agent.run()."""
+    parts: list[str] = []
+    for msg in messages:
+        for part in getattr(msg, "parts", []):
+            if isinstance(part, ThinkingPart) and part.content:
+                parts.append(part.content)
+    return "\n---\n".join(parts) if parts else None
+
+
+async def _run_affect_detector(
+    output: str,
+    thinking: str | None,
+    session_manager,
+    session_id,
+) -> None:
+    """Run passive NLP affect analysis on agent output; auto-writes KMs on anomalies."""
+    detector = getattr(session_manager, "affect_detector", None)
+    if detector is None or session_id is None:
+        return
+    try:
+        import re
+        clean = re.sub(r"<think>.*?</think>", "", output, flags=re.DOTALL).strip()
+        if clean:
+            await detector.process(clean, thinking=thinking, session_id=session_id)
+    except Exception:
+        _LOG.debug("affect detector process() failed", exc_info=True)
 
 
 def _auto_record_refusal_if_needed(
@@ -432,6 +461,20 @@ class AtmanRunner:
         self._workspace = workspace
         self._agent_id = agent_id
         self._config = config
+        # Build model_settings once from config so every agent.run() uses them.
+        # num_ctx sets Ollama's context window; max_tokens caps the output.
+        # Both default to 2000/8192 in ModelConfig which is too small — callers
+        # should configure these to match the deployed model's actual limits.
+        mc = config.model
+        self._model_settings: dict = {
+            "max_tokens": mc.max_tokens,
+            "num_ctx": mc.context_limit,
+        }
+        if config.thinking:
+            # Ollama: think=True makes thinking arrive in a separate 'reasoning'
+            # field, NOT mixed into content alongside tool-call JSON.
+            # pydantic-ai then lifts it to ThinkingPart — tool args stay clean.
+            self._model_settings["think"] = True
         # E22.5: Track triggered context thresholds for restart warning
         self._triggered: set[int] = set()
         # E22.6: Queue-based stdin reader for timeout support
@@ -716,6 +759,7 @@ class AtmanRunner:
                         user_text,
                         deps=deps,
                         message_history=history or None,
+                        model_settings=self._model_settings,
                     )
                 except Exception as exc:
                     print_err(f"Run failed: {exc!s}")
@@ -770,10 +814,18 @@ class AtmanRunner:
                 print_plain(str(result.output))
                 print_plain("")
 
+                output_text = str(result.output or "")
+                thinking_text = _extract_thinking_from_messages(result.new_messages())
+
+                # Passive NLP affect analysis — anomaly/divergence detection
+                await _run_affect_detector(
+                    output_text, thinking_text, session_manager, session_id
+                )
+
                 # Auto-record value-based refusals as key moments (silent, no agent nudging)
                 with contextlib.suppress(Exception):
                     _auto_record_refusal_if_needed(
-                        output=str(result.output or ""),
+                        output=output_text,
                         session_manager=session_manager,
                         session_id=session_id,
                     )
@@ -992,7 +1044,7 @@ class AtmanRunner:
                 return "continue"
 
             try:
-                result = await agent.run(user_input, deps=deps)
+                result = await agent.run(user_input, deps=deps, model_settings=self._model_settings)
                 print_plain(str(result.output))
                 print_plain("")
             except Exception as exc:

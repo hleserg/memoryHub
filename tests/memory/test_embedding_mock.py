@@ -31,8 +31,8 @@ class TestMockEmbeddingAdapter:
         assert hasattr(adapter, "model_name")
 
     def test_dimension_is_768(self, adapter: MockEmbeddingAdapter) -> None:
-        """Adapter reports correct 2560 dimension (qwen3-embedding:4b compatible)."""
-        assert adapter.dimension() == 2560
+        """Adapter reports correct 1024 dimension (qwen3-embedding:4b compatible)."""
+        assert adapter.dimension() == 1024
 
     def test_model_name_is_mock(self, adapter: MockEmbeddingAdapter) -> None:
         """Adapter reports correct model name."""
@@ -42,7 +42,7 @@ class TestMockEmbeddingAdapter:
         """Single text embedding returns list[float]."""
         result = adapter.embed("hello world")
         assert isinstance(result, list)
-        assert len(result) == 2560
+        assert len(result) == 1024
         assert all(isinstance(x, float) for x in result)
 
     def test_embed_dimension_matches_reported(self, adapter: MockEmbeddingAdapter) -> None:
@@ -70,14 +70,14 @@ class TestMockEmbeddingAdapter:
     def test_empty_string_embedding(self, adapter: MockEmbeddingAdapter) -> None:
         """Empty string produces valid embedding."""
         embedding = adapter.embed("")
-        assert len(embedding) == 2560
+        assert len(embedding) == 1024
         assert all(isinstance(x, float) for x in embedding)
 
     def test_unicode_text_embedding(self, adapter: MockEmbeddingAdapter) -> None:
         """Unicode text produces valid embedding."""
         text = "Привет мир 🌍 你好世界"
         embedding = adapter.embed(text)
-        assert len(embedding) == 2560
+        assert len(embedding) == 1024
         assert all(isinstance(x, float) for x in embedding)
 
     # ==========================================================================
@@ -92,7 +92,7 @@ class TestMockEmbeddingAdapter:
         assert len(results) == 3
         for emb in results:
             assert isinstance(emb, list)
-            assert len(emb) == 2560
+            assert len(emb) == 1024
             assert all(isinstance(x, float) for x in emb)
 
     def test_embed_batch_empty_list(self, adapter: MockEmbeddingAdapter) -> None:
@@ -104,7 +104,7 @@ class TestMockEmbeddingAdapter:
         """Batch with single item works correctly."""
         results = adapter.embed_batch(["single"])
         assert len(results) == 1
-        assert len(results[0]) == 2560
+        assert len(results[0]) == 1024
 
     def test_embed_batch_determinism(self, adapter: MockEmbeddingAdapter) -> None:
         """Batch embeddings are deterministic."""
@@ -166,13 +166,13 @@ class TestMockEmbeddingAdapter:
         """Very long text produces valid embedding."""
         text = "word " * 10000
         embedding = adapter.embed(text)
-        assert len(embedding) == 2560
+        assert len(embedding) == 1024
 
     def test_special_characters_embedding(self, adapter: MockEmbeddingAdapter) -> None:
         """Special characters produce valid embedding."""
         text = "\n\t\r\\\"'\x00\x01\x02"
         embedding = adapter.embed(text)
-        assert len(embedding) == 2560
+        assert len(embedding) == 1024
 
     def test_large_batch(self, adapter: MockEmbeddingAdapter) -> None:
         """Large batch works correctly."""
@@ -180,4 +180,4 @@ class TestMockEmbeddingAdapter:
         results = adapter.embed_batch(texts)
         assert len(results) == 100
         for emb in results:
-            assert len(emb) == 2560
+            assert len(emb) == 1024

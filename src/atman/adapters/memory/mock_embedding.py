@@ -2,7 +2,7 @@
 MockEmbeddingAdapter - deterministic hash-based embedding for testing.
 
 Generates reproducible embeddings without external dependencies.
-Uses 2560-dimensional vectors to match qwen3-embedding:4b dimensions.
+Uses 1024-dimensional vectors to match bge-m3 dimensions.
 """
 
 import hashlib
@@ -18,10 +18,10 @@ class MockEmbeddingAdapter(EmbeddingPort):
     Mock embedding adapter for testing.
 
     Generates deterministic embeddings based on text hashing.
-    Uses 2560-dimensional vectors to match qwen3-embedding:4b dimensions.
+    Uses 1024-dimensional vectors to match bge-m3 dimensions.
     """
 
-    _DIMENSION = 2560
+    _DIMENSION = 1024
 
     @override
     def embed(self, text: str) -> list[float]:

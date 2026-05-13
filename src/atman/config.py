@@ -22,8 +22,8 @@ class EmbeddingSettings(BaseSettings):
     )
 
     backend: str = "mock"  # "ollama" or "mock"
-    model: str = "qwen3-embedding:4b"  # Ollama model name
-    dimension: int = 2560  # Embedding vector dimension
+    model: str = "bge-m3"  # Ollama model name
+    dimension: int = 1024  # Embedding vector dimension
     ollama_host: str = "http://localhost:11434"  # Ollama API host
     timeout: float = 30.0  # Request timeout in seconds
 

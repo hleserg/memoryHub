@@ -34,14 +34,14 @@ class ModelConfig(BaseModel):
         description="Sampling temperature for model generation",
     )
     max_tokens: int = Field(
-        default=2000,
-        gt=0,
-        description="Maximum tokens for model response",
-    )
-    context_limit: int = Field(
         default=8192,
         gt=0,
-        description="Maximum context window size for the model",
+        description="Maximum output tokens for model response (maps to Ollama num_predict / OpenAI max_tokens)",
+    )
+    context_limit: int = Field(
+        default=262144,
+        gt=0,
+        description="Total context window size — input + output (maps to Ollama num_ctx). Set to match the deployed model's actual limit.",
     )
 
 

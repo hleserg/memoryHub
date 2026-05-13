@@ -46,12 +46,12 @@ CREATE TABLE IF NOT EXISTS public.facts (
     -- Semantic embedding (nullable: populated when embedding model is available).
     -- halfvec stores float16 vectors — half the space of float32, negligible
     -- precision loss for cosine similarity, and HNSW supports up to 4000 dims.
-    embedding           halfvec(2560)
+    embedding           halfvec(1024)
 );
 
 COMMENT ON TABLE public.facts IS 'Factual memory: verifiable facts without interpretation. Owned per agent.';
 COMMENT ON COLUMN public.facts.agent_id IS 'Owning agent UUID (used for RLS)';
-COMMENT ON COLUMN public.facts.embedding IS 'halfvec(2560) embedding (qwen3-embedding:4b). float16 storage: half the size of float32, negligible cosine similarity loss. NULL when model unavailable — system degrades gracefully to text search.';
+COMMENT ON COLUMN public.facts.embedding IS 'halfvec(1024) embedding (bge-m3). float16 storage: half the size of float32, negligible cosine similarity loss. NULL when model unavailable — system degrades gracefully to text search.';
 
 -- ── Fact Relations Table ──────────────────────────────────────────────────────
 

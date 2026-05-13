@@ -872,3 +872,48 @@ python -m theater --sessions 2 --model llama3:latest
 4. **Реализовать `FloorAdapter`** — отдельное хранилище общее для обоих агентов. Структура та же что у MemoryAdapter, но без привязки к agent_id. Нужен метод `remove(moment_id)` — значит у KeyMoment должен быть идентификатор. Уточнить есть ли он в существующей модели.
 
 5. **Проверить модель** — `gemma3:latest` поддерживает tool calling в установленной версии Ollama? Если нет — альтернатива `mistral` или `llama3`.
+
+---
+
+## План реализации
+
+> Зафиксировано 2026-05-13. Все вопросы из раздела выше разобраны.
+> Реализацию начинать после мержа ветки с подключением новых моделей (gemma3:27b-it-qat + bge-m3).
+
+### Предусловия
+
+- [ ] Смержена ветка `feat/demo-and-model-settings` (переход на gemma3:27b-it-qat + bge-m3, `OLLAMA_BASE_URL` в env)
+- [ ] `ollama pull gemma3:27b-it-qat` и `ollama pull bge-m3` выполнены (уже есть)
+
+### Принятые решения
+
+| Вопрос | Решение |
+|---|---|
+| Импорт моделей | `from atman.core.models.experience import KeyMoment, FeltSense, EmotionalDepth` |
+| Хранилище | `FileStateStore` из `atman.adapters.storage.file_state_store` — отдельный путь на каждого агента |
+| agent_id | Фиксированный `UUID` на агента, один на всё время театра. Альфред — один UUID, Элиот — другой |
+| Семантический поиск | Своя реализация в `memory.py`: `list_key_moments()` + bge-m3 через `ollama.embeddings` + numpy cosine |
+| FloorAdapter | Третий `FileStateStore` (path: `theater/floor`). `remove()` — перезапись файла без нужного момента |
+| Tool calling | `gemma3:27b-it-qat` — поддерживает. Fallback: `qwen3.5:9b` (уже в системе) |
+| Модель для диалога | `gemma3:27b-it-qat` вместо `gemma3:latest` из ТЗ |
+
+### Порядок реализации
+
+1. **`theater/prompts.py`** — копируем как есть из ТЗ, без изменений
+2. **`theater/logger.py`** — копируем как есть из ТЗ, без изменений
+3. **`theater/memory.py`** — адаптер поверх `FileStateStore`:
+   - `MemoryAdapter`: обёртка с фиксированным `session_id`, методы `get_top`, `get_all`, `save`, `search` (своя bge-m3 + numpy)
+   - `FloorAdapter`: третий `FileStateStore`, методы `pick_random`, `throw`, `remove`
+   - функции `embed()` и `cosine_similarity()` — как в ТЗ через `ollama` SDK
+4. **`theater/renderer.py`** — копируем как есть из ТЗ. Проверить что `EmotionalDepth.SURFACE` и т.д. совпадают с реальным enum (`"surface"`, `"meaningful"`, `"profound"` — совпадают)
+5. **`theater/tools.py`** — копируем как есть из ТЗ. Добавить `put_in_chest` в список (в ТЗ он есть в коде `agents.py` но отсутствует в списке `TOOLS` — добавить)
+6. **`theater/agents.py`** — копируем из ТЗ. Исправить импорт `from memory import embed` → `from theater.memory import embed`
+7. **`theater/orchestrator.py`** — копируем из ТЗ. Исправить вызов `farewell` (в ТЗ некорректный вызов `run_turn` в блоке экзистенциального дропа — упростить)
+8. **`theater/__main__.py`** — копируем из ТЗ, заменить дефолтную модель на `gemma3:27b-it-qat`
+
+### Известные баги в ТЗ (исправить при реализации)
+
+- `orchestrator.py` строка 787: `run_turn` вызывается с неправильными аргументами в блоке farewell — там передаётся `getattr(memory_alfred..., "adapter", None)` вместо нормального `memory_alfred`/`memory_eliot`
+- `agents.py`: `from memory import embed` — относительный импорт, нужно уточнить структуру пакета
+- `__main__.py`: `FloorAdapter` используется но не импортирован — добавить импорт
+- `__main__.py`: `log` используется без импорта — добавить `import logger as log`

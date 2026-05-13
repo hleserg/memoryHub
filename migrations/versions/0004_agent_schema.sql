@@ -142,7 +142,7 @@ BEGIN
             principles_questioned TEXT[] NOT NULL DEFAULT '{}',
             what_changed          TEXT,
             recorded_at           TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-            embedding             halfvec(2560)
+            embedding             halfvec(1024)
         );
         CREATE INDEX IF NOT EXISTS km_agent_idx
             ON %I.key_moments (agent_id);
