@@ -13,13 +13,14 @@ Usage:
     pages = fetch_all_urls(urls)
     context = format_pages_for_context(pages)
 """
+
 from __future__ import annotations
 
 import re
+import shutil
 import time
 from dataclasses import dataclass, field
 from urllib.parse import urlparse
-
 
 # Regex that catches most URLs in plain text
 URL_PATTERN = re.compile(
@@ -27,9 +28,15 @@ URL_PATTERN = re.compile(
     re.IGNORECASE,
 )
 
-MAX_CONTENT_CHARS = 12_000   # truncate long pages
-FETCH_TIMEOUT     = 15       # seconds per URL
-MAX_URLS_PER_MSG  = 5        # don't fetch a wall of links
+MAX_CONTENT_CHARS = 12_000  # truncate long pages
+FETCH_TIMEOUT = 15  # seconds per URL
+MAX_URLS_PER_MSG = 5  # don't fetch a wall of links
+
+_PLAYWRIGHT_AVAILABLE = bool(
+    shutil.which("chromium")
+    or shutil.which("chromium-browser")
+    or shutil.which("chromium-browser-stable")
+)
 
 
 @dataclass
@@ -84,18 +91,26 @@ def fetch_url(url: str, use_playwright: bool = False) -> FetchedPage:
     Strategy:
       1. Try trafilatura (best for articles/docs)
       2. Fallback to requests + basic HTML strip
-      3. Optional playwright for JS-heavy pages
+      3. Auto playwright when extracted text stays very short (browser on PATH)
+      4. Explicit ``use_playwright=True`` for JS-heavy pages
     """
     if use_playwright:
         return _fetch_playwright(url)
 
-    # Try trafilatura first
     page = _fetch_trafilatura(url)
-    if page.ok:
+    if page.ok and len(page.content) >= 200:
         return page
 
-    # Fallback: requests + strip HTML
-    return _fetch_requests_fallback(url)
+    page2 = _fetch_requests_fallback(url)
+    if page2.ok and len(page2.content) >= 200:
+        return page2
+
+    if _PLAYWRIGHT_AVAILABLE and len(page2.content) < 200:
+        pw_page = _fetch_playwright(url)
+        if pw_page.ok:
+            return pw_page
+
+    return page2 if page2.ok else page
 
 
 def fetch_all_urls(urls: list[str], use_playwright: bool = False) -> list[FetchedPage]:
@@ -118,6 +133,7 @@ def format_pages_for_context(pages: list[FetchedPage]) -> str:
 
 
 # ── Fetchers ──────────────────────────────────────────────────────────────────
+
 
 def _fetch_trafilatura(url: str) -> FetchedPage:
     try:
@@ -144,6 +160,7 @@ def _fetch_trafilatura(url: str) -> FetchedPage:
 
         # Extract title separately
         from trafilatura.metadata import extract_metadata
+
         meta = extract_metadata(downloaded)
         title = meta.title if meta and meta.title else ""
 
@@ -162,6 +179,7 @@ def _fetch_requests_fallback(url: str) -> FetchedPage:
     """Simple fallback: requests + strip HTML tags."""
     try:
         import requests
+
         r = requests.get(
             url,
             timeout=FETCH_TIMEOUT,
@@ -178,7 +196,7 @@ def _fetch_requests_fallback(url: str) -> FetchedPage:
 
         # Strip HTML tags
         text = re.sub(r"<script[^>]*>.*?</script>", " ", text, flags=re.DOTALL | re.IGNORECASE)
-        text = re.sub(r"<style[^>]*>.*?</style>",  " ", text, flags=re.DOTALL | re.IGNORECASE)
+        text = re.sub(r"<style[^>]*>.*?</style>", " ", text, flags=re.DOTALL | re.IGNORECASE)
         text = re.sub(r"<[^>]+>", " ", text)
         text = re.sub(r"&[a-zA-Z]+;", " ", text)
         text = re.sub(r"\s+", " ", text).strip()
@@ -208,7 +226,7 @@ def _fetch_playwright(url: str) -> FetchedPage:
     except ImportError:
         return FetchedPage(
             url=url,
-            error="playwright not installed: pip install playwright && playwright install chromium"
+            error="playwright not installed: pip install playwright && playwright install chromium",
         )
 
     try:
@@ -235,6 +253,7 @@ def _fetch_playwright(url: str) -> FetchedPage:
 
 
 # ── GitHub-specific helpers ───────────────────────────────────────────────────
+
 
 def is_github_url(url: str) -> bool:
     return "github.com" in url
