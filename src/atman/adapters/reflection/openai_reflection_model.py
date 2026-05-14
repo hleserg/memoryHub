@@ -102,6 +102,7 @@ class OpenAIReflectionModel(ReflectionModel):
                 httpx.HTTPStatusError,
                 httpx.RequestError,
                 KeyError,
+                IndexError,
                 ValueError,
             ):
                 if attempt == self._config.max_retries - 1:

@@ -250,6 +250,33 @@ def test_missing_choices_key_raises_error():
         )
 
 
+@respx.mock
+def test_empty_choices_array_raises_error():
+    """Test that empty choices array raises IndexError which is caught and retried."""
+    config = OpenAILLMConfig(
+        base_url="http://test-api/v1",
+        api_key="test-key",
+        max_retries=1,
+    )
+    model = OpenAIReflectionModel(config)
+
+    # Response with empty choices array
+    respx.post("http://test-api/v1/chat/completions").mock(
+        return_value=httpx.Response(
+            200,
+            json={"choices": []},
+        )
+    )
+
+    experience = _make_experience()
+
+    with pytest.raises(OpenAIReflectionError):
+        model.generate_reframing_note(
+            experience=experience,
+            context={"identity": "test"},
+        )
+
+
 def test_config_validation_rejects_zero_retries():
     """Test that max_retries=0 is rejected at config level."""
     with pytest.raises(ValueError, match="max_retries must be >= 1"):
