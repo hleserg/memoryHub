@@ -157,7 +157,7 @@ All paths are absolute relative to the repository root.
 | `eval/migrations/alembic.ini`, `eval/migrations/env.py` | eval storage | Alembic configuration for the isolated PostgreSQL `eval` schema |
 | `eval/migrations/versions/0010_*` ... `0040_*` | eval storage | idempotent eval schema, benchmark run tables, supporting tables, and trend materialized view |
 | `scripts/eval/partition_manager.py` | operations | creates future partitions, detaches old partitions, and reports `eval.benchmark_runs` partition status |
-| `src/demo_eval_runner.py`, `docs/eval/RUNNER.md`, `docs/eval/RUNNER-ru.md` | demo/docs | reproducible E1 runner walkthrough + bilingual usage docs |
+| `src/demo_eval_runner.py`, `docs/features/eval-runner/README.md`, `docs/features/eval-runner/README-ru.md` | demo/docs | reproducible E1 runner walkthrough + bilingual usage docs |
 
 ---
 

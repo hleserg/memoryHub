@@ -161,7 +161,7 @@
 | `eval/migrations/alembic.ini`, `eval/migrations/env.py` | eval storage | конфигурация Alembic для изолированной PostgreSQL-схемы `eval` |
 | `eval/migrations/versions/0010_*` ... `0040_*` | eval storage | идемпотентная схема eval, таблицы benchmark run, supporting tables и materialized view трендов |
 | `scripts/eval/partition_manager.py` | операции | создаёт будущие partitions, отсоединяет старые partitions и показывает статус partitions `eval.benchmark_runs` |
-| `src/demo_eval_runner.py`, `docs/eval/RUNNER.md`, `docs/eval/RUNNER-ru.md` | demo/docs | воспроизводимый walkthrough E1 runner + двуязычная документация |
+| `src/demo_eval_runner.py`, `docs/features/eval-runner/README.md`, `docs/features/eval-runner/README-ru.md` | demo/docs | воспроизводимый walkthrough E1 runner + двуязычная документация |
 
 ---
 
