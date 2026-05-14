@@ -24,6 +24,14 @@ class OpenAILLMConfig:
     timeout: float = field(default_factory=lambda: float(os.getenv("ATMAN_LLM_TIMEOUT", "60")))
     max_retries: int = field(default_factory=lambda: int(os.getenv("ATMAN_LLM_MAX_RETRIES", "2")))
 
+    def __post_init__(self) -> None:
+        """Validate configuration values."""
+        if self.max_retries < 1:
+            raise ValueError(
+                f"max_retries must be >= 1 (got {self.max_retries}). "
+                "Use 1 for one attempt with no retries, 2 for one retry, etc."
+            )
+
 
 @dataclass
 class AnthropicLLMConfig:

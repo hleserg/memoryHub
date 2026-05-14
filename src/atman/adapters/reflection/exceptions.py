@@ -23,3 +23,7 @@ class OllamaReflectionError(RuntimeError):
         super().__init__(
             f"Ollama reflection failed after {attempts} attempts. Last raw: {self.last_raw[:100]}"
         )
+
+
+# Alias for OpenAI-compatible adapters (same error class, more generic name)
+OpenAIReflectionError = OllamaReflectionError

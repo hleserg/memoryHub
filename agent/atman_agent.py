@@ -5,8 +5,6 @@ This agent is the test user — it talks TO Atman, it is not part of Atman.
 Uses its own LLM connection (default: Gemma4 at localhost:8080).
 """
 
-import os
-
 from pydantic_ai import Agent
 from pydantic_ai.models.openai import OpenAIModel
 
@@ -28,10 +26,12 @@ def create_agent(config: AgentLLMConfig | None = None) -> Agent:
     """
     cfg = config or AgentLLMConfig()
 
-    # OpenAIModel reads OPENAI_BASE_URL and OPENAI_API_KEY from environment
-    # Set them temporarily for this agent instance
-    os.environ["OPENAI_BASE_URL"] = cfg.base_url
-    os.environ["OPENAI_API_KEY"] = cfg.api_key
-
-    model = OpenAIModel(model_name=cfg.model)
+    # Pass config directly to OpenAIModel without polluting os.environ
+    # Note: pydantic-ai's OpenAIModel may not fully support all parameters
+    # If this raises at runtime, may need to fall back to env vars or custom client
+    model = OpenAIModel(
+        model_name=cfg.model,
+        base_url=cfg.base_url,  # type: ignore[call-arg]
+        api_key=cfg.api_key,  # type: ignore[call-arg]
+    )
     return Agent(model=model)
