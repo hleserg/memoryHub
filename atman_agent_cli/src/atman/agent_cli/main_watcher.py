@@ -4,6 +4,7 @@ Background watcher: tracks changes in main branch without LLM.
 Records diffs, authors, timestamps to agent memory.
 Runs in a daemon thread — fires and forgets.
 """
+
 from __future__ import annotations
 
 import json
@@ -23,15 +24,15 @@ log = logging.getLogger("atman.watcher")
 
 # ── Data structures ───────────────────────────────────────────────────────────
 
+
 @dataclass
 class CommitEvent:
     """One commit or a batch of commits that landed on main."""
-    sha: str                        # HEAD SHA after the event
-    prev_sha: str                   # SHA before (our last known)
-    timestamp: str = field(
-        default_factory=lambda: datetime.now(timezone.utc).isoformat()
-    )
-    source: str = "unknown"         # "self_merge" | "external_merge" | "webhook" | "init"
+
+    sha: str  # HEAD SHA after the event
+    prev_sha: str  # SHA before (our last known)
+    timestamp: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+    source: str = "unknown"  # "self_merge" | "external_merge" | "webhook" | "init"
     pr_number: int | None = None
     pr_title: str | None = None
     author: str = ""
@@ -50,10 +51,11 @@ class CommitEvent:
 class WatcherState:
     last_seen_sha: str = ""
     last_sync_at: str = ""
-    events: list[dict] = field(default_factory=list)   # list of CommitEvent dicts
+    events: list[dict] = field(default_factory=list)  # list of CommitEvent dicts
 
 
 # ── MainWatcher ───────────────────────────────────────────────────────────────
+
 
 class MainWatcher:
     """
@@ -104,9 +106,7 @@ class MainWatcher:
             return WatcherState()
 
     def _save_state(self) -> None:
-        self.state_file.write_text(
-            json.dumps(asdict(self._state), indent=2, ensure_ascii=False)
-        )
+        self.state_file.write_text(json.dumps(asdict(self._state), indent=2, ensure_ascii=False))
 
     # ── Git helpers ───────────────────────────────────────────────────────────
 
@@ -136,18 +136,16 @@ class MainWatcher:
         )
         lines = [l for l in log_out.splitlines() if l.strip()]
         stats["commits_count"] = len(lines)
-        stats["commit_messages"] = [l[8:].strip() for l in lines[:20]]  # skip SHA
+        stats["commit_messages"] = [
+            line.split(" ", 1)[1].strip() if " " in line else line for line in lines[:20]
+        ]
 
         # Author of last commit
-        _, author_out, _ = run_git(
-            ["log", "-1", "--format=%an", to_sha], self.repo
-        )
+        _, author_out, _ = run_git(["log", "-1", "--format=%an", to_sha], self.repo)
         stats["author"] = author_out.strip()
 
         # Files changed with status
-        _, diff_out, _ = run_git(
-            ["diff", "--name-status", from_sha, to_sha], self.repo
-        )
+        _, diff_out, _ = run_git(["diff", "--name-status", from_sha, to_sha], self.repo)
         for line in diff_out.splitlines():
             if not line.strip():
                 continue
@@ -163,9 +161,7 @@ class MainWatcher:
                 stats["files_changed"].append(file_path)
 
         # Insertion/deletion counts
-        _, numstat_out, _ = run_git(
-            ["diff", "--numstat", from_sha, to_sha], self.repo
-        )
+        _, numstat_out, _ = run_git(["diff", "--numstat", from_sha, to_sha], self.repo)
         for line in numstat_out.splitlines():
             parts = line.split("\t")
             if len(parts) >= 2:
@@ -179,7 +175,9 @@ class MainWatcher:
 
     # ── Core sync ─────────────────────────────────────────────────────────────
 
-    def sync(self, source: str = "poll", pr_number: int | None = None, pr_title: str | None = None) -> CommitEvent | None:
+    def sync(
+        self, source: str = "poll", pr_number: int | None = None, pr_title: str | None = None
+    ) -> CommitEvent | None:
         """
         Check if main has new commits since last seen SHA.
         Records the event if yes. Returns CommitEvent or None.

@@ -464,8 +464,7 @@ class AtmanRunner:
         self._config = config
         # Build model_settings once from config so every agent.run() uses them.
         # num_ctx sets Ollama's context window; max_tokens caps the output.
-        # Both default to 2000/8192 in ModelConfig which is too small — callers
-        # should configure these to match the deployed model's actual limits.
+        # Callers should configure these to match the deployed model's actual limits.
         mc = config.model
         extra_body: dict[str, Any] = {"num_ctx": mc.context_limit}
         if config.thinking:

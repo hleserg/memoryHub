@@ -266,7 +266,7 @@ class PRManager:
         failed_checks = [
             {"name": c["name"], "url": c["html_url"]}
             for c in check_runs
-            if c["conclusion"] in ("failure", "error")
+            if c.get("conclusion") in ("failure", "error")
         ]
 
         # Reviews
@@ -304,7 +304,7 @@ class PRManager:
         checks = self._get(f"repos/{self.repo}/commits/{sha}/check-runs")
         logs = []
         for c in checks.get("check_runs", []):
-            if c["conclusion"] in ("failure", "error"):
+            if c.get("conclusion") in ("failure", "error"):
                 # Fetch job logs
                 try:
                     job_id = c["id"]
