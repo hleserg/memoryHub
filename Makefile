@@ -1,4 +1,4 @@
-.PHONY: lint format typecheck security test test-fast test-all test-integration audit check all sync-site-content docs-preview demo-experience demo-factual demo-identity demo-reflection demo-session demo-full-corpus demo-webui demo-experience-fast demo-factual-fast demo-identity-fast demo-reflection-fast demo-session-fast demo-full-corpus-fast demo-webui-fast demo-experience-paced demo-factual-paced demo-identity-paced demo-reflection-paced demo-session-paced demo-full-corpus-paced demo-webui-paced webui demo-e2e-scenario playbook-extract playbook-check playbook-audit
+.PHONY: lint format typecheck security test test-fast test-all test-integration audit check all sync-site-content docs-preview demo-experience demo-factual demo-identity demo-reflection demo-session demo-full-corpus demo-webui demo-experience-fast demo-factual-fast demo-identity-fast demo-reflection-fast demo-session-fast demo-full-corpus-fast demo-webui-fast demo-experience-paced demo-factual-paced demo-identity-paced demo-reflection-paced demo-session-paced demo-full-corpus-paced demo-webui-paced demo-eval-runner demo-eval-runner-paced demo-eval-runner-fast eval-list eval-run webui demo-e2e-scenario playbook-extract playbook-check playbook-audit
 
 lint:
 	ruff check src/ tests/ e2e/
@@ -103,6 +103,20 @@ demo-webui demo-webui-paced:
 
 demo-webui-fast:
 	ATMAN_DEMO_PACE=off python3 src/demo_web_dashboard.py
+
+# Eval Runner walkthrough (see docs/features/eval-runner/README.md).
+demo-eval-runner demo-eval-runner-paced:
+	ATMAN_DEMO_PACE=1 python3 src/demo_eval_runner.py
+
+demo-eval-runner-fast:
+	ATMAN_DEMO_PACE=off python3 src/demo_eval_runner.py
+
+# Eval Runner CLI (module-only, isolated from production entry points).
+eval-list:
+	python3 -m atman.eval.benchmark_runner list
+
+eval-run:
+	python3 -m atman.eval.benchmark_runner run noop
 
 # Web dashboard — runs Streamlit web UI (see docs/features/web-dashboard/).
 webui:

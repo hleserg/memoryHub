@@ -155,6 +155,11 @@ class RunnerCore:
         )
 
         self._fanout(lambda reporter: reporter.on_run_complete(outcome), reporter_errors)
+
+        # Rebuild outcome with complete reporter errors including on_run_complete phase
+        if reporter_errors != list(outcome.reporter_errors):
+            outcome = replace(outcome, reporter_errors=tuple(reporter_errors))
+
         if idempotency_key is not None and outcome.status == "completed":
             self._completed_by_idempotency_key[idempotency_key] = outcome
         return outcome

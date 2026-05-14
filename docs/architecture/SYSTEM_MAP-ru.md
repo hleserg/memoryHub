@@ -138,6 +138,7 @@
 | `src/demo_reflection.py` | demo | micro→daily→deep с фикстурами |
 | `src/demo_full_corpus.py` | demo | все `e2e/fixtures/sessions/*` → SessionManager → micro/daily/deep + сводка Rich ([issue #158](https://github.com/hleserg/atman/issues/158)) |
 | `src/demo_web_dashboard.py` | demo | подсказка запуска веб-дашборда |
+| `src/demo_eval_runner.py` | demo | E1 Evaluation Runner walkthrough: список реестра → RunnerCore + JsonlReporter → noop benchmark → идемпотентный перезапуск |
 | `src/run_agent.py` | entrypoint | запуск REPL агента через `AgentsRegistry` + `AtmanRunner` (БД из `DATABASE_URL`) |
 | `agent/atman_agent.py`, `agent/config.py` | test agent | фабрика test-user на Pydantic AI (`create_agent`) с OpenAI-compatible provider-конфигом (`AgentLLMConfig`); top-level `agent` включён в wheel через Hatch |
 | `scripts/migrate_embeddings.py` | ops | миграция PostgreSQL `facts` с 2560-мерных Qwen-эмбеддингов на 1024-мерные BGE-M3; перестраивает схему/индекс `facts.embedding` и re-embed в одной транзакции |
@@ -157,9 +158,15 @@
 |------|-----------|------------|
 | `src/atman/eval/__init__.py` | optional namespace | импортирует `_deps_check`; `import atman.eval` быстро падает без extra `eval` |
 | `src/atman/eval/_deps_check.py` | dependency guard | проверяет canary-зависимости из `[project.optional-dependencies].eval` и показывает понятную подсказку установки |
+| `src/atman/eval/benchmark_runner.py` | CLI модуль | E1 benchmark runner CLI с командами `list`/`run`; `python -m atman.eval.benchmark_runner list` / `python -m atman.eval.benchmark_runner run <key>` |
+| `src/atman/eval/runner_core.py`, `src/atman/eval/run_context.py` | eval runtime | lifecycle benchmark, типизированный контекст запуска, детерминированные app-level idempotency keys, fanout репортеров (`on_run_start/on_run_item/on_run_complete`) |
+| `src/atman/eval/registry.py`, `src/atman/eval/benchmarks/noop.py` | реестр benchmark | decorator-based регистрация и lookup (`register`, `get`, `list_benchmarks`) + встроенный noop smoke benchmark |
+| `src/atman/eval/reporters/base.py`, `src/atman/eval/reporters/jsonl_reporter.py`, `src/atman/eval/reporters/db_reporter.py` | reporting | Reporter ABC + JSONL-события lifecycle + PostgreSQL-запись в `eval.benchmark_runs` / `eval.run_items` |
+| `src/atman/eval/seed_manager.py`, `src/atman/eval/hardware.py` | runtime metadata | управление seed и hardware probe с graceful fallback без NVML/GPU |
 | `eval/migrations/alembic.ini`, `eval/migrations/env.py` | eval storage | конфигурация Alembic для изолированной PostgreSQL-схемы `eval` |
 | `eval/migrations/versions/0010_*` ... `0040_*` | eval storage | идемпотентная схема eval, таблицы benchmark run, supporting tables и materialized view трендов |
 | `scripts/eval/partition_manager.py` | операции | создаёт будущие partitions, отсоединяет старые partitions и показывает статус partitions `eval.benchmark_runs` |
+| `src/demo_eval_runner.py`, `docs/features/eval-runner/README.md`, `docs/features/eval-runner/README-ru.md` | demo/docs | воспроизводимый walkthrough E1 runner + двуязычная документация |
 
 ---
 
@@ -210,6 +217,7 @@
 | `cli_experience.py` | `ExperienceService(JsonlExperienceStore)` | `cli_experience.py:17-29` |
 | `cli_identity.py` | `IdentityService(FileStateStore)` + `NarrativeService(FileStateStore)` | `cli_identity.py:15-29` |
 | `cli_reflection.py` | `Micro/Daily/DeepReflectionService` + fixture_loader | `cli_reflection.py:18-47` |
+| `benchmark_runner.py` (module-only) | `RunnerCore` + `registry` + `reporters` (`jsonl`, опционально DB) | `eval/benchmark_runner.py` |
 
 ### 2.4. Демо ↔ реальные объекты
 
@@ -221,6 +229,7 @@
 | `demo_session_manager.py` | `FileStateStore` → `SessionManager` (загрузка identity/narrative, запись событий/моментов, сохранение experience/eigenstate) |
 | `demo_reflection.py` | моки + fixture_loader → `MicroReflectionService` → `DailyReflectionService` → `DeepReflectionService` |
 | `demo_full_corpus.py` | JSON сессий `e2e` → `FileStateStore` + `SessionManager` + `StateStore*Adapter` → micro → daily (за UTC-сутки) → deep; `DeterministicReflectionModel` |
+| `demo_eval_runner.py` | `list_benchmarks()` → `RunnerCore([JsonlReporter])` + `noop` benchmark → идемпотентный перезапуск с тем же `git_sha` → JSONL-артефакт |
 
 ### 2.5. TUI / Web ↔ подпроцессы
 
