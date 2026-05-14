@@ -5,6 +5,8 @@ from __future__ import annotations
 import json
 
 import pytest
+
+from atman.core.models.experience import EmotionalDepth
 from e2e.llm import (
     _normalize_fixture_payload,
     _require_non_null_fixture_fields,
@@ -24,8 +26,6 @@ from e2e.models import (
     weighted_mean_valence,
 )
 from e2e.validation import skeleton_matches_count, validate_corpus
-
-from atman.core.models.experience import EmotionalDepth
 
 
 def _moment(

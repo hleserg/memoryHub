@@ -8,6 +8,7 @@ import sys
 from pathlib import Path
 
 import pytest
+
 from e2e.full_loop import load_all_fixture_sessions_sorted
 
 REPO_ROOT = Path(__file__).resolve().parent.parent

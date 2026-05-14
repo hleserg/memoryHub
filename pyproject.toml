@@ -89,6 +89,8 @@ markers = [
     "integration: marks integration tests (multiple real components, no mocks)",
     "e2e: marks full end-to-end scenarios",
     "requires_ollama: marks tests that need a running Ollama instance",
+    "requires_llm: marks tests that need Atman's internal LLM endpoint (ATMAN_LLM_BASE_URL)",
+    "requires_agent_llm: marks tests that need the agent's LLM endpoint (AGENT_LLM_BASE_URL)",
 ]
 
 [tool.coverage.run]
@@ -213,7 +215,7 @@ ignore = [
 "src/atman/affect/emolex/**" = ["W293", "UP035", "RUF001", "RUF002", "RUF003"]
 
 [tool.ruff.lint.isort]
-known-first-party = ["atman"]
+known-first-party = ["atman", "agent", "e2e"]
 
 [tool.ruff.format]
 quote-style = "double"

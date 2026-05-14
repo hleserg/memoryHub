@@ -64,7 +64,7 @@
 
 | Файл | Назначение |
 |------|------------|
-| `config.py` | Pydantic settings (`EmbeddingSettings`, `LLMSettings`, `MemorySettings`), фабрика `build_memory_backend()`, **фабрика `build_embedding_adapter()`** (выбор FlagEmbedding/Ollama/Mock backend), `validate_embedding_dimension()` (проверка размерности при старте); по умолчанию: embedding backend=`ollama` с `bge-m3`/1024d (FlagEmbedding backend использует `flag_model="BAAI/bge-m3"` с настройками FP16/batch_size/max_length), LLM=`gemma3:27b-it-qat`, factual memory=`FileBackend`; поддерживает `ATMAN_MEMORY_BACKEND=postgres|file|inmemory`, `EMBEDDING_BACKEND=ollama|flag|mock`; **fallback устаревших переменных окружения**: `OLLAMA_HOST`→`EMBEDDING_OLLAMA_HOST`, `OLLAMA_EMBED_MODEL`→`EMBEDDING_MODEL`, `ATMAN_OLLAMA_BASE_URL`→`LLM_OLLAMA_HOST`, `ATMAN_OLLAMA_MODEL`→`LLM_MODEL` |
+| `config.py` | Pydantic settings (`EmbeddingSettings`, `LLMSettings`, `MemorySettings`), **`OpenAILLMConfig`** (base_url, api_key, model, timeout, max_retries с валидацией ≥1), **`AnthropicLLMConfig`** (api_key, model, max_tokens), фабрика `build_memory_backend()`, **фабрика `build_embedding_adapter()`** (выбор FlagEmbedding/Ollama/Mock backend), `validate_embedding_dimension()` (проверка размерности при старте); по умолчанию: embedding backend=`ollama` с `bge-m3`/1024d (FlagEmbedding backend использует `flag_model="BAAI/bge-m3"` с настройками FP16/batch_size/max_length), LLM=`gemma3:27b-it-qat`, factual memory=`FileBackend`; поддерживает `ATMAN_MEMORY_BACKEND=postgres|file|inmemory`, `EMBEDDING_BACKEND=ollama|flag|mock`; **fallback устаревших переменных окружения**: `OLLAMA_HOST`→`EMBEDDING_OLLAMA_HOST`, `OLLAMA_EMBED_MODEL`→`EMBEDDING_MODEL`, `ATMAN_OLLAMA_BASE_URL`→`LLM_OLLAMA_HOST`, `ATMAN_OLLAMA_MODEL`→`LLM_MODEL` |
 | `core/exceptions.py` | `AtmanError`, `GovernanceRejectedError`, `NarrativePersistenceConflictError`, `SessionNotFoundError`, `SessionAlreadyFinishedError`, `TooManyActiveSessionsError` |
 | `core/clock_impl.py` | `SystemClock`, `FrozenClock` |
 | `core/narrative_write_audit.py` | Хуки аудита коммитов нарратива |
@@ -104,6 +104,7 @@
 | **`adapters/storage/in_memory_postgres_reflection_store.py`** (`InMemoryReflectionStore`) | **`ReflectionStore`** | **E27**: в памяти с симуляцией BIGSERIAL + RLS |
 | `adapters/storage/reflection_persistence_helper.py` | — | **E27**: функции-помощники для персистенса рефлексий (`persist_micro_reflection`, `persist_daily_reflection`, `persist_deep_reflection`) |
 | `adapters/reflection/mock_reflection_model.py` (`MockReflectionModel`) | `ReflectionModel` | детерминированный мок |
+| **`adapters/reflection/openai_reflection_model.py`** (**`OpenAIReflectionModel`**) | **`ReflectionModel`** | **Универсальный OpenAI-совместимый адаптер** с `OpenAILLMConfig` (base_url, api_key, model, timeout, настраиваемые повторные попытки); **`adapters/reflection/__init__.py`** экспортирует фабрику **`get_reflection_model()`** (env `ATMAN_REFLECTION_BACKEND=openai|anthropic|mock`, по умолчанию: `openai`) |
 | `adapters/reflection/fixture_loader.py` | — | загрузка фикстур для демо |
 | `adapters/agent/config.py` (`ModelConfig`, `AgentConfig`) | — | конфигурация Pydantic AI модели + среды выполнения агента: лимиты контекстного окна, таймаут сессии, переключатель свободного времени, видимость монолога, **режим внедрения памяти** (`assistant_message`/`user_message`/`system_prompt` для универсальной доставки контекста памяти) (E22.1, E26-R1, E26-R2, E26-R4) |
 | `adapters/agent/deps.py` (`AtmanDeps`, `AtmanDeps.from_config`) | — | замороженный DI-контейнер, связывающий `SessionManager`, `IdentityService`, `ExperienceService`, `MicroReflectionService`, `StateStore`; фабрика `from_config` переносит валидированные лимиты из `AgentConfig`; опциональное поле `injected_context` для режима `system_prompt` |
@@ -184,7 +185,7 @@
 |---------|-----------|
 | `InMemoryBackend`, `FileBackend`, `PostgresFactualMemory` | `FactualMemory` |
 | `InMemoryExperienceStore`, `JsonlExperienceStore`, `FileStateStore`, `PostgresStateStore` | `StateStore` |
-| `MockReflectionModel` | `ReflectionModel` |
+| `MockReflectionModel`, **`OpenAIReflectionModel`** | `ReflectionModel` |
 | `InMemoryPatternStore`, `InMemoryReflectionEventStore`, `InMemoryHealthAssessmentStore` | соответствующие порты |
 | **`InMemoryReflectionStore`** | **`ReflectionStore`** (E27) |
 | `MockEmbeddingAdapter`, `BM25EmbeddingAdapter`, `OllamaEmbeddingAdapter`, `FlagEmbeddingAdapter` | `EmbeddingPort` |

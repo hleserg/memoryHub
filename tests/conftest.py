@@ -48,17 +48,73 @@ def _installed_has_model(installed: set[str], want: str) -> bool:
     return False
 
 
+def _check_agent_llm_available() -> bool:
+    """Check if the agent's LLM endpoint is available."""
+    base_url = os.getenv("AGENT_LLM_BASE_URL", "http://localhost:8080/v1")
+    try:
+        # Try to reach the /models or health endpoint
+        resp = httpx.get(f"{base_url.rstrip('/')}/models", timeout=2.0)
+        return resp.status_code in (200, 404)  # 404 is ok, means endpoint exists
+    except (httpx.ConnectError, httpx.TimeoutException, OSError):
+        return False
+
+
+def _check_atman_llm_available() -> bool:
+    """Check if Atman's internal LLM endpoint is available."""
+    base_url = os.getenv("ATMAN_LLM_BASE_URL", "http://localhost:8081/v1")
+    try:
+        resp = httpx.get(f"{base_url.rstrip('/')}/models", timeout=2.0)
+        return resp.status_code in (200, 404)
+    except (httpx.ConnectError, httpx.TimeoutException, OSError):
+        return False
+
+
+def pytest_configure(config: pytest.Config) -> None:
+    """Register custom markers."""
+    config.addinivalue_line(
+        "markers",
+        "requires_llm: marks tests that need Atman's internal LLM endpoint (ATMAN_LLM_BASE_URL)",
+    )
+    config.addinivalue_line(
+        "markers",
+        "requires_agent_llm: marks tests that need the agent's LLM endpoint (AGENT_LLM_BASE_URL)",
+    )
+
+
 def pytest_collection_modifyitems(
     config: pytest.Config,
     items: list[pytest.Item],
 ) -> None:
-    """Auto-skip tests marked ``requires_ollama`` when Ollama or required models are missing."""
+    """Auto-skip tests marked ``requires_ollama``, ``requires_llm``, or ``requires_agent_llm`` when endpoints are unavailable."""
     skip_unreachable = pytest.mark.skip(reason="Ollama is not reachable at localhost:11434")
     skip_no_models = pytest.mark.skip(reason="Ollama returned no models (empty /api/tags)")
 
     installed = _fetch_ollama_installed_models()
 
     for item in items:
+        # Check requires_agent_llm marker
+        if "requires_agent_llm" in item.keywords:
+            if not _check_agent_llm_available():
+                base_url = os.getenv("AGENT_LLM_BASE_URL", "http://localhost:8080/v1")
+                item.add_marker(
+                    pytest.mark.skip(
+                        reason=f"Agent LLM not available at {base_url}",
+                    )
+                )
+            continue
+
+        # Check requires_llm marker (Atman internal LLM)
+        if "requires_llm" in item.keywords:
+            if not _check_atman_llm_available():
+                base_url = os.getenv("ATMAN_LLM_BASE_URL", "http://localhost:8081/v1")
+                item.add_marker(
+                    pytest.mark.skip(
+                        reason=f"Atman LLM not available at {base_url}",
+                    )
+                )
+            continue
+
+        # Check requires_ollama marker (legacy)
         if "requires_ollama" not in item.keywords:
             continue
 

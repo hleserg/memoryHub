@@ -25,18 +25,6 @@ from datetime import UTC, datetime, time, timedelta
 from pathlib import Path
 from uuid import uuid4
 
-from e2e.full_loop import (
-    DeterministicReflectionModel,
-    StateStoreExperienceAdapter,
-    StateStoreIdentityAdapter,
-    StateStoreNarrativeAdapter,
-    create_bootstrap_identity,
-    create_bootstrap_narrative,
-    load_all_fixture_sessions_sorted,
-    run_session_from_fixture,
-    temp_workspace,
-)
-from e2e.models import SessionFixtureDocument
 from rich.table import Table
 
 import atman.term as term
@@ -55,6 +43,18 @@ from atman.core.services.reflection_service import (
     DeepReflectionService,
     MicroReflectionService,
 )
+from e2e.full_loop import (
+    DeterministicReflectionModel,
+    StateStoreExperienceAdapter,
+    StateStoreIdentityAdapter,
+    StateStoreNarrativeAdapter,
+    create_bootstrap_identity,
+    create_bootstrap_narrative,
+    load_all_fixture_sessions_sorted,
+    run_session_from_fixture,
+    temp_workspace,
+)
+from e2e.models import SessionFixtureDocument
 
 
 def _utc_day_start(d: datetime) -> datetime:

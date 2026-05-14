@@ -72,7 +72,7 @@ All paths are absolute relative to the repository root.
 
 | File | Purpose |
 |------|---------|
-| `config.py` | Pydantic settings (`EmbeddingSettings`, `LLMSettings`, `MemorySettings`), `build_memory_backend()` factory, **`build_embedding_adapter()` factory** (selects FlagEmbedding/Ollama/Mock backend), `validate_embedding_dimension()` (startup dimension check); defaults: embedding backend=`ollama` with `bge-m3`/1024d (FlagEmbedding backend uses `flag_model="BAAI/bge-m3"`, with FP16/batch_size/max_length settings), LLM=`gemma3:27b-it-qat`, factual memory=`FileBackend`; supports `ATMAN_MEMORY_BACKEND=postgres|file|inmemory`, `EMBEDDING_BACKEND=ollama|flag|mock`; **legacy env var fallback**: `OLLAMA_HOST`→`EMBEDDING_OLLAMA_HOST`, `OLLAMA_EMBED_MODEL`→`EMBEDDING_MODEL`, `ATMAN_OLLAMA_BASE_URL`→`LLM_OLLAMA_HOST`, `ATMAN_OLLAMA_MODEL`→`LLM_MODEL` |
+| `config.py` | Pydantic settings (`EmbeddingSettings`, `LLMSettings`, `MemorySettings`), **`OpenAILLMConfig`** (base_url, api_key, model, timeout, max_retries with validation ≥1), **`AnthropicLLMConfig`** (api_key, model, max_tokens), `build_memory_backend()` factory, **`build_embedding_adapter()` factory** (selects FlagEmbedding/Ollama/Mock backend), `validate_embedding_dimension()` (startup dimension check); defaults: embedding backend=`ollama` with `bge-m3`/1024d (FlagEmbedding backend uses `flag_model="BAAI/bge-m3"`, with FP16/batch_size/max_length settings), LLM=`gemma3:27b-it-qat`, factual memory=`FileBackend`; supports `ATMAN_MEMORY_BACKEND=postgres|file|inmemory`, `EMBEDDING_BACKEND=ollama|flag|mock`; **legacy env var fallback**: `OLLAMA_HOST`→`EMBEDDING_OLLAMA_HOST`, `OLLAMA_EMBED_MODEL`→`EMBEDDING_MODEL`, `ATMAN_OLLAMA_BASE_URL`→`LLM_OLLAMA_HOST`, `ATMAN_OLLAMA_MODEL`→`LLM_MODEL` |
 | `core/exceptions.py` | `AtmanError`, `GovernanceRejectedError`, `NarrativePersistenceConflictError`, `SessionNotFoundError`, `SessionAlreadyFinishedError`, `TooManyActiveSessionsError` |
 | `core/clock_impl.py` | `SystemClock`, `FrozenClock` |
 | `core/narrative_write_audit.py` | Narrative commit audit hooks |
@@ -100,6 +100,7 @@ All paths are absolute relative to the repository root.
 | **`adapters/storage/in_memory_postgres_reflection_store.py`** (`InMemoryReflectionStore`) | **`ReflectionStore`** | **E27**: in-memory with BIGSERIAL + RLS simulation |
 | `adapters/storage/reflection_persistence_helper.py` | — | **E27**: helper functions for persisting reflections (`persist_micro_reflection`, `persist_daily_reflection`, `persist_deep_reflection`) |
 | `adapters/reflection/mock_reflection_model.py` (`MockReflectionModel`) | `ReflectionModel` | deterministic mock |
+| **`adapters/reflection/openai_reflection_model.py`** (**`OpenAIReflectionModel`**) | **`ReflectionModel`** | **Generic OpenAI-compatible adapter** with `OpenAILLMConfig` (base_url, api_key, model, timeout, configurable retries); **`adapters/reflection/__init__.py`** exports **`get_reflection_model()`** factory (env `ATMAN_REFLECTION_BACKEND=openai|anthropic|mock`, default: `openai`) |
 | `adapters/reflection/fixture_loader.py` | — | load fixtures for demos |
 | `adapters/agent/config.py` (`ModelConfig`, `AgentConfig`) | — | Pydantic AI model + agent runtime config: context window limits, session timeout, free-time toggle, monologue visibility, **memory injection mode** (`assistant_message`/`user_message`/`system_prompt` for universal memory context delivery) (E22.1, E26-R1, E26-R2, E26-R4) |
 | `adapters/agent/deps.py` (`AtmanDeps`, `AtmanDeps.from_config`) | — | frozen DI container wiring `SessionManager`, `IdentityService`, `ExperienceService`, `MicroReflectionService`, `StateStore`; `from_config` factory transfers validated limits from `AgentConfig`; optional `injected_context` field for `system_prompt` injection mode |
@@ -183,7 +184,7 @@ Connections between two or more parts. These are seams that may break independen
 |---------|------------|
 | `InMemoryBackend`, `FileBackend`, `PostgresFactualMemory` | `FactualMemory` |
 | `InMemoryExperienceStore`, `JsonlExperienceStore`, `FileStateStore`, `PostgresStateStore` | `StateStore` |
-| `MockReflectionModel` | `ReflectionModel` |
+| `MockReflectionModel`, **`OpenAIReflectionModel`** | `ReflectionModel` |
 | `InMemoryPatternStore`, `InMemoryReflectionEventStore`, `InMemoryHealthAssessmentStore` | corresponding ports |
 | `MockEmbeddingAdapter`, `BM25EmbeddingAdapter`, `OllamaEmbeddingAdapter`, `FlagEmbeddingAdapter` | `EmbeddingPort` |
 | `InMemoryUsageLog` | `MemoryUsageLog` |
