@@ -908,7 +908,9 @@ class SessionManager:
         if session_result.key_moments:
             num_moments = len(session_result.key_moments)
             tone = session_result.overall_emotional_tone
-            tone_desc = "позитивный" if tone > 0.2 else "негативный" if tone < -0.2 else "нейтральный"
+            tone_desc = (
+                "позитивный" if tone > 0.2 else "негативный" if tone < -0.2 else "нейтральный"
+            )
             parts.append(
                 f"Зафиксировано значимых моментов: {num_moments}. "
                 f"Общий эмоциональный тон — {tone_desc}."

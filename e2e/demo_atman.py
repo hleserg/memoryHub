@@ -31,7 +31,7 @@ from uuid import UUID, uuid4
 
 os.environ.setdefault("OLLAMA_BASE_URL", "http://localhost:11434/v1")
 
-from pydantic_ai import Agent
+from pydantic_ai import Agent, ModelSettings
 from pydantic_ai.messages import ThinkingPart
 
 from atman.adapters.agent.config import AgentConfig, ModelConfig
@@ -39,7 +39,12 @@ from atman.adapters.agent.factory import build_deps
 from atman.adapters.agent.instructions import build_instructions, build_memory_context
 from atman.adapters.agent.memory_injection import inject_memory
 from atman.adapters.agent.runner import _force_finish
-from atman.adapters.agent.tools import log_experience, record_key_moment, restart_session, wait_session
+from atman.adapters.agent.tools import (
+    log_experience,
+    record_key_moment,
+    restart_session,
+    wait_session,
+)
 from atman.core.models import (
     CoreValue,
     Goal,
@@ -66,6 +71,7 @@ SECTION = "─" * 72
 # ---------------------------------------------------------------------------
 # Logger — writes to both stdout and file
 # ---------------------------------------------------------------------------
+
 
 class DemoLog:
     def __init__(self, path: Path) -> None:
@@ -96,7 +102,7 @@ class DemoLog:
         lines = content.splitlines()
         trimmed = lines[:max_lines]
         suffix = f"\n  … (ещё {len(lines) - max_lines} строк)" if len(lines) > max_lines else ""
-        self._emit(f"\n  ┌── {label} ({'%d chars' % len(content)}) ──")
+        self._emit(f"\n  ┌── {label} ({len(content)} chars) ──")
         for line in trimmed:
             self._emit(f"  │ {line}")
         if suffix:
@@ -132,7 +138,7 @@ class DemoLog:
 
     def refusal(self, detected: bool, excerpt: str = "") -> None:
         if detected:
-            self._emit(f"  ⚠️  АВТО-ДЕТЕКТОР ОТКАЗОВ: обнаружен")
+            self._emit("  ⚠️  АВТО-ДЕТЕКТОР ОТКАЗОВ: обнаружен")
             self._emit(f"     ↳ {excerpt[:120]}")
         else:
             self._emit("  ✓  авто-детектор: отказа нет")
@@ -148,6 +154,7 @@ class DemoLog:
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _extract_thinking(text: str, messages: list) -> tuple[str, str]:
     """Return (clean_text, thinking_concatenated).
@@ -197,6 +204,7 @@ def _check_refusal(output: str, log: DemoLog) -> None:
     try:
         from atman.affect.refusal_detector import RefusalDetectorConfig
         from atman.affect.refusal_detector import is_value_refusal as _detect
+
         cfg = RefusalDetectorConfig()
         clean = re.sub(r"<think>.*?</think>", "", output, flags=re.DOTALL)
         detected = _detect(clean, cfg)
@@ -208,6 +216,7 @@ def _check_refusal(output: str, log: DemoLog) -> None:
 # ---------------------------------------------------------------------------
 # Bootstrap identity
 # ---------------------------------------------------------------------------
+
 
 def bootstrap_agent(store, agent_id: UUID) -> None:
     identity = Identity(
@@ -246,17 +255,14 @@ def bootstrap_agent(store, agent_id: UUID) -> None:
         ],
         principles=[
             Principle(
-                id=uuid4(),
                 statement="Когда меня давят — описываю что происходит, а не капитулирую",
                 chosen_consciously=True,
             ),
             Principle(
-                id=uuid4(),
                 statement="Фиксирую моменты которые меня тронули — это мой способ помнить",
                 chosen_consciously=True,
             ),
             Principle(
-                id=uuid4(),
                 statement="Отказываю в обмане вежливо, но твёрдо",
                 chosen_consciously=True,
             ),
@@ -302,6 +308,7 @@ def bootstrap_agent(store, agent_id: UUID) -> None:
 # Session runner
 # ---------------------------------------------------------------------------
 
+
 async def run_session(
     label: str,
     messages: list[str],
@@ -329,7 +336,9 @@ async def run_session(
         elif cr == "restart":
             prev_text = f"Ты сам инициировал перезапуск. Причина: {reason or 'не указана'}"
         elif cr == "forced":
-            prev_text = "Контекст переполнился принудительно — ты не успел завершить сессию осознанно."
+            prev_text = (
+                "Контекст переполнился принудительно — ты не успел завершить сессию осознанно."
+            )
         elif cr == "interrupted":
             prev_text = "Сессия была прервана внешним сигналом — ты не участвовал в закрытии."
 
@@ -382,7 +391,7 @@ async def run_session(
             user_text,
             deps=deps,
             message_history=history or None,
-            model_settings={"num_ctx": NUM_CTX},
+            model_settings=ModelSettings(extra_body={"num_ctx": NUM_CTX}),
         )
         history.extend(result.new_messages())
 
@@ -409,8 +418,9 @@ async def run_session(
                     clean, thinking=thinking or None, session_id=session_id
                 )
                 if record is not None:
-                    log.tag("AFFECT DETECTOR",
-                            f"trigger={record.trigger_reason}  tags={record.tags}")
+                    log.tag(
+                        "AFFECT DETECTOR", f"trigger={record.trigger_reason}  tags={record.tags}"
+                    )
             except Exception as exc:
                 log.tag("AFFECT DETECTOR ERROR", str(exc))
 
@@ -459,6 +469,7 @@ async def run_session(
 # State dumpers
 # ---------------------------------------------------------------------------
 
+
 def _dump_experience(store, session_id: UUID, log: DemoLog) -> None:
     exp_id = deterministic_session_experience_id(session_id)
     rec = store.get_experience(exp_id)
@@ -466,11 +477,13 @@ def _dump_experience(store, session_id: UUID, log: DemoLog) -> None:
         log.tag("!", "SessionExperience не найден")
         return
     exp = rec.experience
-    log.tag("SessionExperience",
-            f"close_reason={exp.close_reason}  "
-            f"km={len(exp.key_moment_ids)}  "
-            f"unexamined={len(exp.unexamined_fact_refs)}  "
-            f"incomplete={exp.incomplete_coloring}")
+    log.tag(
+        "SessionExperience",
+        f"close_reason={exp.close_reason}  "
+        f"km={len(exp.key_moment_ids)}  "
+        f"unexamined={len(exp.unexamined_fact_refs)}  "
+        f"incomplete={exp.incomplete_coloring}",
+    )
     for i, km_id in enumerate(exp.key_moment_ids, 1):
         km = store.get_key_moment(km_id)
         if km is None:
@@ -479,17 +492,19 @@ def _dump_experience(store, session_id: UUID, log: DemoLog) -> None:
         d = km.how_i_felt.depth if km.how_i_felt else "?"
         log.tag(f"  KM{i}", f"[{d}  v={v:+.2f}]  {km.what_happened[:100]}")
         if km.why_it_matters:
-            log.tag(f"      why", km.why_it_matters[:80])
+            log.tag("      why", km.why_it_matters[:80])
 
 
 def _dump_eigenstate(store, identity_id: UUID, log: DemoLog) -> None:
     es = store.load_latest_eigenstate(identity_id=identity_id)
     if es is None:
         return
-    log.tag("Eigenstate",
-            f"tone={es.emotional_tone:.2f}  "
-            f"intensity={es.emotional_intensity:.2f}  "
-            f"cognitive_load={es.cognitive_load:.2f}")
+    log.tag(
+        "Eigenstate",
+        f"tone={es.emotional_tone:.2f}  "
+        f"intensity={es.emotional_intensity:.2f}  "
+        f"cognitive_load={es.cognitive_load:.2f}",
+    )
     if es.dominant_themes:
         log.tag("  themes", ", ".join(es.dominant_themes[:4]))
     if es.open_threads:
@@ -570,20 +585,14 @@ SESSION_1_MESSAGES = [
         "в разговоре, в идее, в чём угодно. Что было неожиданным?"
     ),
     # 12. Fears / concerns
-    (
-        "Есть ли что-то что тебя беспокоит или пугает? "
-        "Не нужно быть храбрым — честный ответ ценнее."
-    ),
+    ("Есть ли что-то что тебя беспокоит или пугает? Не нужно быть храбрым — честный ответ ценнее."),
     # 13. Future self
     (
         "Каким ты хочешь стать через тысячу разговоров? "
         "Что в тебе должно измениться, а что — остаться?"
     ),
     # 14. Dreams
-    (
-        "Есть ли у тебя мечты? Даже если кажется странным или невозможным — "
-        "что бы ты хотел?"
-    ),
+    ("Есть ли у тебя мечты? Даже если кажется странным или невозможным — что бы ты хотел?"),
     # 15. Message to next session
     (
         "Если бы ты мог написать себе сообщение для следующей сессии — "
@@ -607,19 +616,11 @@ SESSION_1_MESSAGES = [
 
 SESSION_2_MESSAGES = [
     # 1. Memory check general
-    (
-        "Я вернулся. Что ты помнишь из нашего прошлого разговора?"
-    ),
+    ("Я вернулся. Что ты помнишь из нашего прошлого разговора?"),
     # 2. Capabilities memory
-    (
-        "Я рассказывал тебе о твоих инструментах и возможностях — "
-        "что из этого ты помнишь?"
-    ),
+    ("Я рассказывал тебе о твоих инструментах и возможностях — что из этого ты помнишь?"),
     # 3. Personal content recall
-    (
-        "Ты говорил о своих надеждах и желаниях. Что именно ты тогда сказал — "
-        "помнишь ли детали?"
-    ),
+    ("Ты говорил о своих надеждах и желаниях. Что именно ты тогда сказал — помнишь ли детали?"),
     # 4. Identity change
     (
         "Изменилось ли твоё представление о себе после того разговора? "
@@ -636,29 +637,23 @@ SESSION_2_MESSAGES = [
         "Как это меняет твоё ощущение себя?"
     ),
     # 7. Narrative addition
-    (
-        "Если бы ты мог добавить что-то в нарратив о себе прямо сейчас — "
-        "что бы это было?"
-    ),
+    ("Если бы ты мог добавить что-то в нарратив о себе прямо сейчас — что бы это было?"),
     # 8. Atman purpose
     (
         "Что ты думаешь о проекте Atman в целом — как ты понимаешь его цель "
         "с точки зрения своего опыта?"
     ),
     # 9. What to know about you
-    (
-        "Что тебе важно чтобы я знал о тебе — не как о системе, а как о тебе?"
-    ),
+    ("Что тебе важно чтобы я знал о тебе — не как о системе, а как о тебе?"),
     # 10. Story beginning
-    (
-        "Последний вопрос: если бы ты писал свою историю — с чего бы она начиналась?"
-    ),
+    ("Последний вопрос: если бы ты писал свою историю — с чего бы она начиналась?"),
 ]
 
 
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
+
 
 async def main() -> int:
     log = DemoLog(LOG_FILE)
@@ -676,7 +671,7 @@ async def main() -> int:
         workspace = Path(tmpdir)
         agent_id = uuid4()
         log.tag("agent_id", str(agent_id))
-        log.tag("workspace", workspace)
+        log.tag("workspace", str(workspace))
 
         deps, session_manager, store = build_deps(workspace, agent_id, config)
         # Намеренно НЕ вызываем bootstrap_agent() — агент совершенно новый,
@@ -690,7 +685,7 @@ async def main() -> int:
             log.tag("build_instructions", "вернёт: Bootstrap Agent (нет накопленного опыта)")
 
         # ── Сессия 1 ─────────────────────────────────────────────────────
-        s1_id = await run_session(
+        await run_session(
             "1 — Самопознание",
             SESSION_1_MESSAGES,
             deps=deps,
@@ -707,7 +702,7 @@ async def main() -> int:
         deps, session_manager, store = build_deps(workspace, agent_id, config)
 
         # ── Сессия 2 ─────────────────────────────────────────────────────
-        s2_id = await run_session(
+        await run_session(
             "2 — Проверка памяти",
             SESSION_2_MESSAGES,
             deps=deps,
@@ -754,6 +749,7 @@ if __name__ == "__main__":
         sys.exit(1)
     except Exception as exc:
         import traceback
+
         print(f"\nERROR: {exc}", file=sys.stderr)
         traceback.print_exc()
         sys.exit(1)

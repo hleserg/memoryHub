@@ -316,9 +316,9 @@ class TestOllamaEmbeddingAdapter:
     def test_health_check_returns_true_when_healthy(self, adapter: OllamaEmbeddingAdapter) -> None:
         """Health check returns True when Ollama is available and model exists."""
         mock_response = MagicMock()
-        mock_response.read.return_value = json.dumps(
-            {"models": [{"name": "bge-m3"}]}
-        ).encode("utf-8")
+        mock_response.read.return_value = json.dumps({"models": [{"name": "bge-m3"}]}).encode(
+            "utf-8"
+        )
         # urlopen is used as context manager: with urlopen(...) as response
         mock_context = MagicMock()
         mock_context.__enter__.return_value = mock_response

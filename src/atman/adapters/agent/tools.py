@@ -11,13 +11,11 @@ All tools receive RunContext[AtmanDeps] as the first parameter,
 giving them access to services and session state.
 """
 
-
 from pydantic_ai import RunContext
 
 from atman.adapters.agent.deps import AtmanDeps
 from atman.affect.models import AgentMemoryReport
 from atman.core.models.experience import EmotionalDepth
-
 
 # PLAYBOOK-START
 # id: error-returning-tool-callbacks
@@ -97,10 +95,7 @@ async def record_key_moment(
     try:
         EmotionalDepth(depth)
     except ValueError:
-        return (
-            f"Error: invalid depth {depth!r}. "
-            f"Use one of: 'surface', 'meaningful', 'profound'."
-        )
+        return f"Error: invalid depth {depth!r}. Use one of: 'surface', 'meaningful', 'profound'."
 
     # Validate emotional values
     if not -1.0 <= emotional_valence <= 1.0:

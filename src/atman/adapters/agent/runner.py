@@ -26,7 +26,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 from uuid import UUID
 
-from pydantic_ai import Agent
+from pydantic_ai import Agent, ModelSettings
 from pydantic_ai.messages import ModelRequest, ThinkingPart, UserPromptPart
 
 from atman.adapters.agent.config import AgentConfig
@@ -67,6 +67,7 @@ async def _run_affect_detector(
         return
     try:
         import re
+
         clean = re.sub(r"<think>.*?</think>", "", output, flags=re.DOTALL).strip()
         if clean:
             await detector.process(clean, thinking=thinking, session_id=session_id)
@@ -466,15 +467,10 @@ class AtmanRunner:
         # Both default to 2000/8192 in ModelConfig which is too small — callers
         # should configure these to match the deployed model's actual limits.
         mc = config.model
-        self._model_settings: dict = {
-            "max_tokens": mc.max_tokens,
-            "num_ctx": mc.context_limit,
-        }
+        extra_body: dict[str, Any] = {"num_ctx": mc.context_limit}
         if config.thinking:
-            # Ollama: think=True makes thinking arrive in a separate 'reasoning'
-            # field, NOT mixed into content alongside tool-call JSON.
-            # pydantic-ai then lifts it to ThinkingPart — tool args stay clean.
-            self._model_settings["think"] = True
+            extra_body["think"] = True
+        self._model_settings = ModelSettings(max_tokens=mc.max_tokens, extra_body=extra_body)
         # E22.5: Track triggered context thresholds for restart warning
         self._triggered: set[int] = set()
         # E22.6: Queue-based stdin reader for timeout support
