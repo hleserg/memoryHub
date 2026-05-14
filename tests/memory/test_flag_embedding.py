@@ -50,6 +50,7 @@ class _FakeBGEM3Model:
             output["colbert_vecs"] = [_FakeArray([[0.1, 0.2]]) for _ in texts]
         return output
 
+
 FLAG_EMBEDDING_AVAILABLE = False
 try:
     import FlagEmbedding  # noqa: F401  # type: ignore[import-not-found]
