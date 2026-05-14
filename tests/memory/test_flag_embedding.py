@@ -1,6 +1,54 @@
 """Tests for FlagEmbeddingAdapter."""
 
+from typing import Any
+
 import pytest
+
+
+class _FakeArray:
+    """Small stand-in for numpy arrays returned by FlagEmbedding."""
+
+    def __init__(self, value: Any) -> None:
+        self._value = value
+
+    def tolist(self) -> Any:
+        return self._value
+
+
+class _FakeBGEM3Model:
+    """Fake BGEM3 model that records encode calls without loading FlagEmbedding."""
+
+    def __init__(self) -> None:
+        self.calls: list[dict[str, Any]] = []
+
+    def encode(
+        self,
+        texts: list[str],
+        *,
+        batch_size: int,
+        max_length: int,
+        return_dense: bool,
+        return_sparse: bool,
+        return_colbert_vecs: bool,
+    ) -> dict[str, Any]:
+        self.calls.append(
+            {
+                "texts": texts,
+                "batch_size": batch_size,
+                "max_length": max_length,
+                "return_dense": return_dense,
+                "return_sparse": return_sparse,
+                "return_colbert_vecs": return_colbert_vecs,
+            }
+        )
+        output: dict[str, Any] = {
+            "dense_vecs": _FakeArray([[1.0, 0.0], [0.0, 1.0]][: len(texts)]),
+        }
+        if return_sparse:
+            output["lexical_weights"] = [{101: 0.75, "known": 0.25} for _ in texts]
+        if return_colbert_vecs:
+            output["colbert_vecs"] = [_FakeArray([[0.1, 0.2]]) for _ in texts]
+        return output
 
 FLAG_EMBEDDING_AVAILABLE = False
 try:
@@ -143,6 +191,90 @@ class TestFlagEmbeddingAdapterAvailability:
 
         adapter = FlagEmbeddingAdapter()
         # Model should be None before first use
+        assert adapter._model is None
+
+    def test_embed_batch_uses_configured_encode_options_without_real_sdk(self) -> None:
+        """embed_batch passes adapter limits to BGEM3FlagModel.encode."""
+        from atman.adapters.memory.flag_embedding import FlagEmbeddingAdapter
+
+        adapter = FlagEmbeddingAdapter(batch_size=7, max_length=123)
+        fake_model = _FakeBGEM3Model()
+        adapter._model = fake_model
+
+        result = adapter.embed_batch(["first", "second"])
+
+        assert result == [[1.0, 0.0], [0.0, 1.0]]
+        assert fake_model.calls == [
+            {
+                "texts": ["first", "second"],
+                "batch_size": 7,
+                "max_length": 123,
+                "return_dense": True,
+                "return_sparse": False,
+                "return_colbert_vecs": False,
+            }
+        ]
+
+    def test_embed_batch_full_normalizes_hybrid_outputs_without_real_sdk(self) -> None:
+        """Hybrid output is JSON-friendly without requiring the FlagEmbedding package."""
+        from atman.adapters.memory.flag_embedding import FlagEmbeddingAdapter
+
+        adapter = FlagEmbeddingAdapter(batch_size=3, max_length=64)
+        fake_model = _FakeBGEM3Model()
+        adapter._model = fake_model
+
+        result = adapter.embed_batch_full(["hybrid"], return_sparse=True, return_colbert=True)
+
+        assert result == {
+            "dense_vecs": [[1.0, 0.0]],
+            "lexical_weights": [{"101": 0.75, "known": 0.25}],
+            "colbert_vecs": [[[0.1, 0.2]]],
+        }
+        assert fake_model.calls == [
+            {
+                "texts": ["hybrid"],
+                "batch_size": 3,
+                "max_length": 64,
+                "return_dense": True,
+                "return_sparse": True,
+                "return_colbert_vecs": True,
+            }
+        ]
+
+    def test_build_embedding_adapter_raises_when_flag_backend_unavailable(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Selecting FlagEmbedding must fail fast when the SDK is unavailable."""
+        from atman import config as atman_config
+        from atman.adapters.memory.flag_embedding import FlagEmbeddingAdapter
+
+        monkeypatch.setattr(atman_config.settings.embedding, "backend", "flag")
+        monkeypatch.setattr(FlagEmbeddingAdapter, "is_available", lambda self: False)
+
+        with pytest.raises(RuntimeError, match="FlagEmbedding backend selected but not installed"):
+            atman_config.build_embedding_adapter()
+
+    def test_build_embedding_adapter_uses_flag_settings_without_model_load(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """FlagEmbedding config wiring is deterministic and does not load the model."""
+        from atman import config as atman_config
+        from atman.adapters.memory.flag_embedding import FlagEmbeddingAdapter
+
+        monkeypatch.setattr(atman_config.settings.embedding, "backend", "flag")
+        monkeypatch.setattr(atman_config.settings.embedding, "flag_model", "fake/bge")
+        monkeypatch.setattr(atman_config.settings.embedding, "use_fp16", False)
+        monkeypatch.setattr(atman_config.settings.embedding, "batch_size", 5)
+        monkeypatch.setattr(atman_config.settings.embedding, "max_length", 256)
+        monkeypatch.setattr(FlagEmbeddingAdapter, "is_available", lambda self: True)
+
+        adapter = atman_config.build_embedding_adapter()
+
+        assert isinstance(adapter, FlagEmbeddingAdapter)
+        assert adapter.model_name() == "fake/bge"
+        assert adapter._use_fp16 is False
+        assert adapter._batch_size == 5
+        assert adapter._max_length == 256
         assert adapter._model is None
 
     @pytest.mark.skipif(not FLAG_EMBEDDING_AVAILABLE, reason="FlagEmbedding not installed")
