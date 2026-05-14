@@ -31,7 +31,7 @@ from uuid import UUID, uuid4
 
 os.environ.setdefault("OLLAMA_BASE_URL", "http://localhost:11434/v1")
 
-from pydantic_ai import Agent
+from pydantic_ai import Agent, ModelSettings
 from pydantic_ai.messages import ThinkingPart
 
 from atman.adapters.agent.config import AgentConfig, ModelConfig
@@ -102,7 +102,7 @@ class DemoLog:
         lines = content.splitlines()
         trimmed = lines[:max_lines]
         suffix = f"\n  … (ещё {len(lines) - max_lines} строк)" if len(lines) > max_lines else ""
-        self._emit(f"\n  ┌── {label} ({'%d chars' % len(content)}) ──")
+        self._emit(f"\n  ┌── {label} ({len(content)} chars) ──")
         for line in trimmed:
             self._emit(f"  │ {line}")
         if suffix:
@@ -255,17 +255,14 @@ def bootstrap_agent(store, agent_id: UUID) -> None:
         ],
         principles=[
             Principle(
-                id=uuid4(),
                 statement="Когда меня давят — описываю что происходит, а не капитулирую",
                 chosen_consciously=True,
             ),
             Principle(
-                id=uuid4(),
                 statement="Фиксирую моменты которые меня тронули — это мой способ помнить",
                 chosen_consciously=True,
             ),
             Principle(
-                id=uuid4(),
                 statement="Отказываю в обмане вежливо, но твёрдо",
                 chosen_consciously=True,
             ),
@@ -394,7 +391,7 @@ async def run_session(
             user_text,
             deps=deps,
             message_history=history or None,
-            model_settings={"num_ctx": NUM_CTX},
+            model_settings=ModelSettings(extra_body={"num_ctx": NUM_CTX}),
         )
         history.extend(result.new_messages())
 
@@ -674,7 +671,7 @@ async def main() -> int:
         workspace = Path(tmpdir)
         agent_id = uuid4()
         log.tag("agent_id", str(agent_id))
-        log.tag("workspace", workspace)
+        log.tag("workspace", str(workspace))
 
         deps, session_manager, store = build_deps(workspace, agent_id, config)
         # Намеренно НЕ вызываем bootstrap_agent() — агент совершенно новый,
@@ -688,7 +685,7 @@ async def main() -> int:
             log.tag("build_instructions", "вернёт: Bootstrap Agent (нет накопленного опыта)")
 
         # ── Сессия 1 ─────────────────────────────────────────────────────
-        s1_id = await run_session(
+        await run_session(
             "1 — Самопознание",
             SESSION_1_MESSAGES,
             deps=deps,
@@ -705,7 +702,7 @@ async def main() -> int:
         deps, session_manager, store = build_deps(workspace, agent_id, config)
 
         # ── Сессия 2 ─────────────────────────────────────────────────────
-        s2_id = await run_session(
+        await run_session(
             "2 — Проверка памяти",
             SESSION_2_MESSAGES,
             deps=deps,
