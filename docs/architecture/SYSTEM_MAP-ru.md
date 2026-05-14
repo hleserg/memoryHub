@@ -64,7 +64,7 @@
 
 | Файл | Назначение |
 |------|------------|
-| `config.py` | Pydantic settings (`EmbeddingSettings`, `LLMSettings`, `MemorySettings`), **`OpenAILLMConfig`** (base_url, api_key, model, timeout, max_retries с валидацией ≥1), **`AnthropicLLMConfig`** (api_key, model, max_tokens), фабрика `build_memory_backend()`, `validate_embedding_dimension()` (проверка размерности при старте); по умолчанию: embedding=`bge-m3`/1024d через Ollama, LLM=`gemma3:27b-it-qat`, factual memory=`FileBackend`; поддерживает `ATMAN_MEMORY_BACKEND=postgres|file|inmemory`; **fallback устаревших переменных окружения**: `OLLAMA_HOST`→`EMBEDDING_OLLAMA_HOST`, `OLLAMA_EMBED_MODEL`→`EMBEDDING_MODEL`, `ATMAN_OLLAMA_BASE_URL`→`LLM_OLLAMA_HOST`, `ATMAN_OLLAMA_MODEL`→`LLM_MODEL` |
+| `config.py` | Pydantic settings (`EmbeddingSettings`, `LLMSettings`, `MemorySettings`), **`OpenAILLMConfig`** (base_url, api_key, model, timeout, max_retries с валидацией ≥1), **`AnthropicLLMConfig`** (api_key, model, max_tokens), фабрика `build_memory_backend()`, **фабрика `build_embedding_adapter()`** (выбор FlagEmbedding/Ollama/Mock backend), `validate_embedding_dimension()` (проверка размерности при старте); по умолчанию: embedding backend=`ollama` с `bge-m3`/1024d (FlagEmbedding backend использует `flag_model="BAAI/bge-m3"` с настройками FP16/batch_size/max_length), LLM=`gemma3:27b-it-qat`, factual memory=`FileBackend`; поддерживает `ATMAN_MEMORY_BACKEND=postgres|file|inmemory`, `EMBEDDING_BACKEND=ollama|flag|mock`; **fallback устаревших переменных окружения**: `OLLAMA_HOST`→`EMBEDDING_OLLAMA_HOST`, `OLLAMA_EMBED_MODEL`→`EMBEDDING_MODEL`, `ATMAN_OLLAMA_BASE_URL`→`LLM_OLLAMA_HOST`, `ATMAN_OLLAMA_MODEL`→`LLM_MODEL` |
 | `core/exceptions.py` | `AtmanError`, `GovernanceRejectedError`, `NarrativePersistenceConflictError`, `SessionNotFoundError`, `SessionAlreadyFinishedError`, `TooManyActiveSessionsError` |
 | `core/clock_impl.py` | `SystemClock`, `FrozenClock` |
 | `core/narrative_write_audit.py` | Хуки аудита коммитов нарратива |
@@ -93,6 +93,7 @@
 | `adapters/memory/mock_embedding.py` (`MockEmbeddingAdapter`) | `EmbeddingPort` | детерминированные 1024-мерные эмбеддинги; seed=`hash(text) % 2^31`; `model_name()` возвращает `"mock-embedding:1024d"` |
 | `adapters/memory/bm25_embedding.py` (`BM25EmbeddingAdapter`) | `EmbeddingPort` | разреженные лексические BM25 эмбеддинги |
 | `adapters/memory/ollama_embedding.py` (`OllamaEmbeddingAdapter`) | `EmbeddingPort` | Ollama API эмбеддинги; по умолчанию `bge-m3` (1024-мерные); env: `EMBEDDING_MODEL`, `EMBEDDING_OLLAMA_HOST` (устаревшие: `OLLAMA_EMBED_MODEL`, `OLLAMA_HOST`); `model_name()` возвращает настроенную модель; доступен `health_check()` |
+| `adapters/memory/flag_embedding.py` (`FlagEmbeddingAdapter`) | `EmbeddingPort` | Нативный FlagEmbedding SDK (BGEM3FlagModel) через PyTorch; ленивая загрузка модели (~570MB в `~/.cache/huggingface/`); поддержка dense (1024d) + sparse (lexical) + ColBERT через `embed_batch_full()`; настраиваемые FP16, batch_size, max_length, device; не требует внешнего процесса; по умолчанию: `BAAI/bge-m3`; env: `EMBEDDING_FLAG_MODEL`, `EMBEDDING_USE_FP16`, `EMBEDDING_BATCH_SIZE`, `EMBEDDING_MAX_LENGTH` |
 | `adapters/memory/in_memory_usage_log.py` (`InMemoryUsageLog`) | `MemoryUsageLog` | in-memory трекинг использования |
 | `adapters/storage/in_memory_experience_store.py` (`InMemoryExperienceStore`) | `StateStore` | в памяти (частичная: только опыт; операции KeyMoment/Identity/Narrative выбрасывают `NotImplementedError`) |
 | `adapters/storage/jsonl_experience_store.py` (`JsonlExperienceStore`) | `StateStore` | JSONL для опыта (частичная: только опыт; операции KeyMoment/Identity/Narrative выбрасывают `NotImplementedError`) |
@@ -187,7 +188,7 @@
 | `MockReflectionModel`, **`OpenAIReflectionModel`** | `ReflectionModel` |
 | `InMemoryPatternStore`, `InMemoryReflectionEventStore`, `InMemoryHealthAssessmentStore` | соответствующие порты |
 | **`InMemoryReflectionStore`** | **`ReflectionStore`** (E27) |
-| `MockEmbeddingAdapter`, `BM25EmbeddingAdapter`, `OllamaEmbeddingAdapter` | `EmbeddingPort` |
+| `MockEmbeddingAdapter`, `BM25EmbeddingAdapter`, `OllamaEmbeddingAdapter`, `FlagEmbeddingAdapter` | `EmbeddingPort` |
 | `InMemoryUsageLog` | `MemoryUsageLog` |
 
 ### 2.2a. Agent adapter ↔ сервисы

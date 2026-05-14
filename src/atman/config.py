@@ -7,6 +7,7 @@ Centralizes all environment variable configuration with type validation.
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any
 
 from pydantic import BaseModel
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -56,11 +57,16 @@ class EmbeddingSettings(BaseSettings):
         extra="ignore",
     )
 
-    backend: str = "ollama"  # "ollama" or "mock"
-    model: str = "bge-m3"  # Ollama model name (bge-m3 for production)
+    backend: str = "ollama"  # "ollama" (HTTP, default for compatibility), "flag" (native FlagEmbedding), or "mock"
+    model: str = "bge-m3"  # Model name (bge-m3 for Ollama, BAAI/bge-m3 for flag backend)
     dimension: int = 1024  # Embedding vector dimension (1024 for bge-m3)
-    ollama_host: str = "http://localhost:11434"  # Ollama API host
-    timeout: float = 30.0  # Request timeout in seconds
+    ollama_host: str = "http://localhost:11434"  # Ollama API host (used if backend="ollama")
+    timeout: float = 30.0  # Request timeout in seconds (used if backend="ollama")
+    # FlagEmbedding-specific settings (used if backend="flag")
+    flag_model: str = "BAAI/bge-m3"  # HuggingFace model path for FlagEmbedding backend
+    use_fp16: bool = True  # Use float16 for faster inference (recommended with GPU)
+    batch_size: int = 32  # Batch size for FlagEmbedding encode
+    max_length: int = 512  # Max token length for FlagEmbedding (BGE-M3 supports up to 8192)
 
 
 class LLMSettings(BaseSettings):
@@ -144,6 +150,54 @@ def build_memory_backend():
     raise ValueError(
         f"Unknown memory backend {backend!r}. "
         "Set config.memory.backend to 'postgres', 'file', or 'inmemory'."
+    )
+
+
+def build_embedding_adapter() -> Any:
+    """
+    Build the embedding adapter based on settings.embedding.backend.
+
+    Returns the configured embedding adapter (FlagEmbeddingAdapter, OllamaEmbeddingAdapter,
+    or MockEmbeddingAdapter).
+
+    Raises:
+        ValueError: If backend is unknown
+    """
+    backend = settings.embedding.backend
+
+    if backend == "flag":
+        from atman.adapters.memory.flag_embedding import FlagEmbeddingAdapter
+
+        adapter = FlagEmbeddingAdapter(
+            model_name=settings.embedding.flag_model,
+            use_fp16=settings.embedding.use_fp16,
+            batch_size=settings.embedding.batch_size,
+            max_length=settings.embedding.max_length,
+        )
+        if not adapter.is_available():
+            raise RuntimeError(
+                "FlagEmbedding backend selected but not installed. "
+                "Run: pip install 'atman[flag]' or pip install FlagEmbedding"
+            )
+        return adapter
+
+    if backend == "ollama":
+        from atman.adapters.memory.ollama_embedding import OllamaEmbeddingAdapter
+
+        return OllamaEmbeddingAdapter(
+            base_url=settings.embedding.ollama_host,
+            model=settings.embedding.model,
+            timeout=settings.embedding.timeout,
+        )
+
+    if backend == "mock":
+        from atman.adapters.memory.mock_embedding import MockEmbeddingAdapter
+
+        return MockEmbeddingAdapter()
+
+    raise ValueError(
+        f"Unknown embedding backend {backend!r}. "
+        "Set config.embedding.backend to 'flag', 'ollama', or 'mock'."
     )
 
 
