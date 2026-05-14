@@ -6,7 +6,8 @@ Uses its own LLM connection (default: Gemma4 at localhost:8080).
 """
 
 from pydantic_ai import Agent
-from pydantic_ai.models.openai import OpenAIModel
+from pydantic_ai.models.openai import OpenAIChatModel
+from pydantic_ai.providers.openai import OpenAIProvider
 
 from agent.config import AgentLLMConfig
 
@@ -26,12 +27,12 @@ def create_agent(config: AgentLLMConfig | None = None) -> Agent:
     """
     cfg = config or AgentLLMConfig()
 
-    # Pass config directly to OpenAIModel without polluting os.environ
-    # Note: pydantic-ai's OpenAIModel may not fully support all parameters
-    # If this raises at runtime, may need to fall back to env vars or custom client
-    model = OpenAIModel(
+    provider = OpenAIProvider(
+        base_url=cfg.base_url,
+        api_key=cfg.api_key,
+    )
+    model = OpenAIChatModel(
         model_name=cfg.model,
-        base_url=cfg.base_url,  # type: ignore[call-arg]
-        api_key=cfg.api_key,  # type: ignore[call-arg]
+        provider=provider,
     )
     return Agent(model=model)

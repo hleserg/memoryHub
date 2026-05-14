@@ -2,7 +2,7 @@
 OllamaEmbeddingAdapter - embedding via Ollama API.
 
 Requires running Ollama instance with an embedding model.
-Default model: bge-m3 (multilingual, 1024 dims)
+Default model: bge-m3 (1024-dimensional, multilingual)
 """
 
 import json
@@ -21,11 +21,11 @@ class OllamaEmbeddingAdapter(EmbeddingPort):
     Embedding adapter using Ollama API.
 
     Requires Ollama to be running locally or at configured host.
-    Default model is bge-m3 (multilingual, 1024 dims).
+    Default model is bge-m3 for multilingual 1024-dimensional embeddings.
 
     Environment variables:
         OLLAMA_HOST: Ollama server URL (default: http://localhost:11434)
-        OLLAMA_EMBED_MODEL: Model name (default: bge-m3)
+        OLLAMA_EMBED_MODEL: Legacy model name override
     """
 
     def __init__(

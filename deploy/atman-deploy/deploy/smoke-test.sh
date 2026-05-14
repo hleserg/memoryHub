@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Smoke test — вызывается из setup.sh в конце
-# Аргументы: <pg_user> <pg_db> <qdrant_port> <qdrant_key> <embed_model> <docker_cmd>
+# Аргументы: <pg_user> <pg_db> <qdrant_port> <qdrant_key> <embed_model> <docker_cmd> [expected_dim]
 set -euo pipefail
 
 PG_USER="$1"
@@ -9,6 +9,7 @@ QD_PORT="$3"
 QD_KEY="$4"
 EMBED_MODEL="$5"
 DOCKER="${6:-docker}"
+EXPECTED_EMBED_DIM="${7:-1024}"
 
 G='\033[0;32m' R='\033[0;31m' N='\033[0m'
 ok()  { echo -e "${G}[✓]${N} $*"; }
@@ -65,10 +66,10 @@ EMBED_DIM=$(curl -sf http://localhost:11434/api/embeddings \
     | python3 -c "import sys,json; print(len(json.load(sys.stdin)['embedding']))" 2>/dev/null \
     || echo "0")
 
-if [[ "${EMBED_DIM}" -eq 768 ]]; then
+if [[ "${EMBED_DIM}" -eq "${EXPECTED_EMBED_DIM}" ]]; then
     ok "Embedding: ${EMBED_DIM} dims"
 else
-    fail "Embedding: ожидалось 768, получено ${EMBED_DIM}"
+    fail "Embedding: ожидалось ${EXPECTED_EMBED_DIM}, получено ${EMBED_DIM}"
     ERRORS=$((ERRORS+1))
 fi
 

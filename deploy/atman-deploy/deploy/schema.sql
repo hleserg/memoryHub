@@ -57,7 +57,7 @@ CREATE TABLE IF NOT EXISTS public.facts (
     embedding           halfvec(1024)
 );
 COMMENT ON TABLE public.facts IS 'Фактическая память. Факты без интерпретаций. Изолированы по agent_id через RLS.';
-COMMENT ON COLUMN public.facts.embedding IS 'halfvec(1024) — bge-m3. NULL при недоступности модели, система деградирует на ILIKE.';
+COMMENT ON COLUMN public.facts.embedding IS 'halfvec(1024) — BGE-M3. NULL при недоступности модели, система деградирует на ILIKE.';
 
 CREATE INDEX IF NOT EXISTS idx_facts_agent_status ON public.facts(agent_id, status, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_facts_tags         ON public.facts USING GIN(tags);

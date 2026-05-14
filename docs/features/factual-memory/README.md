@@ -148,7 +148,7 @@ with PostgresFactualMemory(
 ```
 
 If an `EmbeddingPort` is provided and succeeds, the adapter stores/searches
-`halfvec(2560)` embeddings with a cosine HNSW index. If embedding generation is
+`halfvec(1024)` BGE-M3 embeddings with a cosine HNSW index. If embedding generation is
 missing or fails, the adapter emits a warning and falls back to `ILIKE` text
 search; facts are still stored.
 

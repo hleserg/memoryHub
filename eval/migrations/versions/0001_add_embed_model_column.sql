@@ -18,6 +18,6 @@ ALTER TABLE public.identity_snapshots
 ADD COLUMN IF NOT EXISTS embed_model TEXT;
 
 -- Add comments explaining the column purpose
-COMMENT ON COLUMN public.facts.embed_model IS 'Name of the embedding model used to generate the embedding vector (e.g., qwen3-embedding:4b)';
-COMMENT ON COLUMN public.key_moments.embed_model IS 'Name of the embedding model used to generate the embedding vector (e.g., qwen3-embedding:4b)';
-COMMENT ON COLUMN public.identity_snapshots.embed_model IS 'Name of the embedding model used to generate the embedding vector (e.g., qwen3-embedding:4b)';
+COMMENT ON COLUMN public.facts.embed_model IS 'Name of the embedding model used to generate the embedding vector (e.g., bge-m3)';
+COMMENT ON COLUMN public.key_moments.embed_model IS 'Name of the embedding model used to generate the embedding vector (e.g., bge-m3)';
+COMMENT ON COLUMN public.identity_snapshots.embed_model IS 'Name of the embedding model used to generate the embedding vector (e.g., bge-m3)';

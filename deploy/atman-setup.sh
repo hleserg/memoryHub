@@ -27,7 +27,7 @@ POSTGRES_PORT="5432"
 QDRANT_PORT="6333"
 QDRANT_VERSION="latest"
 OLLAMA_LLM_MODEL="qwen3.5:9b"
-OLLAMA_EMBED_MODEL="qwen3-embedding:1.5b"
+OLLAMA_EMBED_MODEL="bge-m3"
 
 # NVMe путь — скрипт определит автоматически или использует дефолт
 NVME_PATH=""
@@ -42,7 +42,7 @@ echo "  ║         Atman Memory Stack Setup             ║"
 echo "  ║                                              ║"
 echo "  ║  PostgreSQL 16 + pgvector                    ║"
 echo "  ║  Qdrant · Ollama · qwen3.5:9b                ║"
-echo "  ║  qwen3-embedding:1.5b · Flash Attention      ║"
+echo "  ║  bge-m3 · Flash Attention                    ║"
 echo "  ╚══════════════════════════════════════════════╝"
 echo -e "${NC}"
 echo -e "  Начало: $(date '+%Y-%m-%d %H:%M:%S')\n"
@@ -215,6 +215,8 @@ QDRANT_API_KEY=${QDRANT_API_KEY}
 OLLAMA_URL=http://localhost:11434
 ATMAN_OLLAMA_MODEL=${OLLAMA_LLM_MODEL}
 ATMAN_EMBED_MODEL=${OLLAMA_EMBED_MODEL}
+EMBEDDING_MODEL=${OLLAMA_EMBED_MODEL}
+OLLAMA_EMBED_MODEL=${OLLAMA_EMBED_MODEL}
 OLLAMA_KEEP_ALIVE=5m
 OLLAMA_FLASH_ATTENTION=1
 
@@ -398,7 +400,7 @@ CREATE TABLE IF NOT EXISTS facts (
     content    TEXT NOT NULL,
     source     TEXT NOT NULL,
     tags       TEXT[] NOT NULL DEFAULT '{}',
-    embedding  halfvec(2560),
+    embedding  halfvec(1024),
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     metadata   JSONB NOT NULL DEFAULT '{}'
 );
@@ -488,7 +490,7 @@ CREATE TABLE IF NOT EXISTS key_moments (
     experience_id        UUID NOT NULL REFERENCES experiences(id) ON DELETE CASCADE,
     agent_id             UUID NOT NULL REFERENCES agents(id) ON DELETE CASCADE,
     what_happened        TEXT NOT NULL,
-    embedding            halfvec(2560),
+    embedding            halfvec(1024),
     emotional_valence    FLOAT NOT NULL CHECK (emotional_valence BETWEEN -1 AND 1),
     emotional_intensity  FLOAT NOT NULL CHECK (emotional_intensity BETWEEN 0 AND 1),
     depth                TEXT NOT NULL CHECK (depth IN ('surface','meaningful','profound')),
@@ -626,7 +628,7 @@ CREATE TABLE IF NOT EXISTS memory_access_log (
         'relation_traverse','narrative_read'
     )),
     query_text      TEXT,
-    query_embedding halfvec(2560),
+    query_embedding halfvec(1024),
     filters         JSONB NOT NULL DEFAULT '{}',
     result_count    INT NOT NULL DEFAULT 0,
     top_score       FLOAT,
@@ -806,7 +808,7 @@ for COLLECTION in atman_facts atman_experiences; do
         curl -sf -X PUT "http://localhost:${QDRANT_PORT}/collections/${COLLECTION}" \
             -H "api-key: ${QDRANT_API_KEY}" \
             -H "Content-Type: application/json" \
-            -d '{"vectors":{"size":768,"distance":"Cosine"},"optimizers_config":{"default_segment_number":2}}' \
+            -d '{"vectors":{"size":1024,"distance":"Cosine"},"optimizers_config":{"default_segment_number":2}}' \
             > /dev/null
         ok "Коллекция ${COLLECTION} создана"
     fi
@@ -922,7 +924,7 @@ EMBED_DIM=$(curl -sf http://localhost:11434/api/embeddings \
     -H "Content-Type: application/json" \
     -d "{\"model\":\"${OLLAMA_EMBED_MODEL}\",\"prompt\":\"тест системы\"}" \
     | python3 -c "import sys,json; d=json.load(sys.stdin); print(len(d['embedding']))" 2>/dev/null)
-ok "Embedding: ${EMBED_DIM} dims (ожидается 768)"
+ok "Embedding: ${EMBED_DIM} dims (ожидается 1024)"
 
 # Ollama модели
 LLM_PRESENT=$(ollama list 2>/dev/null | grep -c "qwen3" || echo "0")

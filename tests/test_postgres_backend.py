@@ -196,6 +196,23 @@ def test_search_falls_back_to_text_when_embedding_fails(monkeypatch: pytest.Monk
     assert params == [["task"], "%needle%", 3]
 
 
+def test_search_uses_halfvec_literal_for_semantic_ordering(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("ATMAN_CURRENT_AGENT", str(uuid4()))
+    cursor = _FakeCursor(rows=[_row(content="semantic fact")])
+    conn = _FakeConnection(cursor)
+    memory = _memory_with(conn, embedding=_FixedEmbedding())
+
+    results = memory.search(query="semantic", limit=5)
+
+    assert [fact.content for fact in results] == ["semantic fact"]
+    query, params = cursor.executed[0]
+    assert "f.embedding <=> '[0.25,0.75]'::halfvec" in query
+    assert "f.content ILIKE" not in query
+    assert params == [5]
+
+
 def test_add_fact_persists_embedding_relations_and_agent_context(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

@@ -51,7 +51,7 @@ CREATE TABLE IF NOT EXISTS public.facts (
 
 COMMENT ON TABLE public.facts IS 'Factual memory: verifiable facts without interpretation. Owned per agent.';
 COMMENT ON COLUMN public.facts.agent_id IS 'Owning agent UUID (used for RLS)';
-COMMENT ON COLUMN public.facts.embedding IS 'halfvec(1024) embedding (bge-m3). float16 storage: half the size of float32, negligible cosine similarity loss. NULL when model unavailable — system degrades gracefully to text search.';
+COMMENT ON COLUMN public.facts.embedding IS 'halfvec(1024) embedding (BGE-M3). float16 storage: half the size of float32, negligible cosine similarity loss. NULL when model unavailable — system degrades gracefully to text search.';
 
 -- ── Fact Relations Table ──────────────────────────────────────────────────────
 

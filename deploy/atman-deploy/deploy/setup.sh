@@ -268,7 +268,7 @@ for COL in atman_facts atman_experiences; do
         curl -sf -X PUT "http://localhost:${QDRANT_PORT}/collections/${COL}" \
             -H "api-key: ${QDRANT_API_KEY}" \
             -H "Content-Type: application/json" \
-            -d '{"vectors":{"size":768,"distance":"Cosine"},"optimizers_config":{"default_segment_number":2}}' \
+            -d "{\"vectors\":{\"size\":${VECTOR_DIM},\"distance\":\"Cosine\"},\"optimizers_config\":{\"default_segment_number\":2}}" \
             > /dev/null
         ok "Коллекция ${COL} создана"
     else
@@ -302,7 +302,7 @@ header "Smoke test"
 
 bash "${SCRIPT_DIR}/smoke-test.sh" \
     "${POSTGRES_USER}" "${POSTGRES_DB}" "${QDRANT_PORT}" \
-    "${QDRANT_API_KEY}" "${OLLAMA_EMBED_MODEL}" "${DOCKER}"
+    "${QDRANT_API_KEY}" "${OLLAMA_EMBED_MODEL}" "${DOCKER}" "${VECTOR_DIM}"
 
 # ── Итог ──────────────────────────────────────────────────────────────────────
 echo ""
