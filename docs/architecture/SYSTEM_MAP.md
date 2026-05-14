@@ -109,6 +109,12 @@ All paths are absolute relative to the repository root.
 | `adapters/agent/runner.py` (`AtmanRunner`, `chat`, `_force_finish`, `_check_restart_requested`, `_do_restart`, `_build_restart_package`, `_check_token_usage`, `_start_stdin_reader`, `_stop_stdin_reader`, `_handle_menu_mode`, `_handle_free_time_mode`) | — | Signal-aware session lifecycle wrapper with restart loop, token monitoring, and timeout/menu (E22.2, E22.3, E22.5, E22.6); token monitoring: progressive warnings at 70/80/90%, force-close at 95% (`_check_token_usage`); queue-based stdin reader (no race on timeout); restart detection: sentinel → finish session with `close_reason="restart"` → build package (key moments + reason + tail) → new session with updated `AtmanDeps`; session timeout → menu mode (reflect/wait/sleep/save_to_memory/free_time); SIGTERM/KeyboardInterrupt/EOFError/SystemExit → graceful `_force_finish()`; creates minimal `KeyMoment` if empty; preserves exit codes |
 | `agents_registry.py` (`AgentsRegistry`) | — | PostgreSQL-backed registry of agent instances (app/admin DB URLs); used by `src/run_agent.py` |
 
+### 1.5b. Optional local coding agent (**not** in core wheel — `atman_agent_cli/`)
+
+| Path | Notes |
+|------|--------|
+| `atman_agent_cli/src/atman/agent_cli/` | Coding-agent Textual/RAG surface layered on adapters when wired. Sources live beside core; Hatch ships only [`src/atman`](#). Use `PYTHONPATH=atman_agent_cli/src:src`, `pip install -e ".[agent-cli]"`; prep tooling `scripts/agent_cli/`, docs `atman_agent_cli/RUNBOOK.md`. Listed core namespaces must not import **`atman.agent_cli`** — **`.importlinter` contract `no-core-to-optional-agent-cli`**. |
+
 ### 1.6. CLI / TUI / Web / Demos
 
 | File | Category | Purpose |
@@ -149,9 +155,15 @@ All paths are absolute relative to the repository root.
 |------|----------|---------|
 | `src/atman/eval/__init__.py` | optional namespace | imports `_deps_check`; `import atman.eval` fails fast without the `eval` extra |
 | `src/atman/eval/_deps_check.py` | dependency guard | checks canary deps from `[project.optional-dependencies].eval` and returns a friendly install hint |
+| `src/atman/eval/benchmark_runner.py` | eval CLI | module-only benchmark runner (`list` / `run`) with no production entry point |
+| `src/atman/eval/runner_core.py`, `src/atman/eval/run_context.py` | eval runtime | benchmark lifecycle, typed context, deterministic app-level idempotency key when `git_sha` is provided |
+| `src/atman/eval/registry.py`, `src/atman/eval/benchmarks/noop.py` | benchmark catalog | simple decorator-based benchmark registry with builtin noop smoke benchmark |
+| `src/atman/eval/reporters/base.py`, `src/atman/eval/reporters/db_reporter.py`, `src/atman/eval/reporters/jsonl_reporter.py` | reporting | run lifecycle protocol + DB writer (`eval.benchmark_runs` / `eval.run_items`) + JSONL local artifacts |
+| `src/atman/eval/seed_manager.py`, `src/atman/eval/hardware.py` | runtime metadata | deterministic seed management and hardware probe with fallback without NVML/GPU |
 | `eval/migrations/alembic.ini`, `eval/migrations/env.py` | eval storage | Alembic configuration for the isolated PostgreSQL `eval` schema |
 | `eval/migrations/versions/0010_*` ... `0040_*` | eval storage | idempotent eval schema, benchmark run tables, supporting tables, and trend materialized view |
 | `scripts/eval/partition_manager.py` | operations | creates future partitions, detaches old partitions, and reports `eval.benchmark_runs` partition status |
+| `src/demo_eval_runner.py`, `docs/eval/RUNNER.md`, `docs/eval/RUNNER-ru.md` | demo/docs | reproducible E1 runner walkthrough + bilingual usage docs |
 
 ---
 
@@ -205,6 +217,7 @@ Connections between two or more parts. These are seams that may break independen
 | `cli_experience.py` | `ExperienceService(JsonlExperienceStore)` | `cli_experience.py:17-29` |
 | `cli_identity.py` | `IdentityService(FileStateStore)` + `NarrativeService(FileStateStore)` | `cli_identity.py:15-29` |
 | `cli_reflection.py` | `Micro/Daily/DeepReflectionService` + fixture_loader | `cli_reflection.py:18-47` |
+| `benchmark_runner.py` (module-only) | `RunnerCore` + `registry` + `reporters` (`jsonl`, optional DB) | `eval/benchmark_runner.py` |
 
 ### 2.4. Demo ↔ real objects
 
@@ -216,6 +229,7 @@ Connections between two or more parts. These are seams that may break independen
 | `demo_session_manager.py` | `FileStateStore` → `SessionManager` (loads identity/narrative, records events/moments, stores experience/eigenstate) |
 | `demo_reflection.py` | mocks + fixture_loader → `MicroReflectionService` → `DailyReflectionService` → `DeepReflectionService` |
 | `demo_full_corpus.py` | `e2e` session JSON → `FileStateStore` + `SessionManager` + `StateStore*Adapter` → micro → daily (per UTC day) → deep; `DeterministicReflectionModel` |
+| `demo_eval_runner.py` | `RunnerCore` + `JsonlReporter` + `noop` benchmark; shows idempotent rerun behavior for same `git_sha` |
 
 ### 2.5. TUI / Web ↔ subprocesses
 

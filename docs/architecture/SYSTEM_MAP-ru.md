@@ -113,6 +113,12 @@
 | `adapters/agent/runner.py` (`AtmanRunner`, `chat`, `_force_finish`, `_check_restart_requested`, `_do_restart`, `_build_restart_package`, `_check_token_usage`, `_start_stdin_reader`, `_stop_stdin_reader`, `_handle_menu_mode`, `_handle_free_time_mode`) | — | обёртка жизненного цикла сессии с обработкой сигналов, restart loop, мониторингом токенов и таймаут/меню (E22.2, E22.3, E22.5, E22.6); мониторинг токенов: прогрессивные предупреждения на 70/80/90%, принудительное закрытие на 95% (`_check_token_usage`); очередь-based stdin reader (без race condition при таймауте); детекция restart: sentinel → finish session с `close_reason="restart"` → построение пакета (ключевые моменты + причина + хвост) → новая сессия с обновлённым `AtmanDeps`; таймаут сессии → menu mode (reflect/wait/sleep/save_to_memory/free_time); SIGTERM/KeyboardInterrupt/EOFError/SystemExit → graceful `_force_finish()`; создаёт минимальный `KeyMoment` если пусто; сохраняет exit-коды |
 | `agents_registry.py` (`AgentsRegistry`) | — | реестр экземпляров агентов в PostgreSQL (app/admin URL); используется `src/run_agent.py` |
 
+### 1.5b. Опциональный локальный coding-agent (**не** в wheel ядра — каталог `atman_agent_cli/`)
+
+| Путь | Заметки |
+|------|---------|
+| `atman_agent_cli/src/atman/agent_cli/` | Textual/RAG-слой поверх ядра. Исходники вне стандартного пакета `atman`; `PYTHONPATH=atman_agent_cli/src:src`, `pip install -e ".[agent-cli]"`; см. `scripts/agent_cli/`, `atman_agent_cli/RUNBOOK.md`. Перечисленные в контракте пространства имён **`src/atman`** не импортируют **`atman.agent_cli`** (`.importlinter`). |
+
 ### 1.6. CLI / TUI / Web / Демо
 
 | Файл | Категория | Назначение |
@@ -153,9 +159,15 @@
 |------|-----------|------------|
 | `src/atman/eval/__init__.py` | optional namespace | импортирует `_deps_check`; `import atman.eval` быстро падает без extra `eval` |
 | `src/atman/eval/_deps_check.py` | dependency guard | проверяет canary-зависимости из `[project.optional-dependencies].eval` и показывает понятную подсказку установки |
+| `src/atman/eval/benchmark_runner.py` | eval CLI | module-only runner (`list` / `run`) без production entry point |
+| `src/atman/eval/runner_core.py`, `src/atman/eval/run_context.py` | eval runtime | lifecycle бенчмарков, типизированный контекст, детерминированный app-level idempotency key при наличии `git_sha` |
+| `src/atman/eval/registry.py`, `src/atman/eval/benchmarks/noop.py` | benchmark catalog | простой decorator-based реестр бенчмарков + встроенный noop smoke benchmark |
+| `src/atman/eval/reporters/base.py`, `src/atman/eval/reporters/db_reporter.py`, `src/atman/eval/reporters/jsonl_reporter.py` | reporting | протокол lifecycle-репортеров + DB writer (`eval.benchmark_runs` / `eval.run_items`) + JSONL-артефакты |
+| `src/atman/eval/seed_manager.py`, `src/atman/eval/hardware.py` | runtime metadata | управление seed и hardware probe с fallback без NVML/GPU |
 | `eval/migrations/alembic.ini`, `eval/migrations/env.py` | eval storage | конфигурация Alembic для изолированной PostgreSQL-схемы `eval` |
 | `eval/migrations/versions/0010_*` ... `0040_*` | eval storage | идемпотентная схема eval, таблицы benchmark run, supporting tables и materialized view трендов |
 | `scripts/eval/partition_manager.py` | операции | создаёт будущие partitions, отсоединяет старые partitions и показывает статус partitions `eval.benchmark_runs` |
+| `src/demo_eval_runner.py`, `docs/eval/RUNNER.md`, `docs/eval/RUNNER-ru.md` | demo/docs | воспроизводимый walkthrough E1 runner + двуязычная документация |
 
 ---
 
@@ -206,6 +218,7 @@
 | `cli_experience.py` | `ExperienceService(JsonlExperienceStore)` | `cli_experience.py:17-29` |
 | `cli_identity.py` | `IdentityService(FileStateStore)` + `NarrativeService(FileStateStore)` | `cli_identity.py:15-29` |
 | `cli_reflection.py` | `Micro/Daily/DeepReflectionService` + fixture_loader | `cli_reflection.py:18-47` |
+| `benchmark_runner.py` (module-only) | `RunnerCore` + `registry` + `reporters` (`jsonl`, опционально DB) | `eval/benchmark_runner.py` |
 
 ### 2.4. Демо ↔ реальные объекты
 
@@ -217,6 +230,7 @@
 | `demo_session_manager.py` | `FileStateStore` → `SessionManager` (загрузка identity/narrative, запись событий/моментов, сохранение experience/eigenstate) |
 | `demo_reflection.py` | моки + fixture_loader → `MicroReflectionService` → `DailyReflectionService` → `DeepReflectionService` |
 | `demo_full_corpus.py` | JSON сессий `e2e` → `FileStateStore` + `SessionManager` + `StateStore*Adapter` → micro → daily (за UTC-сутки) → deep; `DeterministicReflectionModel` |
+| `demo_eval_runner.py` | `RunnerCore` + `JsonlReporter` + `noop` benchmark; демонстрирует идемпотентный rerun при том же `git_sha` |
 
 ### 2.5. TUI / Web ↔ подпроцессы
 
