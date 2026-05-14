@@ -105,7 +105,7 @@ demo-webui-fast:
 	ATMAN_DEMO_PACE=off python3 src/demo_web_dashboard.py
 
 # Eval Runner walkthrough (see docs/features/eval-runner/README.md).
-demo-eval-runner:
+demo-eval-runner demo-eval-runner-paced:
 	ATMAN_DEMO_PACE=1 python3 src/demo_eval_runner.py
 
 demo-eval-runner-fast:
