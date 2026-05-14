@@ -47,14 +47,16 @@ def get_db_url() -> str:
 def check_current_dimension(conn: psycopg.Connection) -> int | None:
     """Check the current dimension of the embedding column."""
     with conn.cursor() as cur:
-        # Check if the table and column exist
         cur.execute(
             """
-            SELECT column_name, udt_name
-            FROM information_schema.columns
-            WHERE table_schema = 'public'
-              AND table_name = 'facts'
-              AND column_name = 'embedding'
+            SELECT a.atttypmod - 4 AS dimension
+            FROM pg_attribute a
+            JOIN pg_class c ON c.oid = a.attrelid
+            JOIN pg_namespace n ON n.oid = c.relnamespace
+            WHERE n.nspname = 'public'
+              AND c.relname = 'facts'
+              AND a.attname = 'embedding'
+              AND NOT a.attisdropped
             """
         )
         result = cur.fetchone()
@@ -62,18 +64,80 @@ def check_current_dimension(conn: psycopg.Connection) -> int | None:
             print("INFO: No embedding column found in facts table")
             return None
 
-        # Check dimension by querying a sample embedding
+        dimension = result["dimension"]
+        if isinstance(dimension, int) and dimension > 0:
+            return dimension
+
+        # Fallback for unconstrained legacy columns: inspect one stored vector.
         cur.execute("SELECT embedding FROM public.facts WHERE embedding IS NOT NULL LIMIT 1")
         row = cur.fetchone()
         if not row or not row["embedding"]:
             print("INFO: No embeddings found in database")
             return None
 
-        # Parse dimension from pgvector representation
         vec_str = str(row["embedding"])
         # pgvector format: [1.0, 2.0, 3.0, ...]
-        dimension = len(vec_str.strip("[]").split(","))
-        return dimension
+        return len(vec_str.strip("[]").split(","))
+
+
+# PLAYBOOK-START
+# id: transactional-derived-vector-schema-migration
+# category: failure-modes
+# title: Transactional Schema Changes for Regenerable Vectors
+# status: draft
+#
+# Pattern: when changing the dimensionality of derived vector data, perform
+# index/schema changes, regeneration writes, and verification inside one
+# transaction. Roll back the physical shape change if any regeneration or
+# verification step fails.
+#
+# Why generalizable: embedding vectors, search indexes, and caches are derived
+# data. Changing their physical shape before replacement data is ready can turn
+# a routine migration into write failures or silent search degradation.
+# PLAYBOOK-END
+def ensure_facts_embedding_schema(
+    conn: psycopg.Connection,
+    *,
+    dimension: int,
+    model_name: str,
+) -> None:
+    """Prepare ``public.facts.embedding`` for the target vector dimension."""
+    if dimension < 1:
+        raise ValueError(f"Embedding dimension must be positive, got {dimension}")
+
+    with conn.cursor() as cur:
+        cur.execute("DROP INDEX IF EXISTS public.idx_facts_embedding")
+        cur.execute("ALTER TABLE public.facts ADD COLUMN IF NOT EXISTS embed_model TEXT")
+        cur.execute(
+            f"""
+            ALTER TABLE public.facts
+            ALTER COLUMN embedding TYPE halfvec({dimension})
+            USING NULL::halfvec({dimension})
+            """
+        )
+        cur.execute(
+            """
+            COMMENT ON COLUMN public.facts.embedding IS
+            %s
+            """,
+            (
+                f"halfvec({dimension}) embedding ({model_name}). NULL while embeddings "
+                "are unavailable or being regenerated.",
+            ),
+        )
+        cur.execute(
+            """
+            COMMENT ON COLUMN public.facts.embed_model IS
+            'Name of the embedding model used to generate the embedding vector'
+            """
+        )
+        cur.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_facts_embedding
+                ON public.facts USING hnsw(embedding halfvec_cosine_ops)
+                WHERE embedding IS NOT NULL
+            """
+        )
 
 
 def migrate_embeddings(dry_run: bool = False) -> None:
@@ -136,9 +200,10 @@ def migrate_embeddings(dry_run: bool = False) -> None:
         if dry_run:
             print("DRY RUN: Would perform the following actions:")
             print(f"  1. Load all {count_before} facts with content and IDs")
-            print(f"  2. Re-embed each fact using {embedding_model}")
-            print(f"  3. Update embedding column with new {new_dimension}-dim vectors")
-            print(f"  4. Verify {count_before} facts were updated")
+            print(f"  2. Rebuild facts.embedding as halfvec({new_dimension})")
+            print(f"  3. Re-embed each fact using {embedding_model}")
+            print(f"  4. Update embedding column with new {new_dimension}-dim vectors")
+            print(f"  5. Verify {count_before} facts were updated")
             print()
             print("Run without --dry-run to apply changes")
             return
@@ -158,6 +223,13 @@ def migrate_embeddings(dry_run: bool = False) -> None:
 
         print(f"Loaded {len(facts)} facts")
         print()
+
+        print("Preparing facts.embedding column and index...")
+        ensure_facts_embedding_schema(
+            conn,
+            dimension=new_dimension,
+            model_name=embedding.model_name(),
+        )
 
         # Re-embed and update
         print("Re-embedding facts with new model...")
@@ -181,12 +253,10 @@ def migrate_embeddings(dry_run: bool = False) -> None:
                 for fact_id, new_vec in zip(batch_ids, new_embeddings, strict=True):
                     vec_str = "[" + ",".join(str(v) for v in new_vec) + "]"
                     cur.execute(
-                        "UPDATE public.facts SET embedding = %s::vector, embed_model = %s WHERE id = %s",
+                        "UPDATE public.facts SET embedding = %s::halfvec, embed_model = %s WHERE id = %s",
                         (vec_str, embedding.model_name(), fact_id),
                     )
                     updated_count += 1
-
-            conn.commit()
 
             progress = (i + len(batch)) / len(facts) * 100
             print(f"  Progress: {i + len(batch)}/{len(facts)} ({progress:.1f}%)", end="\r")
@@ -220,6 +290,8 @@ def migrate_embeddings(dry_run: bool = False) -> None:
         else:
             print(f"  ✗ Count mismatch: {count_before} → {count_after}")
             sys.exit(1)
+
+        conn.commit()
 
     finally:
         conn.close()

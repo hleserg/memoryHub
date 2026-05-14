@@ -208,7 +208,7 @@ mem = PostgresFactualMemory(
 )
 ```
 
-- Если `embedding` передан и провайдер доступен → поиск через `halfvec(2560)` cosine similarity (HNSW индекс)
+- Если `embedding` передан и провайдер доступен → поиск через `halfvec(1024)` BGE-M3 cosine similarity (HNSW индекс)
 - Если embedding-провайдер недоступен или упал → автоматический fallback на `ILIKE` текстовый поиск, `warnings.warn`
 - Факты без эмбеддинга хранятся нормально, метрика `facts_without_embedding` считает их
 

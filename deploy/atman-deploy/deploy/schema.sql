@@ -54,10 +54,10 @@ CREATE TABLE IF NOT EXISTS public.facts (
     confirmation_count  INTEGER NOT NULL DEFAULT 0 CHECK (confirmation_count >= 0),
     last_confirmed_at   TIMESTAMPTZ,
     salience            FLOAT NOT NULL DEFAULT 0.5 CHECK (salience BETWEEN 0.0 AND 1.0),
-    embedding           halfvec(2560)
+    embedding           halfvec(1024)
 );
 COMMENT ON TABLE public.facts IS 'Фактическая память. Факты без интерпретаций. Изолированы по agent_id через RLS.';
-COMMENT ON COLUMN public.facts.embedding IS 'halfvec(2560) — qwen3-embedding:4b. NULL при недоступности модели, система деградирует на ILIKE.';
+COMMENT ON COLUMN public.facts.embedding IS 'halfvec(1024) — BGE-M3. NULL при недоступности модели, система деградирует на ILIKE.';
 
 CREATE INDEX IF NOT EXISTS idx_facts_agent_status ON public.facts(agent_id, status, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_facts_tags         ON public.facts USING GIN(tags);
@@ -135,7 +135,7 @@ CREATE TABLE IF NOT EXISTS key_moments (
     experience_id         UUID NOT NULL REFERENCES experiences(id) ON DELETE CASCADE,
     agent_id              UUID NOT NULL REFERENCES agents(id) ON DELETE CASCADE,
     what_happened         TEXT NOT NULL,
-    embedding             halfvec(2560),
+    embedding             halfvec(1024),
     emotional_valence     FLOAT NOT NULL CHECK (emotional_valence BETWEEN -1 AND 1),
     emotional_intensity   FLOAT NOT NULL CHECK (emotional_intensity BETWEEN 0 AND 1),
     depth                 TEXT NOT NULL CHECK (depth IN ('surface', 'meaningful', 'profound')),
@@ -382,7 +382,7 @@ CREATE TABLE IF NOT EXISTS memory_access_log (
         'relation_traverse', 'narrative_read'
     )),
     query_text      TEXT,
-    query_embedding halfvec(2560),
+    query_embedding halfvec(1024),
     filters         JSONB NOT NULL DEFAULT '{}',
     result_count    INT NOT NULL DEFAULT 0,
     top_score       FLOAT,

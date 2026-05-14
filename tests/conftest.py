@@ -29,7 +29,7 @@ def _required_ollama_models(item: pytest.Item) -> tuple[str, ...]:
     """Models a test file expects to be installed (see OllamaReflectionModel / OllamaEmbeddingAdapter)."""
     path_name = item.path.name
     if path_name == "test_postgres_facts.py":
-        return (os.environ.get("OLLAMA_EMBED_MODEL", "qwen3-embedding:4b"),)
+        return (os.environ.get("OLLAMA_EMBED_MODEL", "bge-m3"),)
     return (os.environ.get("ATMAN_OLLAMA_MODEL", "qwen3.5:9b"),)
 
 

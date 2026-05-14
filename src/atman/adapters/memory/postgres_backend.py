@@ -361,7 +361,7 @@ class PostgresFactualMemory(FactualMemory):
 
         if query and vec is not None:
             # Vector search — cosine distance, NULLs sort last naturally
-            order_sql = f"f.embedding <=> '{_vec_str(vec)}'::vector"
+            order_sql = f"f.embedding <=> '{_vec_str(vec)}'::halfvec"
         elif query:
             # Text fallback
             conditions.append("f.content ILIKE %s")
