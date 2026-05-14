@@ -902,22 +902,20 @@ class SessionManager:
             parts.append(session_result.key_insight)
 
         if themes:
-            themes_str = ", ".join(sorted(themes)[:5])
-            parts.append(f"Затронутые темы: {themes_str}.")
+            themes_str = ", ".join(sorted(themes)[:5])  # Limit to 5 themes
+            parts.append(f"This engaged my values around {themes_str}.")
 
         if session_result.key_moments:
             num_moments = len(session_result.key_moments)
             tone = session_result.overall_emotional_tone
-            tone_desc = (
-                "позитивный" if tone > 0.2 else "негативный" if tone < -0.2 else "нейтральный"
-            )
+            tone_desc = "positive" if tone > 0.2 else "negative" if tone < -0.2 else "neutral"
             parts.append(
-                f"Зафиксировано значимых моментов: {num_moments}. "
-                f"Общий эмоциональный тон — {tone_desc}."
+                f"Experienced {num_moments} significant moment{'s' if num_moments > 1 else ''} "
+                f"with an overall {tone_desc} emotional tone."
             )
 
         if not parts:
-            parts.append("Сессия завершена.")
+            parts.append("Recently completed a session.")
 
         return " ".join(parts)
 
