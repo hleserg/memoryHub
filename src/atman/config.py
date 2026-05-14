@@ -140,21 +140,9 @@ def build_embedding_adapter() -> Any:
             max_length=settings.embedding.max_length,
         )
         if not adapter.is_available():
-            # Soft fallback to Ollama with warning
-            import warnings
-
-            warnings.warn(
-                "FlagEmbedding not installed, falling back to OllamaEmbeddingAdapter. "
-                "Run: pip install FlagEmbedding",
-                RuntimeWarning,
-                stacklevel=2,
-            )
-            from atman.adapters.memory.ollama_embedding import OllamaEmbeddingAdapter
-
-            return OllamaEmbeddingAdapter(
-                base_url=settings.embedding.ollama_host,
-                model=settings.embedding.model,  # Uses bge-m3 for Ollama
-                timeout=settings.embedding.timeout,
+            raise RuntimeError(
+                "FlagEmbedding backend selected but not installed. "
+                "Run: pip install 'atman[flag]' or pip install FlagEmbedding"
             )
         return adapter
 
