@@ -173,7 +173,7 @@ class TestAgentConfig:
         assert config.enable_key_moments is True
         assert config.model.model == "test"
         assert config.model.temperature == 0.7
-        assert config.model.max_tokens == 2000
+        assert config.model.max_tokens == 8192
 
     def test_custom_config(self):
         """Test AgentConfig with custom values."""
@@ -207,7 +207,7 @@ class TestModelConfig:
 
         assert config.model == "test"
         assert config.temperature == 0.7
-        assert config.max_tokens == 2000
+        assert config.max_tokens == 8192
 
     def test_openai_model(self):
         """Test configuring OpenAI model."""

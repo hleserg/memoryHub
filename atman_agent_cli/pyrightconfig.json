@@ -1,0 +1,20 @@
+{
+  "include": ["src"],
+  "venvPath": "..",
+  "pythonVersion": "3.12",
+  "pythonPlatform": "Linux",
+  "typeCheckingMode": "basic",
+  "reportMissingImports": "none",
+  "reportUnsupportedDunderAll": "none",
+  "extraPaths": ["../src"],
+  "reportAttributeAccessIssue": "none",
+  "reportOptionalMemberAccess": "none",
+  "reportOptionalIterable": "none",
+  "reportOptionalSubscript": "none",
+  "reportArgumentType": "none",
+  "reportCallIssue": "none",
+  "reportReturnType": "none",
+  "reportGeneralTypeIssues": "none",
+  "reportUnknownMemberType": "none",
+  "reportUnknownArgumentType": "none"
+}

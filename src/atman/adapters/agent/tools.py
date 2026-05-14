@@ -11,14 +11,11 @@ All tools receive RunContext[AtmanDeps] as the first parameter,
 giving them access to services and session state.
 """
 
-from typing import Literal
-
 from pydantic_ai import RunContext
 
 from atman.adapters.agent.deps import AtmanDeps
 from atman.affect.models import AgentMemoryReport
 from atman.core.models.experience import EmotionalDepth
-
 
 # PLAYBOOK-START
 # id: error-returning-tool-callbacks
@@ -45,13 +42,33 @@ from atman.core.models.experience import EmotionalDepth
 # Also requires explicit input validation up-front, since you can't rely
 # on Pydantic's "raise on invalid" behavior.
 # PLAYBOOK-END
+_DEPTH_ALIASES: dict[str, str] = {
+    "significant": "meaningful",
+    "important": "meaningful",
+    "notable": "meaningful",
+    "moderate": "meaningful",
+    "identity": "profound",
+    "existential": "profound",
+    "deep": "profound",
+    "fundamental": "profound",
+    "transformative": "profound",
+    "core": "profound",
+    "minor": "surface",
+    "light": "surface",
+    "casual": "surface",
+    "trivial": "surface",
+    "superficial": "surface",
+    "shallow": "surface",
+}
+
+
 async def record_key_moment(
     ctx: RunContext[AtmanDeps],
     what_happened: str,
     why_it_matters: str,
     emotional_valence: float = 0.0,
     emotional_intensity: float = 0.5,
-    depth: Literal["surface", "meaningful", "profound"] = "meaningful",
+    depth: str = "meaningful",
 ) -> str:
     """
     Record a key moment during the current session.
@@ -62,8 +79,8 @@ async def record_key_moment(
         why_it_matters: Why this moment is significant
         emotional_valence: Emotional tone (-1.0 negative to +1.0 positive)
         emotional_intensity: Intensity of emotion (0.0 to 1.0)
-        depth: How deeply this touched the agent's identity
-            ("surface" | "meaningful" | "profound")
+        depth: How deeply this touched the agent's identity.
+            Must be one of: "surface", "meaningful", "profound".
 
     Returns:
         Confirmation message
@@ -74,10 +91,11 @@ async def record_key_moment(
     if not ctx.deps.session_id:
         return "Error: No active session. Cannot record key moment outside of a session."
 
+    depth = _DEPTH_ALIASES.get(depth.lower(), depth.lower())
     try:
         EmotionalDepth(depth)
     except ValueError:
-        return f"Error: invalid depth {depth!r}"
+        return f"Error: invalid depth {depth!r}. Use one of: 'surface', 'meaningful', 'profound'."
 
     # Validate emotional values
     if not -1.0 <= emotional_valence <= 1.0:

@@ -879,7 +879,7 @@ def test_finish_session_updates_recent_narrative(session_manager, temp_storage):
     assert recent_content_before in recent_content_after
     assert "Successfully delivered complex work" in recent_content_after
     assert "competence" in recent_content_after or "growth" in recent_content_after
-    assert "positive" in recent_content_after  # Overall tone was 0.6
+    assert "positive" in recent_content_after  # Overall tone was 0.6 (English output)
 
     # Start second session - should load updated narrative
     context2 = manager.start_session(agent_id)

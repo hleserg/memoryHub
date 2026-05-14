@@ -115,6 +115,12 @@
 | `adapters/agent/runner.py` (`AtmanRunner`, `chat`, `_force_finish`, `_check_restart_requested`, `_do_restart`, `_build_restart_package`, `_check_token_usage`, `_start_stdin_reader`, `_stop_stdin_reader`, `_handle_menu_mode`, `_handle_free_time_mode`) | — | обёртка жизненного цикла сессии с обработкой сигналов, restart loop, мониторингом токенов и таймаут/меню (E22.2, E22.3, E22.5, E22.6); мониторинг токенов: прогрессивные предупреждения на 70/80/90%, принудительное закрытие на 95% (`_check_token_usage`); очередь-based stdin reader (без race condition при таймауте); детекция restart: sentinel → finish session с `close_reason="restart"` → построение пакета (ключевые моменты + причина + хвост) → новая сессия с обновлённым `AtmanDeps`; таймаут сессии → menu mode (reflect/wait/sleep/save_to_memory/free_time); SIGTERM/KeyboardInterrupt/EOFError/SystemExit → graceful `_force_finish()`; создаёт минимальный `KeyMoment` если пусто; сохраняет exit-коды |
 | `agents_registry.py` (`AgentsRegistry`) | — | реестр экземпляров агентов в PostgreSQL (app/admin URL); используется `src/run_agent.py` |
 
+### 1.5b. Опциональный локальный coding-agent (**не** в wheel ядра — каталог `atman_agent_cli/`)
+
+| Путь | Заметки |
+|------|---------|
+| `atman_agent_cli/src/atman/agent_cli/` | Textual/RAG-слой поверх ядра. Исходники вне стандартного пакета `atman`; `PYTHONPATH=atman_agent_cli/src:src`, `pip install -e ".[agent-cli]"`; см. `scripts/agent_cli/`, `atman_agent_cli/RUNBOOK.md`. Перечисленные в контракте пространства имён **`src/atman`** не импортируют **`atman.agent_cli`** (`.importlinter`). |
+
 ### 1.6. CLI / TUI / Web / Демо
 
 | Файл | Категория | Назначение |

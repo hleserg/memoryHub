@@ -60,6 +60,7 @@ def main() -> None:
     logging.basicConfig(level=logging.DEBUG if args.verbose else logging.WARNING)
 
     env = _load_env()
+    os.environ.update({k: v for k, v in env.items() if k not in os.environ})
     app_url = env.get("DATABASE_URL")
     admin_url = env.get("ATMAN_ADMIN_DATABASE_URL") or app_url
 

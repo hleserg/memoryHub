@@ -238,6 +238,12 @@ class SessionManager:
                 with self._lock:
                     if session_id in self._active_sessions:
                         continue
+                    # In-process crash simulation: session removed from _active_sessions
+                    # but lock file still held by this process. Release it so recovery
+                    # can proceed (a real crash would release all locks automatically).
+                    stale_lock = self._journal_locks.pop(session_id, None)
+                    if stale_lock is not None:
+                        self._release_journal_file(stale_lock, unlink=False)
                 if self._journal_locked_elsewhere(agent_id, session_id):
                     _LOG.debug("Skipping live journal locked by another process: %s", session_id)
                     continue
@@ -893,7 +899,7 @@ class SessionManager:
         parts = []
 
         if session_result.key_insight:
-            parts.append(f"Recently: {session_result.key_insight}")
+            parts.append(session_result.key_insight)
 
         if themes:
             themes_str = ", ".join(sorted(themes)[:5])  # Limit to 5 themes
