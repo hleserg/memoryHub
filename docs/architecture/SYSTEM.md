@@ -675,6 +675,75 @@ Ready for discussion and coordination.
 
 ---
 
+## LLM BACKENDS
+
+Atman uses LLMs for two separate purposes, each with independent configuration:
+
+### Atman Internal LLM (ReflectionModel)
+
+Used for reflection, reframing, pattern detection, narrative updates, and health assessments.
+
+**Configuration via environment variables:**
+
+```bash
+# Backend selection (default: openai)
+ATMAN_REFLECTION_BACKEND=openai      # or: anthropic, mock
+
+# For OpenAI-compatible endpoints (default backend)
+ATMAN_LLM_BASE_URL=http://localhost:8081/v1
+ATMAN_LLM_MODEL=default
+ATMAN_LLM_API_KEY=sk-local
+ATMAN_LLM_TIMEOUT=60
+ATMAN_LLM_MAX_RETRIES=2
+
+# For Anthropic (when ATMAN_REFLECTION_BACKEND=anthropic)
+ANTHROPIC_API_KEY=sk-ant-...
+ATMAN_ANTHROPIC_MODEL=claude-opus-4-7
+ATMAN_ANTHROPIC_MAX_TOKENS=1024
+
+# For offline / CI (when ATMAN_REFLECTION_BACKEND=mock)
+# No configuration needed — uses deterministic mock
+```
+
+**Backend options:**
+
+* `openai` — Generic OpenAI-compatible endpoint (llama-server, vLLM, Ollama with OpenAI compat, etc.)
+* `anthropic` — Anthropic Claude API (not yet implemented, use `openai` or `mock`)
+* `mock` — Deterministic template-based responses for testing (no network calls)
+
+**Implementation:**
+
+* Port: `atman.core.ports.reflection.ReflectionModel`
+* Adapters: `OpenAIReflectionModel`, `MockReflectionModel`
+* Factory: `atman.adapters.reflection.get_reflection_model()`
+
+### Pydantic AI Test Agent (Development Infrastructure)
+
+Separate agent that acts as a test user talking **to** Atman. Not part of Atman — part of the development/testing infrastructure.
+
+**Configuration via environment variables:**
+
+```bash
+AGENT_LLM_BASE_URL=http://localhost:8080/v1   # llama-server with Gemma4
+AGENT_LLM_MODEL=gemma4
+AGENT_LLM_API_KEY=dummy                        # llama-server ignores this
+```
+
+**Implementation:**
+
+* Module: `agent/` (separate from `src/atman/`)
+* Config: `agent.config.AgentLLMConfig`
+* Factory: `agent.atman_agent.create_agent()`
+
+**These two LLM connections are fully independent:**
+
+* Atman's internal LLM at `:8081` does reflection/reframing/pattern detection
+* Agent's LLM at `:8080` is the test user that talks to Atman
+* They can point to different models/endpoints
+* They never interact with each other directly
+
+---
+
 ## Source: ARCHITECTURE-DECISIONS.md
 
 *[This section contains architecture decisions and additional technical details]*

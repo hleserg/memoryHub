@@ -5,10 +5,37 @@ Centralizes all environment variable configuration with type validation.
 """
 
 import os
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from pydantic import BaseModel
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+@dataclass
+class OpenAILLMConfig:
+    """Atman's internal LLM connection — any OpenAI-compatible endpoint."""
+
+    base_url: str = field(
+        default_factory=lambda: os.getenv("ATMAN_LLM_BASE_URL", "http://localhost:8081/v1")
+    )
+    api_key: str = field(default_factory=lambda: os.getenv("ATMAN_LLM_API_KEY", "sk-local"))
+    model: str = field(default_factory=lambda: os.getenv("ATMAN_LLM_MODEL", "default"))
+    timeout: float = field(default_factory=lambda: float(os.getenv("ATMAN_LLM_TIMEOUT", "60")))
+    max_retries: int = field(default_factory=lambda: int(os.getenv("ATMAN_LLM_MAX_RETRIES", "2")))
+
+
+@dataclass
+class AnthropicLLMConfig:
+    """Atman's Anthropic Claude connection."""
+
+    api_key: str = field(default_factory=lambda: os.getenv("ANTHROPIC_API_KEY", ""))
+    model: str = field(
+        default_factory=lambda: os.getenv("ATMAN_ANTHROPIC_MODEL", "claude-opus-4-7")
+    )
+    max_tokens: int = field(
+        default_factory=lambda: int(os.getenv("ATMAN_ANTHROPIC_MAX_TOKENS", "1024"))
+    )
 
 
 class EmbeddingSettings(BaseSettings):
