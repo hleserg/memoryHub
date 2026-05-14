@@ -4,7 +4,7 @@ import pytest
 
 FLAG_EMBEDDING_AVAILABLE = False
 try:
-    import FlagEmbedding  # noqa: F401
+    import FlagEmbedding  # noqa: F401  # type: ignore[import-not-found]
 
     FLAG_EMBEDDING_AVAILABLE = True
 except ImportError:

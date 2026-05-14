@@ -52,7 +52,7 @@ class FlagEmbeddingAdapter(EmbeddingPort):
         """Lazy-load BGEM3FlagModel on first use."""
         if self._model is None:
             try:
-                from FlagEmbedding import BGEM3FlagModel
+                from FlagEmbedding import BGEM3FlagModel  # type: ignore[import-not-found]
             except ImportError as e:
                 raise RuntimeError(
                     "FlagEmbedding not installed. Run: pip install FlagEmbedding"
@@ -150,7 +150,7 @@ class FlagEmbeddingAdapter(EmbeddingPort):
     def is_available(self) -> bool:
         """Check if FlagEmbedding package is installed."""
         try:
-            import FlagEmbedding  # noqa: F401
+            import FlagEmbedding  # noqa: F401  # type: ignore[import-not-found]
 
             return True
         except ImportError:
