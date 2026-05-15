@@ -142,17 +142,18 @@ class FileStateStore(StateStore):
             n.triggered_by == note.triggered_by for n in record.experience.reframing_notes
         ):
             return record
-        record.experience.add_reframing_note(note)
+        record.experience.reframing_notes.append(note)
         experience_file = self.experiences_dir / f"{experience_id}.json"
         self._write_json_atomically(experience_file, record.model_dump_json(indent=2))
         return record
 
     def mark_accessed(self, experience_id: UUID) -> ExperienceRecord | None:
-        """Mark experience as accessed."""
+        """Mark experience as accessed (legacy)."""
         record = self.get_experience(experience_id)
         if record is None:
             return None
-        record.experience.mark_accessed()
+        record.experience.last_accessed_at = datetime.now(UTC)
+        record.experience.access_count += 1
         experience_file = self.experiences_dir / f"{experience_id}.json"
         self._write_json_atomically(experience_file, record.model_dump_json(indent=2))
         return record
@@ -467,11 +468,7 @@ class FileStateStore(StateStore):
         """List key moments from JSONL file, optionally filtered by session_id."""
         import warnings
 
-        # KeyMoment model doesn't have session_id field yet; filtering not implemented
-        if session_id is not None:
-            raise NotImplementedError(
-                "Filtering by session_id not yet supported - KeyMoment model needs session_id field"
-            )
+        # session_id filtering is now supported via KeyMoment.session_id field
 
         if not self.key_moments_path.exists():
             return []
@@ -484,10 +481,14 @@ class FileStateStore(StateStore):
                     key_moment = KeyMoment.model_validate(data)
                     key_moments.append(key_moment)
                 except (json.JSONDecodeError, ValueError) as e:
+                    import warnings
                     warnings.warn(
                         f"Skipping corrupted line in {self.key_moments_path}: {e}",
                         stacklevel=2,
                     )
                     continue
+
+        if session_id is not None:
+            key_moments = [km for km in key_moments if km.session_id == session_id]
 
         return key_moments

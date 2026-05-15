@@ -4,6 +4,9 @@ PassiveMemoryInjector - automatic memory surfacing.
 Surfaces relevant facts and experiences automatically based on:
 1. Embedding similarity (top-K semantic search)
 2. 1-hop associative graph expansion (related facts via relations)
+
+When LinguisticAnalyzer + MemoryReranker are provided (LINGUISTIC_ENABLED=True),
+uses ambient-anchor mode: parallel queries per entity/anchor type, then reranking.
 """
 
 from dataclasses import dataclass
@@ -41,24 +44,79 @@ class PassiveMemoryInjector:
         top_k_similarity: int = 5,
         associative_expand: bool = True,
         min_similarity_threshold: float = 0.3,
+        *,
+        linguistic_analyzer: object | None = None,
+        memory_reranker: object | None = None,
+        ambient_top_k: int = 50,
+        reranker_top_n: int = 10,
     ) -> None:
-        """
-        Initialize passive memory injector.
-
-        Args:
-            embedding: Embedding provider for similarity search
-            factual_memory: Factual memory storage
-            state_store: State store for experiences
-            top_k_similarity: Number of top similar items to surface
-            associative_expand: Whether to do 1-hop graph expansion
-            min_similarity_threshold: Minimum similarity score to include
-        """
         self.embedding = embedding
         self.factual_memory = factual_memory
         self.state_store = state_store
         self.top_k = top_k_similarity
         self.associative_expand = associative_expand
         self.min_threshold = min_similarity_threshold
+        self._linguistic_analyzer = linguistic_analyzer
+        self._reranker = memory_reranker
+        self._ambient_top_k = ambient_top_k
+        self._reranker_top_n = reranker_top_n
+
+    @property
+    def _ambient_mode(self) -> bool:
+        """True when both LA and reranker are configured."""
+        return self._linguistic_analyzer is not None and self._reranker is not None
+
+    def surface_key_moments_for_context(
+        self,
+        context_text: str,
+        *,
+        limit: int = 10,
+    ) -> list[SurfacedMemory]:
+        """
+        Surface relevant key moments (v2 API — uses state_store.list_key_moments).
+
+        Falls back to dense embedding search on what_happened text.
+        In ambient mode, uses entity anchors + reranker.
+        """
+        from atman.core.ports.memory_reranker import SurfacedMemory as RankedMemory
+
+        query_embedding = self.embedding.embed(context_text)
+        all_moments = self.state_store.list_key_moments()
+        candidates: list[RankedMemory] = []
+
+        for moment in all_moments:
+            if not moment.what_happened.strip():
+                continue
+            if not moment.salience or moment.salience < 0.01:
+                continue
+            mom_embedding = self.embedding.embed(moment.what_happened)
+            score = self.embedding.similarity(query_embedding, mom_embedding)
+            if score >= self.min_threshold:
+                candidates.append(
+                    RankedMemory(
+                        key_moment_id=moment.id,
+                        text=moment.what_happened,
+                        score=float(score),
+                        source="dense",
+                    )
+                )
+
+        if self._ambient_mode and candidates:
+            ranked = self._reranker.rerank(context_text, candidates, top_n=limit)  # type: ignore[union-attr]
+        else:
+            ranked = sorted(candidates, key=lambda c: c.score, reverse=True)[:limit]
+
+        return [
+            SurfacedMemory(
+                item=FactRecord(
+                    content=r.text,
+                    source=f"key_moment:{r.key_moment_id}",
+                ),
+                source=r.source,
+                score=r.final_score or r.score,
+            )
+            for r in ranked
+        ]
 
     def surface_for_context(
         self,

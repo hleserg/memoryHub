@@ -35,6 +35,7 @@ from atman.affect.metrics import (
 )
 from atman.affect.models import AffectMetrics, AffectRecord, AgentMemoryReport, TriggerReason
 from atman.core.models.experience import ContextHalo, EmotionalDepth, FeltSense, KeyMoment
+from atman.core.ports.linguistic import LinguisticAnalyzer
 
 _LOG = logging.getLogger(__name__)
 
@@ -88,10 +89,12 @@ class AffectDetector:
         *,
         workspace: Path,
         append_moment: Callable[[UUID, KeyMoment], None],
+        linguistic_analyzer: LinguisticAnalyzer | None = None,
     ) -> None:
         self.config = config
         self._workspace = workspace
         self._append = append_moment
+        self._linguistic_analyzer = linguistic_analyzer
         self._baseline = RollingBaseline(
             workspace / "affect_baseline.jsonl",
             window=config.baseline_window,
@@ -184,6 +187,20 @@ class AffectDetector:
             if not cold and divergence > self.config.divergence_threshold:
                 tags.append("affect:divergence")
                 reasons.append(TriggerReason.DIVERGENCE)
+
+        # Linguistic enrichment: when a LinguisticAnalyzer is wired in, run a
+        # full agent-message analysis so downstream code (e.g. DivergenceDetector)
+        # can consume the structured result.  The analysis is stored on the
+        # AffectRecord via demonstrates_thinks if no other value has been set.
+        # TODO(injection-point): merge analysis.divergence_signals into tags /
+        # reasons and pass analysis to _append_key_moment for structured_markers
+        # enrichment once KeyMomentBuilder is integrated into the affect pipeline.
+        _linguistic_analysis = None
+        if self._linguistic_analyzer is not None:
+            _linguistic_analysis = self._linguistic_analyzer.analyze_agent_message(
+                message=clean_text,
+                thinking=thinking if thinking and thinking.strip() else None,
+            )
 
         if not cold:
             strong = sum(1 for k in METRIC_KEYS if abs(z.get(k, 0.0)) > self.config.sigma_threshold)

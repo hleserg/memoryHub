@@ -8,6 +8,8 @@ For integration tests, use FileStateStore.
 from datetime import datetime
 from uuid import UUID
 
+from datetime import UTC
+
 from atman.core.models import (
     Eigenstate,
     ExperienceRecord,
@@ -17,6 +19,7 @@ from atman.core.models import (
     NarrativeDocument,
     ReframingNote,
 )
+from atman.core.models.session import Session
 from atman.core.ports.state_store import (
     DateRangeQuery,
     DepthQuery,
@@ -36,12 +39,12 @@ class InMemoryStateStore(StateStore):
         self._experiences: dict[UUID, ExperienceRecord] = {}
         self._key_moments: dict[UUID, KeyMoment] = {}  # moment_id -> KeyMoment
         self._session_moments: dict[UUID, list[UUID]] = {}  # session_id -> [moment_ids]
+        self._sessions: dict[UUID, Session] = {}
         self._identities: dict[UUID, Identity] = {}
         self._identity_snapshots: dict[UUID, IdentitySnapshot] = {}
         self._narratives: dict[UUID, NarrativeDocument] = {}
         self._archived_narratives: dict[UUID, list[tuple[NarrativeDocument, str, datetime]]] = {}
         self._eigenstates: list[Eigenstate] = []
-        self._key_moments: dict[UUID, KeyMoment] = {}
 
     def create_experience(self, record: ExperienceRecord) -> ExperienceRecord:
         """Store experience in memory."""
@@ -58,24 +61,23 @@ class InMemoryStateStore(StateStore):
     def add_reframing_note(
         self, experience_id: UUID, note: ReframingNote
     ) -> ExperienceRecord | None:
-        """Add reframing note to experience."""
+        """Add reframing note to experience (legacy — experience is read-only view in v2)."""
         record = self._experiences.get(experience_id)
         if record is None:
             return None
-        # Create updated record with new note via experience method
         updated = record.model_copy(deep=True)
-        updated.experience.add_reframing_note(note)
+        updated.experience.reframing_notes.append(note)
         self._experiences[experience_id] = updated
         return updated
 
     def mark_accessed(self, experience_id: UUID) -> ExperienceRecord | None:
-        """Mark experience as accessed."""
+        """Mark experience as accessed (legacy)."""
         record = self._experiences.get(experience_id)
         if record is None:
             return None
-        # Update access metadata via experience method
         updated = record.model_copy(deep=True)
-        updated.experience.mark_accessed()
+        updated.experience.last_accessed_at = datetime.now(UTC)
+        updated.experience.access_count += 1
         self._experiences[experience_id] = updated
         return updated
 
@@ -283,17 +285,68 @@ class InMemoryStateStore(StateStore):
         return latest.model_copy(deep=True)
 
     def create_key_moment(self, key_moment: KeyMoment) -> KeyMoment:
-        """Store key moment in memory."""
+        """Store key moment in memory. Raises ValueError if duplicate id."""
         if key_moment.id in self._key_moments:
             raise ValueError(f"KeyMoment {key_moment.id} already exists")
         self._key_moments[key_moment.id] = key_moment.model_copy(deep=True)
+        if key_moment.session_id is not None:
+            ids = self._session_moments.setdefault(key_moment.session_id, [])
+            if key_moment.id not in ids:
+                ids.append(key_moment.id)
         return key_moment
+
+    def store_key_moment(self, moment: KeyMoment) -> KeyMoment:
+        """Store key moment idempotently (v2 API — upsert by id)."""
+        self._key_moments[moment.id] = moment.model_copy(deep=True)
+        if moment.session_id is not None:
+            ids = self._session_moments.setdefault(moment.session_id, [])
+            if moment.id not in ids:
+                ids.append(moment.id)
+        return moment
 
     def list_key_moments(self, session_id: UUID | None = None) -> list[KeyMoment]:
         """List key moments, optionally filtered by session_id."""
-        # KeyMoment model doesn't have session_id field yet; filtering not implemented
         if session_id is not None:
-            raise NotImplementedError(
-                "Filtering by session_id not yet supported - KeyMoment model needs session_id field"
-            )
-        return [km.model_copy(deep=True) for km in self._key_moments.values()]
+            ids = self._session_moments.get(session_id, [])
+            moments = [self._key_moments[i] for i in ids if i in self._key_moments]
+        else:
+            moments = list(self._key_moments.values())
+        return [m.model_copy(deep=True) for m in moments]
+
+    def mark_moment_accessed(self, moment_id: UUID) -> None:
+        """Update last_accessed_at and increment access_count."""
+        moment = self._key_moments.get(moment_id)
+        if moment:
+            moment.mark_accessed()
+
+    def update_moment_structured_markers(
+        self, moment_id: UUID, markers: dict, version: str
+    ) -> None:
+        """Update structured_markers on a stored key moment."""
+        moment = self._key_moments.get(moment_id)
+        if moment:
+            moment.structured_markers = markers
+            moment.structured_markers_version = version
+
+    # Session operations (v2)
+
+    def create_session(self, session: Session) -> Session:
+        """Persist a new session record."""
+        self._sessions[session.id] = session.model_copy(deep=True)
+        return session
+
+    def get_session(self, session_id: UUID) -> Session | None:
+        """Retrieve session by ID."""
+        s = self._sessions.get(session_id)
+        return s.model_copy(deep=True) if s else None
+
+    def update_session(self, session: Session) -> Session:
+        """Update session metadata."""
+        self._sessions[session.id] = session.model_copy(deep=True)
+        return session
+
+    def list_recent_sessions(self, agent_id: UUID, *, limit: int = 10) -> list[Session]:
+        """List most recent sessions for an agent, newest first."""
+        sessions = [s for s in self._sessions.values() if s.agent_id == agent_id]
+        sessions.sort(key=lambda s: s.started_at, reverse=True)
+        return [s.model_copy(deep=True) for s in sessions[:limit]]

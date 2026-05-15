@@ -18,6 +18,38 @@ from atman.core.models.identity import Identity
 from atman.core.models.narrative import Eigenstate, NarrativeDocument
 
 
+class Session(BaseModel):
+    """
+    Persisted session record — the DB row for agent_N.sessions after migration 0008.
+
+    Separate from SessionResult (runtime) and SessionContext (startup context).
+    """
+
+    model_config = ConfigDict(validate_assignment=True)
+
+    id: UUID = Field(default_factory=uuid4)
+    agent_id: UUID
+    started_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    ended_at: datetime | None = None
+    status: str = Field(
+        default="active",
+        description="active | completed | interrupted",
+    )
+    identity_snapshot_id: UUID | None = None
+
+    # Fields added by migration 0008
+    close_reason: str | None = Field(
+        default=None,
+        description="timeout_sleep | menu_timeout | restart | forced | interrupted",
+    )
+    agent_recap: str | None = None
+    restart_reason: str = ""
+    user_language: str = "ru"
+    overall_tone: float | None = Field(default=None, ge=-1.0, le=1.0)
+    key_insight: str | None = None
+    unexamined_fact_refs: list[UUID] = Field(default_factory=list)
+
+
 class ActiveSessionSummary(BaseModel):
     """Lightweight view of an active session for listing without N+1 lookups."""
 

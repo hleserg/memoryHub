@@ -647,22 +647,11 @@ def test_list_key_moments_returns_all(store: StateStore) -> None:
 
 
 def test_list_key_moments_with_session_id_raises_not_implemented(store: StateStore) -> None:
-    """Test that filtering by session_id raises NotImplementedError.
-
-    Note: PostgresStateStore actually implements this feature, so it's
-    excluded from this test.
-    """
+    """Test that filtering by session_id returns an empty list (not NotImplementedError)."""
     # Skip for stores that don't support KeyMoment operations
     if isinstance(store, InMemoryExperienceStore | JsonlExperienceStore):
         pytest.skip("Store doesn't support KeyMoment operations")
 
-    # PostgresStateStore actually supports session_id filtering
-    if (
-        POSTGRES_AVAILABLE
-        and PostgresStateStore is not None
-        and isinstance(store, PostgresStateStore)
-    ):
-        pytest.skip("PostgresStateStore supports session_id filtering")
-
-    with pytest.raises(NotImplementedError, match="session_id"):
-        store.list_key_moments(session_id=uuid4())
+    # session_id filtering is now supported — returns empty list for unknown session
+    result = store.list_key_moments(session_id=uuid4())
+    assert result == []

@@ -49,16 +49,54 @@ from atman.core.models.reflection import (
     ReflectionRecord,
     ReframingNoteOutput,
 )
+from atman.core.models.entity import (
+    Entity,
+    EntityAlias,
+    EntityRelation,
+    EntityStance,
+    EntityType,
+    FactEntityLink,
+    KeyMomentEntityLink,
+    ResolutionMethod,
+)
+from atman.core.models.maintenance import JobName, JobStatus, MaintenanceJob
 from atman.core.models.session import (
     ActiveSessionSummary,
     KeyMomentInput,
+    Session,
     SessionContext,
     SessionEvent,
     SessionResult,
 )
+from atman.core.models.validation import (
+    DivergenceEvent,
+    DivergenceSeverity,
+    DivergenceType,
+    FindingSeverity,
+    FindingType,
+    ValidationFinding,
+)
 
 __all__ = [
     "ActiveSessionSummary",
+    "DivergenceEvent",
+    "DivergenceSeverity",
+    "DivergenceType",
+    "Entity",
+    "EntityAlias",
+    "EntityRelation",
+    "EntityStance",
+    "EntityType",
+    "FactEntityLink",
+    "FindingSeverity",
+    "FindingType",
+    "JobName",
+    "JobStatus",
+    "KeyMomentEntityLink",
+    "MaintenanceJob",
+    "ResolutionMethod",
+    "Session",
+    "ValidationFinding",
     "ContextHalo",
     "CoreValue",
     "CriterionAssessment",
