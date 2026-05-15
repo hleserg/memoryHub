@@ -24,6 +24,7 @@ try:
 
     _GLINER_AVAILABLE = True
 except ImportError:
+    _GLiNER = None  # type: ignore[assignment]
     _GLINER_AVAILABLE = False
 
 try:
@@ -31,6 +32,7 @@ try:
 
     _TRANSFORMERS_AVAILABLE = True
 except ImportError:
+    _hf_pipeline = None  # type: ignore[assignment]
     _TRANSFORMERS_AVAILABLE = False
 
 # Cyrillic suppression phrase patterns (lower-case substrings)
@@ -106,7 +108,7 @@ class GLiNERPlusMiniLMAdapter(LinguisticAnalyzer):
             return None
         logger.info("Loading GLiNER model %s …", self._gliner_model)
         try:
-            self._gliner = _GLiNER.from_pretrained(self._gliner_model)
+            self._gliner = _GLiNER.from_pretrained(self._gliner_model)  # type: ignore[union-attr]
         except Exception:
             logger.exception("Failed to load GLiNER model %s", self._gliner_model)
             return None
@@ -124,7 +126,7 @@ class GLiNERPlusMiniLMAdapter(LinguisticAnalyzer):
             return None
         logger.info("Loading zero-shot classifier %s …", self._minilm_model)
         try:
-            self._classifier = _hf_pipeline(
+            self._classifier = _hf_pipeline(  # type: ignore[operator]
                 "zero-shot-classification",
                 model=self._minilm_model,
                 device=self._device,

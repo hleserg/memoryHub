@@ -76,8 +76,6 @@ def _build_session_experience(session: Session, moments_for_session: list) -> Se
         has_profound_moment=has_profound,
         incomplete_coloring=incomplete,
         fact_refs=fact_refs,
-        overall_tone=session.overall_tone,
-        key_insight=session.key_insight,
     )
 
 

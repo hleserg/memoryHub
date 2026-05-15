@@ -17,7 +17,7 @@ class EntityType(StrEnum):
     tool = "tool"
     health_condition = "health_condition"
     skill = "skill"
-    value = "value"
+    core_value = "value"
     principle = "principle"
 
 
