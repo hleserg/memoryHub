@@ -22,9 +22,7 @@ class SurfacedMemory(BaseModel):
         default=None,
         description="Score assigned by the reranker; None until rerank() is called",
     )
-    source: str = Field(
-        description="dense | entity_join | time_ref | alias_match | fallback"
-    )
+    source: str = Field(description="dense | entity_join | time_ref | alias_match | fallback")
 
 
 class MemoryReranker(ABC):

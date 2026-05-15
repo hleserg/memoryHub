@@ -2,7 +2,7 @@
 
 import threading
 from datetime import UTC, datetime
-from uuid import UUID, uuid4
+from uuid import UUID
 
 from atman.core.models.maintenance import JobName, JobStatus, MaintenanceJob
 from atman.core.ports.maintenance_queue import MaintenanceQueue
@@ -35,9 +35,9 @@ class InMemoryMaintenanceQueue(MaintenanceQueue):
         with self._lock:
             if run_key is not None:
                 for job in self._jobs:
-                    if (
-                        job.run_key == run_key
-                        and job.status in (JobStatus.pending, JobStatus.running)
+                    if job.run_key == run_key and job.status in (
+                        JobStatus.pending,
+                        JobStatus.running,
                     ):
                         return job
 

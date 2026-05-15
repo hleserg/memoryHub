@@ -21,10 +21,13 @@ All paths are absolute relative to the repository root.
 | File | Purpose | Public classes |
 |------|---------|----------------|
 | `core/models/fact.py` | Verifiable facts and links between them | `FactRecord`, `Relation` |
-| `core/models/experience.py` | Lived experience, key moments (with `id: UUID` for independent storage), reframing, session closure metadata (E22.7: `close_reason`, `restart_reason`, `user_language`) | `SessionExperience`, `KeyMoment`, `FeltSense`, `ContextHalo`, `ReframingNote`, `EmotionalDepth`, `ReframingNoteAppendResult` |
+| `core/models/experience.py` | Lived experience, key moments (with `id: UUID` for independent storage), reframing, session closure metadata (E22.7: `close_reason`, `restart_reason`, `user_language`); **v2**: `KeyMoment` is a first-class standalone record with `session_id`, `salience`, `salience_at`, `last_accessed_at`, `access_count`, `importance`, `incomplete_coloring`, `recorded_by`, `identity_snapshot_id`, `structured_markers`, `structured_markers_version`, `schema_version="2.0.0"`; `mark_accessed()` and `calculate_current_salience()` methods on `KeyMoment`; `SessionExperience` kept as read-only view for Reflection compat | `SessionExperience`, `KeyMoment`, `FeltSense`, `ContextHalo`, `ReframingNote`, `EmotionalDepth`, `ReframingNoteAppendResult` |
 | `core/models/identity.py` | Agent's self-representation (values, habits, principles, goals, open questions) | `Identity`, `CoreValue`, `Habit`, `Principle`, `Goal`, `OpenQuestion`, `IdentitySnapshot`, `HelpfulnessLevel` |
 | `core/models/narrative.py` | Self-narrative document (CORE/RECENT/THREADS) and eigenstate | `NarrativeDocument`, `NarrativeLayer`, `NarrativeThread`, `Eigenstate` (`schema_version`, optional `identity_id`), `LayerType` |
-| `core/models/session.py` | Session runtime models: context, events, key moment input, result, active listing | `SessionContext`, `SessionEvent`, `KeyMomentInput`, `SessionResult`, `ActiveSessionSummary` |
+| `core/models/session.py` | Session runtime models: context, events, key moment input, result, active listing; **v2**: `Session` persistence model with `close_reason`, `agent_recap`, `restart_reason`, `user_language`, `overall_tone`, `key_insight`, `unexamined_fact_refs` | `SessionContext`, `SessionEvent`, `KeyMomentInput`, `SessionResult`, `ActiveSessionSummary`, **`Session`** |
+| `core/models/entity.py` | Entity Registry domain models: entity types, aliases, relations, stances, and link tables for facts and key moments | `Entity`, `EntityAlias`, `EntityRelation`, `EntityStance`, `EntityType`, `FactEntityLink`, `KeyMomentEntityLink`, `ResolutionMethod` |
+| `core/models/validation.py` | Observability models: validation findings (data quality) and divergence events (thinking vs message gap detection) | `ValidationFinding`, `FindingSeverity`, `FindingType`, `DivergenceEvent`, `DivergenceSeverity`, `DivergenceType` |
+| `core/models/maintenance.py` | Maintenance queue models for background/cron jobs (salience decay, memory guardian) | `MaintenanceJob`, `JobName`, `JobStatus` |
 | `core/models/reflection.py` | Reflection processes, patterns, health assessment (Jahoda criteria), structured LLM/mock outputs (MODEL-01 / #146), **PostgreSQL reflections persistence** (E27) | `ReflectionLevel`, `PatternCandidate`, `PatternStatus`, `PatternType`, `ReflectionEvent`, `HealthAssessment`, `JahodaCriterion`, `CriterionAssessment`, `ReframingNoteOutput`, `PatternDetectionOutput`, `NarrativeUpdateOutput`, `HealthCriterionOutput`, **`ReflectionRecord`** |
 | `core/models/governance.py` | Governance decisions for core narrative mutations | `GovernanceDecision`, `GovernanceMode` |
 
@@ -34,7 +37,14 @@ All paths are absolute relative to the repository root.
 |------|---------|-----------|
 | `core/ports/memory_backend.py` | Factual memory interface | `FactualMemory` (ABC) |
 | `core/ports/clock.py` | Domain clock for reproducibility | `ClockPort` (Protocol) |
-| `core/ports/state_store.py` | Storage for experience/identity/narrative/eigenstate/key moments | `StateStore` (with `create_key_moment`, `list_key_moments`, `get_key_moment`), `ExperienceQuery`, `SessionExperienceQuery`, `ValuesTouchedQuery`, `DepthQuery`, `DateRangeQuery`, `FactRefsContainsQuery` |
+| `core/ports/state_store.py` | Storage for experience/identity/narrative/eigenstate/key moments; **v2**: extended with sessions API (`create_session`, `get_session`, `update_session`, `list_recent_sessions`) and standalone KeyMoment API (`store_key_moment` idempotent upsert, `mark_moment_accessed`, `update_moment_structured_markers`, `find_moments_by_entity`) | `StateStore` (with `create_key_moment`, `store_key_moment`, `list_key_moments`, `get_key_moment`, `mark_moment_accessed`, `update_moment_structured_markers`, `find_moments_by_entity`, `create_session`, `get_session`, `update_session`, `list_recent_sessions`), `ExperienceQuery`, `SessionExperienceQuery`, `ValuesTouchedQuery`, `DepthQuery`, `DateRangeQuery`, `FactRefsContainsQuery` |
+| `core/ports/entity_registry.py` | Entity Registry — resolve-or-create pattern with L1/L2/L3 tiers (alias exact → cosine similarity → new entity) | `EntityRegistry` (ABC): `resolve_or_create`, `get_entity`, `find_by_name`, `add_alias`, `merge_entities`, `update_last_seen`, `list_entities`, `flag_disambiguation` |
+| `core/ports/linguistic.py` | Linguistic analysis: NER + zero-shot classification at user-message (U), agent-message (A), and key-moment (K) analysis points | `LinguisticAnalyzer` (ABC), `AmbientAnchor`, `DetectedEntity`, `UserMessageAnalysis`, `AgentMessageAnalysis`, `KeyMomentAnalysis` |
+| `core/ports/memory_reranker.py` | Cross-encoder reranker for RAG candidates (ambient memory surfacing) | `MemoryReranker` (ABC): `rerank(query, candidates, top_n)`, `SurfacedMemory` |
+| `core/ports/entity_stance.py` | Agent's stance toward known entities — supersession chain | `EntityStanceStore` (ABC): `get_current_stance`, `get_stance_history`, `write_stance`, `supersede_stance`, `list_active_stances` |
+| `core/ports/maintenance_queue.py` | DB-backed cron queue for background maintenance jobs; SKIP LOCKED semantics, run_key idempotency | `MaintenanceQueue` (ABC): `enqueue`, `claim_batch`, `mark_done`, `mark_failed`, `mark_skipped`, `list_jobs` |
+| `core/ports/salience_decay.py` | Salience decay service — exponential decay with λ by emotional depth | `SalienceDecayService` (ABC): `decay_pass`, `mark_accessed`, `calculate_lambda` |
+| `core/ports/memory_guardian.py` | Memory quality scanning and finding persistence | `MemoryGuardian` (ABC): `scan_orphan_entities`, `scan_merge_candidates`, `scan_stale_moments`, `scan_embedding_gaps`, `write_finding`, `get_unresolved`, `resolve_finding` |
 | `core/ports/reflection.py` | Reflection Engine dependencies; `ReflectionModel` returns structured DTOs (#146) | `ExperienceRepository`, `IdentityRepository`, `NarrativeRepository`, `ReflectionModel`, `PatternStore`, `ReflectionEventStore`, `HealthAssessmentStore`, `ReflectionEventPersistenceObserver`, `NarrativeWriteAuditPort` |
 | `core/ports/embedding.py` (E24.6) | Text embedding generation for semantic similarity | `EmbeddingPort` (Protocol) |
 | `core/ports/memory_middleware.py` (E24) | Memory surfacing context wrapping | `MemoryMiddlewarePort` (Protocol), `MemoryContext` |
@@ -54,17 +64,21 @@ All paths are absolute relative to the repository root.
 | `core/services/principle_advisor.py` | Distinguish habit vs principle; advise on principle revision | `PrincipleRevisionAdvisor` |
 | `core/services/conflict_detector.py` (E24.5) | Detect contradictions between active facts; produces small cognitive tension signals | `ConflictDetector`, `FactConflict` |
 | `core/services/emotional_echo.py` (E24.7) | Build historical emotional context from recent experiences (recency × intensity) | `EmotionalEcho`, `EchoItem` |
-| `core/services/passive_memory_injector.py` (E24.6, E24.8) | Surface relevant facts/experiences via embedding similarity + 1-hop graph expansion | `PassiveMemoryInjector`, `SurfacedMemory` |
+| `core/services/passive_memory_injector.py` (E24.6, E24.8) | Surface relevant facts/experiences via embedding similarity + 1-hop graph expansion; **v2**: ambient mode with optional `LinguisticAnalyzer` + `MemoryReranker` — entity anchors + parallel queries + reranking when both configured; falls back to dense search otherwise; `surface_key_moments_for_context()` using standalone key moments | `PassiveMemoryInjector`, `SurfacedMemory` |
+| `core/services/key_moment_builder.py` | Build `KeyMoment` from `KeyMomentInput` + linguistic analysis + entity links | `KeyMomentBuilder` |
+| `core/services/divergence_detector.py` | Rules-based divergence detection between agent thinking and message layers | `DivergenceDetector` |
+| `core/services/salience_decay_service.py` | Exponential salience decay with λ parameterised by `EmotionalDepth`; `InMemorySalienceDecayService` for unit tests | `InMemorySalienceDecayService` |
+| `core/services/maintenance_worker.py` | Claim and dispatch maintenance jobs (salience decay, memory guardian scan) from `MaintenanceQueue` | `MaintenanceWorker` |
 | `core/services/session_working_memory.py` (E24.9) | In-session LRU cache of surfaced facts/experiences to avoid duplicate surfacing | `SessionWorkingMemory`, `CachedItem` |
 
 ### 1.4a. Affect detector (`src/atman/affect/`, E21)
 
 | File | Purpose | Public surface |
 |------|---------|----------------|
-| `affect/models.py` | DTOs for metrics, detector output, agent self-report | `AffectMetrics`, `AffectRecord`, `AgentMemoryReport` (optional `emotional_depth` → `KeyMoment.how_i_felt.depth`), `TriggerReason` |
+| `affect/models.py` | DTOs for metrics, detector output, agent self-report | `AffectMetrics`, `AffectRecord`, `AgentMemoryReport` (optional `emotional_depth` → `KeyMoment.how_i_felt.depth`), `TriggerReason` (incl. **`STRUCTURAL_MARKER`** for linguistic boundary events) |
 | `affect/metrics.py` | Eight behavioural floats + sincerity heuristic over tokens | `nrc_emotion_score`, density helpers, `min_length_gate`, `sincerity_score`, … |
 | `affect/baseline.py` | Rolling z-scores + `{workspace}/affect_baseline.jsonl` persistence | `RollingBaseline` |
-| `affect/detector.py` | Language sniff, trigger logic (anomaly / random sample / divergence / self-report), `KeyMoment` writes via callback | `AffectDetector`, `AffectDetectorConfig`; CLI `python -m atman.affect.detector --demo` |
+| `affect/detector.py` | Language sniff, trigger logic (anomaly / random sample / divergence / self-report), `KeyMoment` writes via callback; **v2**: optional `LinguisticAnalyzer` DI for structured markers enrichment | `AffectDetector`, `AffectDetectorConfig`; CLI `python -m atman.affect.detector --demo` |
 | `affect/refusal_detector.py` | Text-only value refusal detection (no LLM required) — three layers: (1) morphology via pymorphy3 (refusal verbs + negated modals), (2) NRC emotion semantic context (disgust/anger density for moral framing), (3) capability exclusion (technical inability vs ethical stance); optional LLM fallback for uncertain zone | `is_value_refusal`, `score_refusal`, `RefusalDetectorConfig`, `RefusalScore` |
 | `affect/emolex/` | Vendored NRC Emotion Lexicon (ru/en) + pymorphy3 lemmatisation | `emotion_score`, `tokenize`, JSON lexicons |
 
@@ -93,8 +107,15 @@ All paths are absolute relative to the repository root.
 | `adapters/memory/in_memory_usage_log.py` (`InMemoryUsageLog`) | `MemoryUsageLog` | in-memory append-only list with filtering by item/usage_type/time (no eviction) |
 | `adapters/storage/in_memory_experience_store.py` (`InMemoryExperienceStore`) | `StateStore` | in-memory (partial: experience only; KeyMoment/Identity/Narrative ops raise `NotImplementedError`) |
 | `adapters/storage/jsonl_experience_store.py` (`JsonlExperienceStore`) | `StateStore` | JSONL for experience (partial: experience only; KeyMoment/Identity/Narrative ops raise `NotImplementedError`) |
-| `adapters/storage/in_memory_state_store.py` (`InMemoryStateStore`) | `StateStore` | full in-memory implementation with deep copies (experience + identity + narrative + eigenstate + key moments dict) |
-| `adapters/storage/file_state_store.py` (`FileStateStore`) | `StateStore` | JSON files (experience + identity + narrative + eigenstate) + `key_moments.jsonl` (append-only JSONL with corruption recovery) |
+| `adapters/storage/in_memory_state_store.py` (`InMemoryStateStore`) | `StateStore` | full in-memory implementation with deep copies; **v2**: sessions dict + standalone key_moments + `store_key_moment` (idempotent upsert), `mark_moment_accessed`, `update_moment_structured_markers`, `create_session`/`get_session`/`update_session`/`list_recent_sessions` |
+| `adapters/storage/file_state_store.py` (`FileStateStore`) | `StateStore` | JSON files (experience + identity + narrative + eigenstate) + `key_moments.jsonl`; **v2**: `list_key_moments(session_id)` filtering support |
+| `adapters/memory/in_memory_entity_registry.py` (`InMemoryEntityRegistry`) | `EntityRegistry` | L1 (alias exact, case-insensitive) + L2 (pure-Python cosine ≥ 0.85) + L3 (create new); thread-safe with Lock; `clear()`/`count()` test helpers |
+| `adapters/memory/in_memory_entity_stance.py` (`InMemoryEntityStanceStore`) | `EntityStanceStore` | supersession chain; thread-safe |
+| `adapters/memory/noop_reranker.py` (`NoOpReranker`) | `MemoryReranker` | passthrough — returns candidates sorted by existing score; deploy without reranker model |
+| `adapters/linguistic/noop_adapter.py` (`NoOpLinguisticAnalyzer`) | `LinguisticAnalyzer` | returns empty-but-valid analysis objects; default when `LINGUISTIC_ENABLED=false` |
+| `adapters/linguistic/gliner_minilm_adapter.py` (`GLiNERPlusMiniLMAdapter`) | `LinguisticAnalyzer` | GLiNER (`urchade/gliner_multi-v2.1`) + MiniLM NLI (`MoritzLaurer/multilingual-MiniLMv2-L6-mnli-xnli`); lazy model load; guarded imports; Russian divergence heuristics; requires `pip install -e ".[linguistic]"` |
+| `adapters/maintenance/in_memory_queue.py` (`InMemoryMaintenanceQueue`) | `MaintenanceQueue` | run_key idempotency; atomic `claim_batch`; all status transitions |
+| `adapters/reflection_compat/experience_view_repository.py` (`ExperienceViewRepository`) | `ExperienceRepository` (Reflection compat) | maps `experience_id ≡ session_id`; builds virtual `SessionExperience` from `Session` + `list[KeyMoment]`; Reflection Engine unchanged via this adapter |
 | `adapters/storage/in_memory_reflection_store.py` | `PatternStore`, `ReflectionEventStore`, `HealthAssessmentStore` | reflection output stores |
 || **`adapters/state/postgres_state_store.py`** (`PostgresStateStore`) | **`StateStore`** | **PostgreSQL implementation** (KeyMoment operations only, psycopg3; other StateStore methods raise `NotImplementedError`) |
 | **`adapters/storage/in_memory_postgres_reflection_store.py`** (`InMemoryReflectionStore`) | **`ReflectionStore`** | **E27**: in-memory with BIGSERIAL + RLS simulation |
@@ -123,6 +144,7 @@ All paths are absolute relative to the repository root.
 |------|----------|---------|
 | `cli.py` | CLI | Factual memory REPL |
 | `cli_experience.py` | CLI | Experience Store |
+| `cli_maintenance.py` | CLI | Maintenance queue: `run` (claim+dispatch batch), `list` (show jobs), `enqueue` (schedule job); subcommands `run`, `list`, `enqueue`; entry point `atman-maintenance` |
 | `cli_identity.py` | CLI | Identity Store |
 | `cli_reflection.py` | CLI | Reflection Engine (micro/daily/deep) |
 | `term.py` | utility | Rich output for CLI/demos |
@@ -168,6 +190,7 @@ All paths are absolute relative to the repository root.
 | `eval/migrations/alembic.ini`, `eval/migrations/env.py` | eval storage | Alembic configuration for the isolated PostgreSQL `eval` schema |
 | `eval/migrations/versions/0010_*` ... `0040_*` | eval storage | idempotent eval schema, benchmark run tables, supporting tables, and trend materialized view |
 | `scripts/eval/partition_manager.py` | operations | creates future partitions, detaches old partitions, and reports `eval.benchmark_runs` partition status |
+| `scripts/eval/eval_linguistic_quality.py` | offline eval | NER + classification quality eval: 23 NER examples (Russian persons/orgs/places/topics/health), 5 classification examples; computes precision/recall/F1 and accuracy; `--adapter gliner|noop`, `--verbose`; exit 1 on FAIL; target: NER F1 ≥ 0.65, classification accuracy ≥ 0.70 |
 | `src/demo_eval_runner.py`, `docs/features/eval-runner/README.md`, `docs/features/eval-runner/README-ru.md` | demo/docs | reproducible E1 runner walkthrough + bilingual usage docs |
 
 ---
@@ -191,19 +214,28 @@ Connections between two or more parts. These are seams that may break independen
 | `PrincipleRevisionAdvisor` ↔ `PatternCandidate` + `Identity` | `core/services/principle_advisor.py` | analyzes patterns in identity context |
 | `ConflictDetector` ↔ `FactualMemory` | `core/services/conflict_detector.py` → `core/ports/memory_backend.py` | DI; lightweight contradiction scan over ACTIVE candidates returned by `search()` |
 | `EmotionalEcho` ↔ `StateStore` | `core/services/emotional_echo.py` → `core/ports/state_store.py` | DI; `lookback_days` window via `search_experiences` |
-| `PassiveMemoryInjector` ↔ `EmbeddingPort` + `FactualMemory` + `StateStore` | `core/services/passive_memory_injector.py` → `core/ports/embedding.py`, `core/ports/memory_backend.py`, `core/ports/state_store.py` | DI; top-K similarity + 1-hop associative graph expansion; optional `SessionWorkingMemory` cache |
+| `PassiveMemoryInjector` ↔ `EmbeddingPort` + `FactualMemory` + `StateStore` + optional `LinguisticAnalyzer` + `MemoryReranker` | `core/services/passive_memory_injector.py` → `core/ports/embedding.py`, `core/ports/memory_backend.py`, `core/ports/state_store.py`, `core/ports/linguistic.py`, `core/ports/memory_reranker.py` | DI; top-K similarity + 1-hop expansion (dense mode); ambient mode: entity anchors + parallel queries + reranking when LA+reranker configured; optional `SessionWorkingMemory` cache |
+| `MaintenanceWorker` ↔ `MaintenanceQueue` + `SalienceDecayService` + `MemoryGuardian` | `core/services/maintenance_worker.py` → `core/ports/maintenance_queue.py`, `core/ports/salience_decay.py`, `core/ports/memory_guardian.py` | DI; `run_once()` claims batch and dispatches jobs |
+| `DivergenceDetector` ↔ `AgentMessageAnalysis` | `core/services/divergence_detector.py` | stateless; maps signal labels from analysis to `DivergenceEvent` list |
+| `KeyMomentBuilder` ↔ `KeyMomentInput` + `KeyMomentAnalysis` | `core/services/key_moment_builder.py` | stateless; populates `structured_markers` from analysis |
 
 ### 2.2. Adapter ↔ port
 
 | Adapter | Implements |
 |---------|------------|
 | `InMemoryBackend`, `FileBackend`, `PostgresFactualMemory` | `FactualMemory` |
-| `InMemoryExperienceStore`, `JsonlExperienceStore`, `FileStateStore`, `PostgresStateStore` | `StateStore` |
+| `InMemoryExperienceStore`, `JsonlExperienceStore`, `FileStateStore`, `InMemoryStateStore`, `PostgresStateStore` | `StateStore` |
 | `MockReflectionModel`, **`OpenAIReflectionModel`** | `ReflectionModel` |
 | `InMemoryPatternStore`, `InMemoryReflectionEventStore`, `InMemoryHealthAssessmentStore` | corresponding ports |
 | `MockEmbeddingAdapter`, `BM25EmbeddingAdapter`, `OllamaEmbeddingAdapter`, `FlagEmbeddingAdapter` | `EmbeddingPort` |
 | `InMemoryUsageLog` | `MemoryUsageLog` |
 | `InMemoryReflectionStore` (`adapters/storage/in_memory_postgres_reflection_store.py`) | `ReflectionStore` (E27) |
+| `InMemoryEntityRegistry` | `EntityRegistry` |
+| `InMemoryEntityStanceStore` | `EntityStanceStore` |
+| `NoOpLinguisticAnalyzer`, `GLiNERPlusMiniLMAdapter` | `LinguisticAnalyzer` |
+| `NoOpReranker` | `MemoryReranker` |
+| `InMemoryMaintenanceQueue` | `MaintenanceQueue` |
+| `ExperienceViewRepository` (`adapters/reflection_compat/`) | `ExperienceRepository` (Reflection compat bridge) |
 
 ### 2.2a. Agent adapter ↔ services
 

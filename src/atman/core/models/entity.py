@@ -150,9 +150,7 @@ class KeyMomentEntityLink(BaseModel):
     key_moment_id: UUID
     entity_id: UUID
     agent_id: UUID
-    involvement: str = Field(
-        description="primary_subject | present | mentioned | evoked"
-    )
+    involvement: str = Field(description="primary_subject | present | mentioned | evoked")
     valence_toward_entity: float | None = Field(default=None, ge=-1.0, le=1.0)
     intensity_toward_entity: float | None = Field(default=None, ge=0.0, le=1.0)
 

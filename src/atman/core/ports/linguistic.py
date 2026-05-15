@@ -13,9 +13,7 @@ class AmbientAnchor(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     anchor_type: str = Field(
-        description=(
-            "person_ref | topic | location | time_ref | action | emotion_ref"
-        )
+        description=("person_ref | topic | location | time_ref | action | emotion_ref")
     )
     text: str
     entity_type: EntityType | None = None

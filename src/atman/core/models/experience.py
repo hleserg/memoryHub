@@ -442,7 +442,7 @@ class SessionExperience(BaseModel):
             raise ValueError("access_count cannot be negative")
         return v
 
-    def add_reframing_note(self, note: "ReframingNote") -> None:
+    def add_reframing_note(self, note: ReframingNote) -> None:
         """Append a reframing note. In v2 the view is read-only; persistence is via state_store."""
         self.reframing_notes.append(note)
 

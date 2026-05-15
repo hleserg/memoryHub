@@ -1,5 +1,5 @@
 """DivergenceDetector — rules-based divergence detection between thinking and message."""
-from datetime import UTC, datetime
+
 from uuid import UUID
 
 from atman.core.models.validation import DivergenceEvent, DivergenceSeverity, DivergenceType

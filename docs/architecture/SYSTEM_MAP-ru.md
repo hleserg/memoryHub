@@ -24,10 +24,13 @@
 | Файл | Назначение | Публичные классы |
 |------|------------|------------------|
 | `core/models/fact.py` | Верифицируемые факты и связи между ними | `FactRecord`, `Relation` |
-| `core/models/experience.py` | Прожитый опыт, ключевые моменты (с `id: UUID` для независимого хранения), переосмысление, метаданные завершения сессии (E22.7: `close_reason`, `restart_reason`, `user_language`) | `SessionExperience`, `KeyMoment`, `FeltSense`, `ContextHalo`, `ReframingNote`, `EmotionalDepth`, `ReframingNoteAppendResult` |
+| `core/models/experience.py` | Прожитый опыт, ключевые моменты (с `id: UUID` для независимого хранения), переосмысление, метаданные завершения сессии (E22.7: `close_reason`, `restart_reason`, `user_language`); **v2**: `KeyMoment` — самостоятельная запись с `session_id`, `salience`, `salience_at`, `last_accessed_at`, `access_count`, `importance`, `incomplete_coloring`, `recorded_by`, `identity_snapshot_id`, `structured_markers`, `structured_markers_version`, `schema_version="2.0.0"`; методы `mark_accessed()` и `calculate_current_salience()`; `SessionExperience` — read-only view для совместимости с Reflection | `SessionExperience`, `KeyMoment`, `FeltSense`, `ContextHalo`, `ReframingNote`, `EmotionalDepth`, `ReframingNoteAppendResult` |
 | `core/models/identity.py` | Самопредставление агента (ценности, привычки, принципы, цели, открытые вопросы) | `Identity`, `CoreValue`, `Habit`, `Principle`, `Goal`, `OpenQuestion`, `IdentitySnapshot`, `HelpfulnessLevel` |
 | `core/models/narrative.py` | Документ самонарратива (CORE/RECENT/THREADS) и собственное состояние | `NarrativeDocument`, `NarrativeLayer`, `NarrativeThread`, `Eigenstate` (`schema_version`, опциональный `identity_id`), `LayerType` |
-| `core/models/session.py` | Модели сессионного runtime: контекст, события, входящий key moment, результат, сводка активных | `SessionContext`, `SessionEvent`, `KeyMomentInput`, `SessionResult`, `ActiveSessionSummary` |
+| `core/models/session.py` | Модели сессионного runtime: контекст, события, входящий key moment, результат, сводка активных; **v2**: модель персистенса `Session` с `close_reason`, `agent_recap`, `restart_reason`, `user_language`, `overall_tone`, `key_insight`, `unexamined_fact_refs` | `SessionContext`, `SessionEvent`, `KeyMomentInput`, `SessionResult`, `ActiveSessionSummary`, **`Session`** |
+| `core/models/entity.py` | Доменные модели Entity Registry: типы сущностей, псевдонимы, отношения, позиции и таблицы связей для фактов и ключевых моментов | `Entity`, `EntityAlias`, `EntityRelation`, `EntityStance`, `EntityType`, `FactEntityLink`, `KeyMomentEntityLink`, `ResolutionMethod` |
+| `core/models/validation.py` | Модели наблюдаемости: находки валидации (качество данных) и события расхождения (анализ разрыва thinking↔сообщение) | `ValidationFinding`, `FindingSeverity`, `FindingType`, `DivergenceEvent`, `DivergenceSeverity`, `DivergenceType` |
+| `core/models/maintenance.py` | Модели очереди технического обслуживания для фоновых/cron задач (salience decay, memory guardian) | `MaintenanceJob`, `JobName`, `JobStatus` |
 | `core/models/reflection.py` | Процесс рефлексии, паттерны, оценка здоровья (критерии Йоды), структурированные ответы модели (MODEL-01 / #146), **персистентность рефлексий в PostgreSQL** (E27) | `ReflectionLevel`, `PatternCandidate`, `PatternStatus`, `PatternType`, `ReflectionEvent`, `HealthAssessment`, `JahodaCriterion`, `CriterionAssessment`, `ReframingNoteOutput`, `PatternDetectionOutput`, `NarrativeUpdateOutput`, `HealthCriterionOutput`, **`ReflectionRecord`** |
 | `core/models/governance.py` | Решения governance для мутаций ядра нарратива | `GovernanceDecision`, `GovernanceMode` |
 
@@ -37,7 +40,14 @@
 |------|------------|-----------|
 | `core/ports/memory_backend.py` | Интерфейс факт-памяти | `FactualMemory` (ABC) |
 | `core/ports/clock.py` | Доменные часы для воспроизводимости | `ClockPort` (Protocol) |
-| `core/ports/state_store.py` | Хранилище опыта/identity/нарратива/eigenstate/ключевых моментов | `StateStore` (с `create_key_moment`, `list_key_moments`, `get_key_moment`), `ExperienceQuery`, `SessionExperienceQuery`, `ValuesTouchedQuery`, `DepthQuery`, `DateRangeQuery`, `FactRefsContainsQuery` |
+| `core/ports/state_store.py` | Хранилище опыта/identity/нарратива/eigenstate/ключевых моментов; **v2**: расширен sessions API (`create_session`, `get_session`, `update_session`, `list_recent_sessions`) и API самостоятельных KeyMoment (`store_key_moment` — идемпотентный upsert, `mark_moment_accessed`, `update_moment_structured_markers`, `find_moments_by_entity`) | `StateStore` (с `create_key_moment`, `store_key_moment`, `list_key_moments`, `get_key_moment`, `mark_moment_accessed`, `update_moment_structured_markers`, `find_moments_by_entity`, `create_session`, `get_session`, `update_session`, `list_recent_sessions`), `ExperienceQuery`, `SessionExperienceQuery`, `ValuesTouchedQuery`, `DepthQuery`, `DateRangeQuery`, `FactRefsContainsQuery` |
+| `core/ports/entity_registry.py` | Entity Registry — шаблон resolve-or-create с уровнями L1/L2/L3 (точный псевдоним → косинусное сходство → новая сущность) | `EntityRegistry` (ABC): `resolve_or_create`, `get_entity`, `find_by_name`, `add_alias`, `merge_entities`, `update_last_seen`, `list_entities`, `flag_disambiguation` |
+| `core/ports/linguistic.py` | Лингвистический анализ: NER + zero-shot классификация в точках U (сообщение пользователя), A (сообщение агента), K (ключевой момент) | `LinguisticAnalyzer` (ABC), `AmbientAnchor`, `DetectedEntity`, `UserMessageAnalysis`, `AgentMessageAnalysis`, `KeyMomentAnalysis` |
+| `core/ports/memory_reranker.py` | Cross-encoder реранкер для RAG кандидатов (ambient memory surfacing) | `MemoryReranker` (ABC): `rerank(query, candidates, top_n)`, `SurfacedMemory` |
+| `core/ports/entity_stance.py` | Позиция агента по известным сущностям — цепочка замещений | `EntityStanceStore` (ABC): `get_current_stance`, `get_stance_history`, `write_stance`, `supersede_stance`, `list_active_stances` |
+| `core/ports/maintenance_queue.py` | DB-очередь cron-задач технического обслуживания; семантика SKIP LOCKED, идемпотентность через run_key | `MaintenanceQueue` (ABC): `enqueue`, `claim_batch`, `mark_done`, `mark_failed`, `mark_skipped`, `list_jobs` |
+| `core/ports/salience_decay.py` | Сервис затухания salience — экспоненциальное затухание с λ по эмоциональной глубине | `SalienceDecayService` (ABC): `decay_pass`, `mark_accessed`, `calculate_lambda` |
+| `core/ports/memory_guardian.py` | Сканирование качества памяти и персистенс находок | `MemoryGuardian` (ABC): `scan_orphan_entities`, `scan_merge_candidates`, `scan_stale_moments`, `scan_embedding_gaps`, `write_finding`, `get_unresolved`, `resolve_finding` |
 | `core/ports/reflection.py` | Зависимости Reflection Engine; `ReflectionModel` возвращает DTO (#146) | `ExperienceRepository`, `IdentityRepository`, `NarrativeRepository`, `ReflectionModel`, `PatternStore`, `ReflectionEventStore`, `HealthAssessmentStore`, `ReflectionEventPersistenceObserver`, `NarrativeWriteAuditPort` |
 | **`core/ports/reflection_store.py`** | **E27**: Интерфейс таблицы PostgreSQL `reflections` | `ReflectionStore` (ABC): `add`, `get`, `list_by_session`, `list_recent`, `list_by_level`, `list_by_experience` |
 | `core/ports/embedding.py` | Интерфейс эмбеддингов для семантического поиска | `EmbeddingPort` (ABC) — `embed()`, `embed_batch()`, `dimension()`, `model_name()` |
@@ -56,7 +66,11 @@
 | `core/services/reflection_service.py` | Три уровня рефлексии: micro, daily, deep | `MicroReflectionService`, `DailyReflectionService`, `DeepReflectionService` |
 | `core/services/principle_advisor.py` | Различение привычки и принципа; советник пересмотра принципов | `PrincipleRevisionAdvisor` |
 | `core/services/session_working_memory.py` | In-session кэш для предотвращения повторных поисков | `SessionWorkingMemory`, `CachedItem` |
-| `core/services/passive_memory_injector.py` | Автоматический surfacing через embedding similarity + ассоциативный expand | `PassiveMemoryInjector`, `SurfacedMemory` |
+| `core/services/passive_memory_injector.py` | Автоматический surfacing через embedding similarity + ассоциативный expand; **v2**: ambient-режим с опциональными `LinguisticAnalyzer` + `MemoryReranker` — entity anchors + параллельные запросы + реранкинг, если оба сконфигурированы; без них — старый dense-поиск; `surface_key_moments_for_context()` через самостоятельные key moments | `PassiveMemoryInjector`, `SurfacedMemory` |
+| `core/services/key_moment_builder.py` | Построение `KeyMoment` из `KeyMomentInput` + лингвистический анализ + entity links | `KeyMomentBuilder` |
+| `core/services/divergence_detector.py` | Детекция расхождения thinking↔сообщение на основе правил | `DivergenceDetector` |
+| `core/services/salience_decay_service.py` | Экспоненциальное затухание salience с λ по `EmotionalDepth`; `InMemorySalienceDecayService` для unit-тестов | `InMemorySalienceDecayService` |
+| `core/services/maintenance_worker.py` | Забор и диспетчеризация задач обслуживания (salience decay, memory guardian scan) из `MaintenanceQueue` | `MaintenanceWorker` |
 | `core/services/emotional_echo.py` | Historical emotional context builder | `EmotionalEcho`, `EchoItem` |
 | `core/services/conflict_detector.py` | Обнаружение противоречий между активными фактами | `ConflictDetector`, `FactConflict` |
 
@@ -76,10 +90,10 @@
 
 | Файл | Назначение | Публичный API |
 |------|------------|---------------|
-| `affect/models.py` | DTO метрик, результата детектора, self-report агента | `AffectMetrics`, `AffectRecord`, `AgentMemoryReport` (опц. `emotional_depth` → глубина `KeyMoment.how_i_felt`), `TriggerReason` |
+| `affect/models.py` | DTO метрик, результата детектора, self-report агента | `AffectMetrics`, `AffectRecord`, `AgentMemoryReport` (опц. `emotional_depth` → глубина `KeyMoment.how_i_felt`), `TriggerReason` (включая **`STRUCTURAL_MARKER`** для лингвистических граничных событий) |
 | `affect/metrics.py` | Восемь поведенческих метрик + эвристика искренности | функции плотностей и `nrc_emotion_score`, `min_length_gate`, `sincerity_score`, … |
 | `affect/baseline.py` | Скользящие z-score + JSONL `{workspace}/affect_baseline.jsonl` | `RollingBaseline` |
-| `affect/detector.py` | Определение языка, триггеры (аномалия / random sample / расхождение thinking↔сообщение / self-report), запись `KeyMoment` через callback | `AffectDetector`, `AffectDetectorConfig`; CLI `python -m atman.affect.detector --demo` |
+| `affect/detector.py` | Определение языка, триггеры (аномалия / random sample / расхождение thinking↔сообщение / self-report), запись `KeyMoment` через callback; **v2**: опциональный `LinguisticAnalyzer` через DI для обогащения structured markers | `AffectDetector`, `AffectDetectorConfig`; CLI `python -m atman.affect.detector --demo` |
 | `affect/refusal_detector.py` | Текстовая детекция ценностных отказов (LLM не требуется) — три слоя: (1) морфология через pymorphy3 (глаголы отказа + отрицание+модальность), (2) семантический контекст NRC эмоций (плотность disgust/anger для морального фрейма), (3) исключение технической неспособности (техническая неспособность vs этическая позиция); опциональный LLM-fallback для неопределённой зоны | `is_value_refusal`, `score_refusal`, `RefusalDetectorConfig`, `RefusalScore` |
 | `affect/emolex/` | Вендоренный NRC Emotion Lexicon (ru/en) + pymorphy3 | `emotion_score`, `tokenize`, JSON-словари |
 
@@ -97,8 +111,15 @@
 | `adapters/memory/in_memory_usage_log.py` (`InMemoryUsageLog`) | `MemoryUsageLog` | in-memory трекинг использования |
 | `adapters/storage/in_memory_experience_store.py` (`InMemoryExperienceStore`) | `StateStore` | в памяти (частичная: только опыт; операции KeyMoment/Identity/Narrative выбрасывают `NotImplementedError`) |
 | `adapters/storage/jsonl_experience_store.py` (`JsonlExperienceStore`) | `StateStore` | JSONL для опыта (частичная: только опыт; операции KeyMoment/Identity/Narrative выбрасывают `NotImplementedError`) |
-| `adapters/storage/in_memory_state_store.py` (`InMemoryStateStore`) | `StateStore` | полная реализация в памяти с deep copies (опыт + identity + нарратив + eigenstate + словарь ключевых моментов) |
-| `adapters/storage/file_state_store.py` (`FileStateStore`) | `StateStore` | JSON-файлы (опыт + identity + нарратив + eigenstate) + `key_moments.jsonl` (append-only JSONL с восстановлением после повреждений) |
+| `adapters/storage/in_memory_state_store.py` (`InMemoryStateStore`) | `StateStore` | полная реализация в памяти; **v2**: словарь сессий + самостоятельные key moments + `store_key_moment` (идемпотентный upsert), `mark_moment_accessed`, `update_moment_structured_markers`, сессионные методы |
+| `adapters/storage/file_state_store.py` (`FileStateStore`) | `StateStore` | JSON-файлы (опыт + identity + нарратив + eigenstate) + `key_moments.jsonl`; **v2**: фильтрация по `session_id` в `list_key_moments` |
+| `adapters/memory/in_memory_entity_registry.py` (`InMemoryEntityRegistry`) | `EntityRegistry` | L1 (точный псевдоним, регистронезависимо) + L2 (косинус ≥ 0.85) + L3 (создание); потокобезопасный; хелперы `clear()`/`count()` для тестов |
+| `adapters/memory/in_memory_entity_stance.py` (`InMemoryEntityStanceStore`) | `EntityStanceStore` | цепочка замещений; потокобезопасный |
+| `adapters/memory/noop_reranker.py` (`NoOpReranker`) | `MemoryReranker` | passthrough — возвращает кандидатов с сортировкой по score; deploy без модели реранкера |
+| `adapters/linguistic/noop_adapter.py` (`NoOpLinguisticAnalyzer`) | `LinguisticAnalyzer` | возвращает пустые, но корректные объекты анализа; default при `LINGUISTIC_ENABLED=false` |
+| `adapters/linguistic/gliner_minilm_adapter.py` (`GLiNERPlusMiniLMAdapter`) | `LinguisticAnalyzer` | GLiNER (`urchade/gliner_multi-v2.1`) + MiniLM NLI; ленивая загрузка; guarded imports; эвристики расхождения для русского языка; требует `pip install -e ".[linguistic]"` |
+| `adapters/maintenance/in_memory_queue.py` (`InMemoryMaintenanceQueue`) | `MaintenanceQueue` | идемпотентность через run_key; атомарный `claim_batch`; все статусные переходы |
+| `adapters/reflection_compat/experience_view_repository.py` (`ExperienceViewRepository`) | `ExperienceRepository` (compat мост для Reflection) | `experience_id ≡ session_id`; строит виртуальный `SessionExperience` из `Session` + `list[KeyMoment]`; Reflection Engine без изменений |
 | `adapters/storage/in_memory_reflection_store.py` | `PatternStore`, `ReflectionEventStore`, `HealthAssessmentStore` | хранилища выводов рефлексии |
 || **`adapters/state/postgres_state_store.py`** (`PostgresStateStore`) | **`StateStore`** | **Реализация PostgreSQL** (только операции KeyMoment, psycopg3; другие методы StateStore выбрасывают `NotImplementedError`) |
 | **`adapters/storage/in_memory_postgres_reflection_store.py`** (`InMemoryReflectionStore`) | **`ReflectionStore`** | **E27**: в памяти с симуляцией BIGSERIAL + RLS |
@@ -127,6 +148,7 @@
 |------|-----------|------------|
 | `cli.py` | CLI | REPL факт-памяти |
 | `cli_experience.py` | CLI | Experience Store |
+| `cli_maintenance.py` | CLI | Очередь обслуживания: `run` (забор+диспетчеризация batch), `list` (просмотр задач), `enqueue` (планирование задачи); entry point `atman-maintenance` |
 | `cli_identity.py` | CLI | Identity Store |
 | `cli_reflection.py` | CLI | Reflection Engine (micro/daily/deep) |
 | `term.py` | utility | Rich-вывод для CLI/демо |
@@ -172,6 +194,7 @@
 | `eval/migrations/alembic.ini`, `eval/migrations/env.py` | eval storage | конфигурация Alembic для изолированной PostgreSQL-схемы `eval` |
 | `eval/migrations/versions/0010_*` ... `0040_*` | eval storage | идемпотентная схема eval, таблицы benchmark run, supporting tables и materialized view трендов |
 | `scripts/eval/partition_manager.py` | операции | создаёт будущие partitions, отсоединяет старые partitions и показывает статус partitions `eval.benchmark_runs` |
+| `scripts/eval/eval_linguistic_quality.py` | offline eval | качество NER + классификации: 23 NER-примера (персоны/орг/место/тема/здоровье на русском), 5 примеров классификации; вычисляет precision/recall/F1 и accuracy; `--adapter gliner|noop`, `--verbose`; exit 1 при FAIL; цель: NER F1 ≥ 0.65, accuracy ≥ 0.70 |
 | `src/demo_eval_runner.py`, `docs/features/eval-runner/README.md`, `docs/features/eval-runner/README-ru.md` | demo/docs | воспроизводимый walkthrough E1 runner + двуязычная документация |
 
 ---
@@ -199,12 +222,18 @@
 | Адаптер | Реализует |
 |---------|-----------|
 | `InMemoryBackend`, `FileBackend`, `PostgresFactualMemory` | `FactualMemory` |
-| `InMemoryExperienceStore`, `JsonlExperienceStore`, `FileStateStore`, `PostgresStateStore` | `StateStore` |
+| `InMemoryExperienceStore`, `JsonlExperienceStore`, `FileStateStore`, `InMemoryStateStore`, `PostgresStateStore` | `StateStore` |
 | `MockReflectionModel`, **`OpenAIReflectionModel`** | `ReflectionModel` |
 | `InMemoryPatternStore`, `InMemoryReflectionEventStore`, `InMemoryHealthAssessmentStore` | соответствующие порты |
 | **`InMemoryReflectionStore`** | **`ReflectionStore`** (E27) |
 | `MockEmbeddingAdapter`, `BM25EmbeddingAdapter`, `OllamaEmbeddingAdapter`, `FlagEmbeddingAdapter` | `EmbeddingPort` |
 | `InMemoryUsageLog` | `MemoryUsageLog` |
+| `InMemoryEntityRegistry` | `EntityRegistry` |
+| `InMemoryEntityStanceStore` | `EntityStanceStore` |
+| `NoOpLinguisticAnalyzer`, `GLiNERPlusMiniLMAdapter` | `LinguisticAnalyzer` |
+| `NoOpReranker` | `MemoryReranker` |
+| `InMemoryMaintenanceQueue` | `MaintenanceQueue` |
+| `ExperienceViewRepository` (`adapters/reflection_compat/`) | `ExperienceRepository` (compat мост для Reflection) |
 
 ### 2.2a. Agent adapter ↔ сервисы
 

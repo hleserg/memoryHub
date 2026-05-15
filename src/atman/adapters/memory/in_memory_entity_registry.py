@@ -30,7 +30,7 @@ class InMemoryEntityRegistry(EntityRegistry):
 
     @staticmethod
     def _cosine(a: list[float], b: list[float]) -> float:
-        dot = sum(x * y for x, y in zip(a, b))
+        dot = sum(x * y for x, y in zip(a, b, strict=False))
         na = math.sqrt(sum(x * x for x in a))
         nb = math.sqrt(sum(x * x for x in b))
         return dot / (na * nb) if na and nb else 0.0
@@ -282,8 +282,7 @@ class InMemoryEntityRegistry(EntityRegistry):
             results = [
                 e
                 for e in self._entities.values()
-                if e.agent_id == agent_id
-                and (entity_type is None or e.entity_type == entity_type)
+                if e.agent_id == agent_id and (entity_type is None or e.entity_type == entity_type)
             ]
         results.sort(key=lambda e: e.last_seen_at, reverse=True)
         return results[:limit]

@@ -396,10 +396,10 @@ class StateStore(ABC):
         """Store a single key moment (standalone, v2 API). Delegates to create_key_moment."""
         return self.create_key_moment(moment)
 
-    def mark_moment_accessed(self, moment_id: UUID) -> None:
+    def mark_moment_accessed(self, moment_id: UUID) -> None:  # noqa: B027
         """Update last_accessed_at and increment access_count for a key moment."""
 
-    def update_moment_structured_markers(
+    def update_moment_structured_markers(  # noqa: B027
         self, moment_id: UUID, markers: dict, version: str
     ) -> None:
         """Update structured_markers and structured_markers_version for a key moment."""

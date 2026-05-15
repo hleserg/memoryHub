@@ -15,11 +15,11 @@ import sys
 import time
 from uuid import UUID
 
+from atman.adapters.maintenance.in_memory_queue import InMemoryMaintenanceQueue
+from atman.adapters.storage.in_memory_state_store import InMemoryStateStore
 from atman.core.models.maintenance import JobName, JobStatus
 from atman.core.services.maintenance_worker import MaintenanceWorker
-from atman.adapters.maintenance.in_memory_queue import InMemoryMaintenanceQueue
 from atman.core.services.salience_decay_service import InMemorySalienceDecayService
-from atman.adapters.storage.in_memory_state_store import InMemoryStateStore
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 _LOG = logging.getLogger(__name__)
@@ -32,8 +32,7 @@ def cmd_run(args: argparse.Namespace) -> int:
     worker = MaintenanceWorker(queue=queue, salience_decay=decay)
 
     _LOG.warning(
-        "Using in-memory queue — no jobs persisted. "
-        "Use PostgresMaintenanceQueue in production."
+        "Using in-memory queue — no jobs persisted. Use PostgresMaintenanceQueue in production."
     )
 
     job_name: JobName | None = None
@@ -41,10 +40,7 @@ def cmd_run(args: argparse.Namespace) -> int:
         try:
             job_name = JobName(args.job)
         except ValueError:
-            print(
-                f"Unknown job type: {args.job!r}. "
-                f"Valid values: {[j.value for j in JobName]}"
-            )
+            print(f"Unknown job type: {args.job!r}. Valid values: {[j.value for j in JobName]}")
             return 1
 
     if args.once:
@@ -52,7 +48,7 @@ def cmd_run(args: argparse.Namespace) -> int:
         if job_name is not None:
             jobs = queue.claim_batch(job_name=job_name, batch_size=args.batch_size)
             for job in jobs:
-                worker._dispatch(job)  # noqa: SLF001
+                worker._dispatch(job)
             count = len(jobs)
         else:
             count = worker.run_once(batch_size=args.batch_size)
@@ -69,17 +65,13 @@ def cmd_run(args: argparse.Namespace) -> int:
         try:
             while True:
                 if job_name is not None:
-                    jobs = queue.claim_batch(
-                        job_name=job_name, batch_size=args.batch_size
-                    )
+                    jobs = queue.claim_batch(job_name=job_name, batch_size=args.batch_size)
                     for job in jobs:
-                        worker._dispatch(job)  # noqa: SLF001
+                        worker._dispatch(job)
                     count = len(jobs)
                 else:
                     count = worker.run_once(batch_size=args.batch_size)
-                _LOG.info(
-                    "Processed %d jobs. Sleeping %ds.", count, args.interval
-                )
+                _LOG.info("Processed %d jobs. Sleeping %ds.", count, args.interval)
                 time.sleep(args.interval)
         except KeyboardInterrupt:
             _LOG.info("Interrupted — exiting loop.")
@@ -102,10 +94,7 @@ def cmd_list(args: argparse.Namespace) -> int:
         try:
             status = JobStatus(args.status)
         except ValueError:
-            print(
-                f"Unknown status: {args.status!r}. "
-                f"Valid values: {[s.value for s in JobStatus]}"
-            )
+            print(f"Unknown status: {args.status!r}. Valid values: {[s.value for s in JobStatus]}")
             return 1
 
     jobs = queue.list_jobs(status=status)
@@ -135,10 +124,7 @@ def cmd_enqueue(args: argparse.Namespace) -> int:
     try:
         job_name = JobName(args.job_name)
     except ValueError:
-        print(
-            f"Unknown job: {args.job_name!r}. "
-            f"Valid values: {[j.value for j in JobName]}"
-        )
+        print(f"Unknown job: {args.job_name!r}. Valid values: {[j.value for j in JobName]}")
         return 1
 
     agent_id: UUID | None = None
@@ -203,10 +189,7 @@ def _build_parser() -> argparse.ArgumentParser:
         "--job",
         default=None,
         metavar="JOB_NAME",
-        help=(
-            "Filter to a specific job type "
-            f"(choices: {', '.join(j.value for j in JobName)})."
-        ),
+        help=(f"Filter to a specific job type (choices: {', '.join(j.value for j in JobName)})."),
     )
     run_p.add_argument(
         "--agent-id",
@@ -234,10 +217,7 @@ def _build_parser() -> argparse.ArgumentParser:
     enq_p.add_argument(
         "job_name",
         metavar="JOB_NAME",
-        help=(
-            "Job type to enqueue "
-            f"(choices: {', '.join(j.value for j in JobName)})."
-        ),
+        help=(f"Job type to enqueue (choices: {', '.join(j.value for j in JobName)})."),
     )
     enq_p.add_argument(
         "--agent-id",

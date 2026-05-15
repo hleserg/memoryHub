@@ -482,6 +482,7 @@ class FileStateStore(StateStore):
                     key_moments.append(key_moment)
                 except (json.JSONDecodeError, ValueError) as e:
                     import warnings
+
                     warnings.warn(
                         f"Skipping corrupted line in {self.key_moments_path}: {e}",
                         stacklevel=2,

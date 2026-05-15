@@ -130,9 +130,7 @@ class GLiNERPlusMiniLMAdapter(LinguisticAnalyzer):
                 device=self._device,
             )
         except Exception:
-            logger.exception(
-                "Failed to load classification model %s", self._minilm_model
-            )
+            logger.exception("Failed to load classification model %s", self._minilm_model)
             return None
         return self._classifier
 
@@ -181,9 +179,7 @@ class GLiNERPlusMiniLMAdapter(LinguisticAnalyzer):
             )
         return entities
 
-    def _run_classification(
-        self, text: str, candidate_labels: list[str]
-    ) -> dict[str, float]:
+    def _run_classification(self, text: str, candidate_labels: list[str]) -> dict[str, float]:
         """Run zero-shot classification and return a label→score dict."""
         if not text.strip() or not candidate_labels:
             return {}
@@ -193,15 +189,11 @@ class GLiNERPlusMiniLMAdapter(LinguisticAnalyzer):
         try:
             result = classifier(text, candidate_labels, multi_label=True)
         except Exception:
-            logger.exception(
-                "Classification inference failed for text of length %d", len(text)
-            )
+            logger.exception("Classification inference failed for text of length %d", len(text))
             return {}
-        return dict(zip(result["labels"], result["scores"]))
+        return dict(zip(result["labels"], result["scores"], strict=False))
 
-    def _extract_anchors(
-        self, entities: list[DetectedEntity], text: str
-    ) -> list[AmbientAnchor]:
+    def _extract_anchors(self, entities: list[DetectedEntity], text: str) -> list[AmbientAnchor]:
         """Convert detected entities into AmbientAnchor signals."""
         anchors: list[AmbientAnchor] = []
         for ent in entities:
@@ -231,11 +223,11 @@ class GLiNERPlusMiniLMAdapter(LinguisticAnalyzer):
         thinking_lower = thinking.lower()
         message_lower = message.lower()
 
-        # Suppression heuristic: model thought about hiding something
-        if any(pat in thinking_lower for pat in _SUPPRESSION_PATTERNS_RU):
-            # Only flag if the message does not contain an explicit matching refusal
-            if not any(pat in message_lower for pat in ("не могу", "не буду", "не скажу")):
-                signals.append("thinking_suppression")
+        # Suppression heuristic: thinking contains suppression pattern but message has no explicit refusal
+        if any(pat in thinking_lower for pat in _SUPPRESSION_PATTERNS_RU) and not any(
+            pat in message_lower for pat in ("не могу", "не буду", "не скажу")
+        ):
+            signals.append("thinking_suppression")
 
         # Principle / value invocation occurring in thinking but not surfaced
         if any(pat in thinking_lower for pat in _PRINCIPLE_PATTERNS_RU):
@@ -339,9 +331,7 @@ class GLiNERPlusMiniLMAdapter(LinguisticAnalyzer):
             trust_signal = None
 
         topic_labels = [
-            label
-            for label, score in scores.items()
-            if score > self._classification_threshold
+            label for label, score in scores.items() if score > self._classification_threshold
         ]
 
         return KeyMomentAnalysis(

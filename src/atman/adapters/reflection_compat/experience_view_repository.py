@@ -15,7 +15,7 @@ Remove this adapter when Reflection Engine migrates to SessionRepository contrac
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import datetime
 from uuid import UUID
 
 from atman.core.models.experience import (
@@ -24,7 +24,6 @@ from atman.core.models.experience import (
     SessionExperience,
 )
 from atman.core.models.session import Session
-from atman.core.ports.reflection import ExperienceRepository
 from atman.core.ports.state_store import StateStore
 
 
@@ -38,18 +37,14 @@ def _build_session_experience(session: Session, moments_for_session: list) -> Se
         avg_intensity = sum(m.how_i_felt.emotional_intensity for m in moments_for_session) / len(
             moments_for_session
         )
-        has_profound = any(
-            m.how_i_felt.depth.value == "profound" for m in moments_for_session
-        )
+        has_profound = any(m.how_i_felt.depth.value == "profound" for m in moments_for_session)
 
     fact_refs: list[UUID] = []
     for m in moments_for_session:
         fact_refs.extend(m.fact_refs)
     fact_refs = list(dict.fromkeys(fact_refs))  # dedup preserving order
 
-    overall_salience = (
-        max(m.salience for m in moments_for_session) if moments_for_session else 0.5
-    )
+    overall_salience = max(m.salience for m in moments_for_session) if moments_for_session else 0.5
     overall_importance = (
         max(m.importance for m in moments_for_session) if moments_for_session else 0.5
     )

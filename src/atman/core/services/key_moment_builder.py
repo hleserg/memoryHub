@@ -1,4 +1,5 @@
 """KeyMomentBuilder — constructs KeyMoment from input + optional linguistic enrichment."""
+
 from uuid import UUID
 
 from atman.core.models.entity import KeyMomentEntityLink
@@ -56,8 +57,7 @@ class KeyMomentBuilder:
         if analysis is not None:
             markers: dict = {
                 "entities": [
-                    (e.text, e.entity_type.value, e.confidence)
-                    for e in analysis.entities
+                    (e.text, e.entity_type.value, e.confidence) for e in analysis.entities
                 ],
                 "topic_labels": analysis.topic_labels,
                 "cognitive_load": analysis.cognitive_load,

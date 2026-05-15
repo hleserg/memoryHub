@@ -5,10 +5,8 @@ Use for unit tests where file I/O is not needed.
 For integration tests, use FileStateStore.
 """
 
-from datetime import datetime
+from datetime import UTC, datetime
 from uuid import UUID
-
-from datetime import UTC
 
 from atman.core.models import (
     Eigenstate,
