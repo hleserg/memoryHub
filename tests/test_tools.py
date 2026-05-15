@@ -129,6 +129,25 @@ class TestRecordKeyMoment:
         assert "Key moment recorded" in result
         assert "User asked" in result
 
+    async def test_record_key_moment_accepts_case_insensitive_canonical_depth(self):
+        """LLM tool calls often vary enum casing; canonical depth values stay accepted."""
+        agent_id = uuid4()
+        deps, _session_id = _create_deps_with_session(agent_id)
+
+        ctx = _make_run_context(deps)
+
+        result = await record_key_moment(
+            ctx,
+            what_happened="User surfaced an identity-level decision",
+            why_it_matters="This should be retained as a deep identity moment",
+            emotional_valence=0.2,
+            emotional_intensity=0.8,
+            depth="PROFOUND",
+        )
+
+        assert result.startswith("Key moment recorded")
+        assert "identity-level decision" in result
+
     async def test_record_key_moment_no_session(self):
         """Test error when no session is active."""
         agent_id = uuid4()
