@@ -215,6 +215,132 @@ class SessionManager:
     # Trade-offs: journal entries are larger and may duplicate data already stored
     # on the happy path, but the duplication is bounded and only used for recovery.
     # PLAYBOOK-END
+    def _load_journal_payload(
+        self, journal_file: Path
+    ) -> tuple[list[UUID], dict[UUID, KeyMoment], set[UUID]]:
+        """Load recoverable key moments and fact references from a session journal."""
+        key_moment_ids: list[UUID] = []
+        journaled_moments: dict[UUID, KeyMoment] = {}
+        fact_refs_set: set[UUID] = set()
+
+        with journal_file.open("r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    entry = json.loads(line)
+                    if entry.get("type") == "key_moment":
+                        moment_id = UUID(entry["moment_id"])
+                        key_moment_ids.append(moment_id)
+                        moment_data = entry.get("moment")
+                        if isinstance(moment_data, dict):
+                            journaled_moments[moment_id] = KeyMoment.model_validate(moment_data)
+                        # Extract fact_refs if present
+                        for fact_id_str in entry.get("fact_refs", []):
+                            fact_refs_set.add(UUID(fact_id_str))
+                    elif entry.get("type") == "facts_read":
+                        for fact_id_str in entry.get("fact_ids", []):
+                            fact_refs_set.add(UUID(fact_id_str))
+                except (json.JSONDecodeError, KeyError, ValueError) as exc:
+                    _LOG.warning("Skipping malformed journal line in %s: %s", journal_file, exc)
+                    continue
+
+        return key_moment_ids, journaled_moments, fact_refs_set
+
+    def _load_recovery_key_moments(
+        self,
+        session_id: UUID,
+        key_moment_ids: list[UUID],
+        journaled_moments: dict[UUID, KeyMoment],
+    ) -> list[KeyMoment] | None:
+        """Load or restore all key moments needed for session recovery."""
+        loaded_moments: list[KeyMoment] = []
+        for moment_id in key_moment_ids:
+            loaded_moment = self._state_store.get_key_moment(moment_id)
+            if loaded_moment is None and moment_id in journaled_moments:
+                loaded_moment = journaled_moments[moment_id]
+                try:
+                    self._state_store.create_key_moment(loaded_moment)
+                except ValueError:
+                    # Another recovery/finish path stored it first.
+                    loaded_moment = self._state_store.get_key_moment(moment_id)
+            if loaded_moment is not None:
+                loaded_moments.append(loaded_moment)
+
+        if len(loaded_moments) != len(key_moment_ids):
+            _LOG.warning(
+                "Cannot recover orphaned session %s: %d/%d key moments available; "
+                "leaving journal for manual recovery",
+                session_id,
+                len(loaded_moments),
+                len(key_moment_ids),
+            )
+            return None
+
+        return loaded_moments
+
+    def _finish_artifacts_complete(self, agent_id: UUID, session_id: UUID) -> bool:
+        """Return True when all finish-session artifacts already exist."""
+        eigenstate = self._state_store.load_latest_eigenstate(
+            session_id=session_id,
+            identity_id=agent_id,
+        )
+        if eigenstate is None:
+            return False
+
+        narrative = self._state_store.load_narrative(agent_id)
+        return narrative is not None and _session_finish_marker(session_id) in (
+            narrative.recent_layer.content
+        )
+
+    def _recover_finish_artifacts_from_existing_experience(
+        self,
+        agent_id: UUID,
+        existing_exp: ExperienceRecord,
+        journaled_moments: dict[UUID, KeyMoment],
+    ) -> bool:
+        """Complete eigenstate/narrative writes after a crash post-experience persistence."""
+        session_id = existing_exp.experience.session_id
+        loaded_moments = self._load_recovery_key_moments(
+            session_id,
+            existing_exp.experience.key_moment_ids,
+            journaled_moments,
+        )
+        if loaded_moments is None:
+            return False
+
+        if self._finish_artifacts_complete(agent_id, session_id):
+            return True
+
+        recovered_result = SessionResult(
+            session_id=session_id,
+            started_at=existing_exp.experience.timestamp,
+            finished_at=existing_exp.experience.timestamp,
+            events=[],
+            key_moments=loaded_moments,
+            overall_emotional_tone=0.0,
+            key_insight=existing_exp.experience.agent_recap or "",
+            alignment_check=True,
+            incomplete_coloring=existing_exp.experience.incomplete_coloring,
+            is_finished=True,
+            identity_snapshot_id=existing_exp.experience.identity_snapshot_id,
+            identity_id=agent_id,
+        )
+
+        if (
+            self._state_store.load_latest_eigenstate(
+                session_id=session_id,
+                identity_id=agent_id,
+            )
+            is None
+        ):
+            recovered_result.eigenstate = self._create_eigenstate(recovered_result)
+            self._state_store.save_eigenstate(recovered_result.eigenstate)
+
+        self._save_session_narrative_update(recovered_result)
+        return self._finish_artifacts_complete(agent_id, session_id)
+
     def _recover_orphaned_sessions(self, agent_id: UUID) -> None:
         """
         Scan for orphaned session journals and convert to SessionExperience.
@@ -248,73 +374,46 @@ class SessionManager:
                     _LOG.debug("Skipping live journal locked by another process: %s", session_id)
                     continue
 
+                # Parse journal to extract key moments and facts
+                key_moment_ids, journaled_moments, fact_refs_set = self._load_journal_payload(
+                    journal_file
+                )
+
                 # Compute deterministic experience_id
                 experience_id = deterministic_session_experience_id(session_id)
 
                 # Check if experience already exists in StateStore
                 existing_exp = self._state_store.get_experience(experience_id)
                 if existing_exp is not None:
-                    # Already saved - journal is stale, just delete it
-                    journal_file.unlink()
-                    _LOG.info("Deleted stale journal for session %s", session_id)
+                    if existing_exp.experience.session_id != session_id:
+                        raise ValueError(
+                            f"Stored experience {experience_id} belongs to another session "
+                            f"({existing_exp.experience.session_id}); refusing recovery."
+                        )
+                    if self._recover_finish_artifacts_from_existing_experience(
+                        agent_id,
+                        existing_exp,
+                        journaled_moments,
+                    ):
+                        journal_file.unlink()
+                        _LOG.info("Deleted stale journal for completed session %s", session_id)
+                    else:
+                        _LOG.warning(
+                            "Existing experience for session %s is missing finish artifacts; "
+                            "leaving journal for retry/manual recovery",
+                            session_id,
+                        )
                     continue
-
-                # Parse journal to extract key moments and facts
-                key_moment_ids: list[UUID] = []
-                journaled_moments: dict[UUID, KeyMoment] = {}
-                fact_refs_set: set[UUID] = set()
-
-                with journal_file.open("r", encoding="utf-8") as f:
-                    for line in f:
-                        line = line.strip()
-                        if not line:
-                            continue
-                        try:
-                            entry = json.loads(line)
-                            if entry.get("type") == "key_moment":
-                                moment_id = UUID(entry["moment_id"])
-                                key_moment_ids.append(moment_id)
-                                moment_data = entry.get("moment")
-                                if isinstance(moment_data, dict):
-                                    journaled_moments[moment_id] = KeyMoment.model_validate(
-                                        moment_data
-                                    )
-                                # Extract fact_refs if present
-                                for fact_id_str in entry.get("fact_refs", []):
-                                    fact_refs_set.add(UUID(fact_id_str))
-                            elif entry.get("type") == "facts_read":
-                                for fact_id_str in entry.get("fact_ids", []):
-                                    fact_refs_set.add(UUID(fact_id_str))
-                        except (json.JSONDecodeError, KeyError, ValueError) as exc:
-                            _LOG.warning(
-                                "Skipping malformed journal line in %s: %s", journal_file, exc
-                            )
-                            continue
 
                 # If we have key moments, create SessionExperience
                 if key_moment_ids:
                     # Try to load actual KeyMoment objects from storage for better metadata
-                    loaded_moments: list[KeyMoment] = []
-                    for moment_id in key_moment_ids:
-                        loaded_moment = self._state_store.get_key_moment(moment_id)
-                        if loaded_moment is None and moment_id in journaled_moments:
-                            loaded_moment = journaled_moments[moment_id]
-                            try:
-                                self._state_store.create_key_moment(loaded_moment)
-                            except ValueError:
-                                # Another recovery/finish path stored it first.
-                                loaded_moment = self._state_store.get_key_moment(moment_id)
-                        if loaded_moment is not None:
-                            loaded_moments.append(loaded_moment)
-
-                    if len(loaded_moments) != len(key_moment_ids):
-                        _LOG.warning(
-                            "Cannot recover orphaned session %s: %d/%d key moments available; "
-                            "leaving journal for manual recovery",
-                            session_id,
-                            len(loaded_moments),
-                            len(key_moment_ids),
-                        )
+                    loaded_moments = self._load_recovery_key_moments(
+                        session_id,
+                        key_moment_ids,
+                        journaled_moments,
+                    )
+                    if loaded_moments is None:
                         continue
 
                     # Compute better metadata if we have loaded moments

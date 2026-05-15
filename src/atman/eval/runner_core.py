@@ -67,10 +67,10 @@ class RunnerCore:
     # title: Idempotent Runner via Deterministic Keys
     # status: draft
     #
-    # Pattern: compute a deterministic idempotency key from benchmark identity
-    # and source revision (`git_sha`). If a terminal successful run with the same
-    # key already exists in this runner process, return it as skipped instead of
-    # re-executing side effects.
+    # Pattern: compute a deterministic idempotency key from benchmark identity,
+    # source revision (`git_sha`), and execution-affecting inputs. If a terminal
+    # successful run with the same key already exists in this runner process,
+    # return it as skipped instead of re-executing side effects.
     #
     # Why generalizable: batch jobs, benchmark pipelines, and CI retries often
     # rerun the same inputs. Deterministic keys reduce duplicate writes and make
@@ -86,9 +86,11 @@ class RunnerCore:
         identity_snapshot_id: int | None = None,
         extra_metadata: dict[str, Any] | None = None,
     ) -> BenchmarkRunOutcome:
+        effective_seed = resolve_seed(seed)
         idempotency_key = self._idempotency_key(
             benchmark_key=benchmark_key,
             git_sha=git_sha,
+            seed=effective_seed,
             agent_config_id=agent_config_id,
             identity_snapshot_id=identity_snapshot_id,
         )
@@ -98,7 +100,6 @@ class RunnerCore:
             metadata["idempotent_reuse"] = True
             return replace(cached, status="skipped", metadata=metadata)
 
-        effective_seed = resolve_seed(seed)
         apply_global_seed(effective_seed)
         context = RunContext.create(
             benchmark_key=benchmark_key,
@@ -180,9 +181,12 @@ class RunnerCore:
         *,
         benchmark_key: str,
         git_sha: str | None,
+        seed: int,
         agent_config_id: str | None,
         identity_snapshot_id: int | None,
     ) -> str | None:
         if not git_sha:
             return None
-        return f"{benchmark_key}:{git_sha}:{agent_config_id or ''}:{identity_snapshot_id or ''}"
+        return (
+            f"{benchmark_key}:{git_sha}:{seed}:{agent_config_id or ''}:{identity_snapshot_id or ''}"
+        )
