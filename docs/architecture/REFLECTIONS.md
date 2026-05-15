@@ -256,6 +256,18 @@ Future work: services will call `ReflectionStore.add()` after generating reflect
 
 ## Future Extensions
 
+### Memory architecture rework — see [REFLECTION_FUTURE.md](./REFLECTION_FUTURE.md)
+
+When the memory layer migrates to standalone `key_moments` (with `session_id`,
+`structured_markers`, salience-on-moment) and the new `entity_stance` /
+`entity_relations` / `validation_findings` tables come online, Reflection Engine
+will need to migrate off `ExperienceRepository` onto a new `SessionRepository`
+contract and start reading the new structured signals. The full roadmap
+(replacement contract, new daily/deep tasks, agent-driven triggers,
+`reflection_overload` monitoring) is collected in
+[REFLECTION_FUTURE.md](./REFLECTION_FUTURE.md). Nothing from that document is
+implemented yet — current Reflection works unchanged via a compat adapter.
+
 ### Embedding Column (E25 EmbeddingPort)
 
 Once E25 lands, add:
