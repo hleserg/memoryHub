@@ -29,6 +29,7 @@ CREATE TABLE IF NOT EXISTS public.skills (
     -- soft cross-schema ref to agent_{N}.entities.id — no FK constraint by design
     entity_id            UUID NOT NULL,
     name                 TEXT NOT NULL,       -- kebab-case, matches metadata.name in SKILL.md
+    description          TEXT NOT NULL DEFAULT '',  -- short human-readable summary (from SKILL.md description)
     version              TEXT NOT NULL DEFAULT '0.1.0',
     kind                 TEXT NOT NULL        -- 'active' | 'passive'
                              CHECK (kind IN ('active', 'passive')),

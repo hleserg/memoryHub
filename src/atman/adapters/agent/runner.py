@@ -1123,7 +1123,7 @@ class AtmanRunner:
                     continue
 
                 try:
-                    event = deps.micro_reflection.reflect(session_id)
+                    event = deps.micro_reflection.reflect(session_id, agent_id=deps.agent_id)
                     print_info(f"✓ Reflection completed: {event.key_insight}")
                     print_warn(
                         "Note: Reflection during active session may have limited data. "

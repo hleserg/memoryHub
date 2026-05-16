@@ -115,12 +115,6 @@ def build_deps(
         reflection_model=_MockReflectionModel(),
         narrative_audit=NoOpNarrativeWriteAudit(),
     )
-    micro_reflection = MicroReflectionService(
-        session_repo=StateStoreSessionRepository(state_store, agent_id=agent_id),
-        narrative_revision=narrative_revision,
-        event_store=InMemoryReflectionEventStore(),
-    )
-
     # Build optional RAG pipeline when ATMAN_LINGUISTIC_ENABLED=true.
     # Uses the configured embedding backend (ollama/flag) and the same
     # state_store that the session will write to.
@@ -154,36 +148,22 @@ def build_deps(
             )
 
     # Build optional skill-loop when skills.enabled=true (default).
-    skill_manager = None
-    from atman.config import settings as _settings
+    #
+    # IMPORTANT: skill_manager must be built BEFORE MicroReflectionService so
+    # the reflection hook (process_session_skills) actually fires. If you move
+    # this block after the MicroReflectionService construction, the hook
+    # becomes dead code — see PR #572 Devin review.
+    skill_manager = _build_skill_manager(
+        agent_id=agent_id,
+        embedding_adapter=_embedding_adapter,
+    )
 
-    if _settings.skills.enabled:
-        try:
-            from pathlib import Path as _Path
-
-            from atman.skills.manager import SkillManager
-            from atman.skills.postgres_store import PostgresSkillStore
-            from atman.skills.projection import PydanticAgentProjector
-            from atman.skills.retriever import SkillRetriever
-
-            _skill_store = PostgresSkillStore(db_url=_settings.database_url)
-            _skill_retriever = SkillRetriever(
-                store=_skill_store,
-                embedding=_embedding_adapter,  # reuse if already built
-            )
-            skill_manager = SkillManager(
-                store=_skill_store,
-                retriever=_skill_retriever,
-                projector=PydanticAgentProjector(),
-                config=_settings.skills,
-                agents_root=_Path(_settings.skills.skills_root).expanduser(),
-            )
-        except Exception:
-            import logging as _logging
-
-            _logging.getLogger(__name__).warning(
-                "Failed to build SkillManager — skill-loop disabled", exc_info=True
-            )
+    micro_reflection = MicroReflectionService(
+        session_repo=StateStoreSessionRepository(state_store, agent_id=agent_id),
+        narrative_revision=narrative_revision,
+        event_store=InMemoryReflectionEventStore(),
+        skill_manager=skill_manager,
+    )
 
     deps = AtmanDeps.from_config(
         config=config,
@@ -201,3 +181,67 @@ def build_deps(
     )
 
     return deps, session_manager, state_store
+
+
+def _build_skill_manager(agent_id: UUID, embedding_adapter):
+    """Assemble SkillManager with graceful fallback.
+
+    Behaviour, in order of preference, when ``settings.skills.enabled`` is true:
+
+    1. ``PostgresSkillStore`` if PostgreSQL is configured and reachable.
+    2. ``InMemorySkillStore`` fallback so local/file-based development still
+       starts a real (in-process) skill-loop. Per AGENTS.md, the project must
+       run without external services; failing to connect to PostgreSQL should
+       degrade, not crash.
+    3. ``None`` (skill-loop disabled) if both stores fail to construct.
+
+    All branches return at most one log line on the warning level; no
+    exception is allowed to escape.
+    """
+    from atman.config import settings as _settings
+
+    if not _settings.skills.enabled:
+        return None
+
+    import logging as _logging
+    from pathlib import Path as _Path
+
+    from atman.skills.manager import SkillManager
+    from atman.skills.projection import PydanticAgentProjector
+    from atman.skills.retriever import SkillRetriever
+
+    log = _logging.getLogger(__name__)
+
+    skill_store: object | None = None
+    try:
+        from atman.skills.postgres_store import PostgresSkillStore
+
+        skill_store = PostgresSkillStore(db_url=_settings.database_url, agent_id=agent_id)
+    except Exception:
+        log.info(
+            "PostgresSkillStore unavailable — falling back to in-memory skill store. "
+            "Set ATMAN_SKILLS_ENABLED=false to silence this notice.",
+            exc_info=True,
+        )
+
+    if skill_store is None:
+        try:
+            from atman.skills.in_memory_store import InMemorySkillStore
+
+            skill_store = InMemorySkillStore()
+        except Exception:
+            log.warning("Failed to build any SkillStore — skill-loop disabled", exc_info=True)
+            return None
+
+    try:
+        retriever = SkillRetriever(store=skill_store, embedding=embedding_adapter)
+        return SkillManager(
+            store=skill_store,
+            retriever=retriever,
+            projector=PydanticAgentProjector(),
+            config=_settings.skills,
+            agents_root=_Path(_settings.skills.skills_root).expanduser(),
+        )
+    except Exception:
+        log.warning("Failed to build SkillManager — skill-loop disabled", exc_info=True)
+        return None
