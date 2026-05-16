@@ -550,3 +550,108 @@ def test_file_state_store_store_key_moment_replaces_existing(tmp_path) -> None:
     loaded = store.get_key_moment(m.id)
     assert loaded is not None
     assert loaded.salience == pytest.approx(0.42)
+
+
+# ---------------------------------------------------------------------------
+# Regression: default StateStore.store_key_moment raises NotImplementedError
+# on attempted update via store with no override (rather than silently
+# no-op'ing or crashing with ValueError). Concrete adapters that need
+# upsert MUST override.
+# ---------------------------------------------------------------------------
+
+
+def test_default_store_key_moment_raises_not_implemented_on_duplicate() -> None:
+    """A bare StateStore subclass that doesn't override store_key_moment
+    must NOT silently accept an update — it must surface NotImplementedError
+    so adapter authors know to implement true upsert."""
+    from atman.core.ports.state_store import StateStore
+
+    class _Bare(StateStore):
+        def __init__(self) -> None:
+            self._km: dict = {}
+
+        # Only KeyMoment ops are needed for this test; minimal stubs for
+        # the abstract members are below.
+
+        def create_key_moment(self, key_moment):
+            if key_moment.id in self._km:
+                raise ValueError(f"KeyMoment {key_moment.id} already exists")
+            self._km[key_moment.id] = key_moment
+            return key_moment
+
+        def get_key_moment(self, moment_id):
+            return self._km.get(moment_id)
+
+        def list_key_moments(self, session_id=None):
+            return list(self._km.values())
+
+        def store_key_moments(self, session_id, moments):
+            for m in moments:
+                self._km[m.id] = m
+
+        def get_key_moments_for_session(self, session_id):
+            return [m for m in self._km.values() if m.session_id == session_id]
+
+        # Bare minimum to satisfy ABC — all other ops are out of scope
+        def create_experience(self, record):
+            raise NotImplementedError
+
+        def get_experience(self, experience_id):
+            return None
+
+        def add_reframing_note(self, experience_id, note):
+            return None
+
+        def mark_accessed(self, experience_id):
+            return None
+
+        def search_experiences(self, query=None, limit=10):
+            return []
+
+        def list_recent_experiences(self, limit=10):
+            return []
+
+        def load_identity(self, agent_id):
+            return None
+
+        def save_identity(self, identity, expected_version=None):
+            return identity
+
+        def create_identity_snapshot(self, snapshot):
+            return snapshot
+
+        def list_identity_snapshots(self, identity_id, limit=10):
+            return []
+
+        def load_narrative(self, identity_id):
+            return None
+
+        def save_narrative(self, narrative, expected_version=None, expected_updated_at=None):
+            return narrative
+
+        def archive_narrative(self, narrative_id, reason):
+            return None
+
+        def list_archived_narratives(self, identity_id, limit=10):
+            return []
+
+        def save_eigenstate(self, eigenstate):
+            return eigenstate
+
+        def load_latest_eigenstate(self, session_id=None, identity_id=None):
+            return None
+
+    store = _Bare()
+    m = KeyMoment(
+        what_happened="x",
+        how_i_felt=FeltSense(
+            emotional_valence=0.0, emotional_intensity=0.5, depth=EmotionalDepth.SURFACE
+        ),
+        why_it_matters="why",
+        session_id=uuid4(),
+    )
+    # First call succeeds (delegate to create_key_moment)
+    store.store_key_moment(m)
+    # Second call must raise NotImplementedError (not ValueError or silent no-op)
+    with pytest.raises(NotImplementedError, match="must override"):
+        store.store_key_moment(m)

@@ -486,8 +486,10 @@ class FileStateStore(StateStore):
                     rebuilt_lines.append(line)
 
         if existed:
-            # Rewrite file with updated record in place.
-            self.key_moments_path.write_text("\n".join(rebuilt_lines) + "\n", encoding="utf-8")
+            # Atomic rewrite: tmpfile + rename, so a crash mid-write cannot
+            # truncate or corrupt the JSONL file (decay_pass calls this in a
+            # loop over every moment, making partial-write risk significant).
+            self._write_json_atomically(self.key_moments_path, "\n".join(rebuilt_lines) + "\n")
         else:
             with self.key_moments_path.open("a", encoding="utf-8") as f:
                 f.write(moment.model_dump_json() + "\n")

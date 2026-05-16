@@ -107,6 +107,15 @@ BEGIN
     $sql$, schema_name, schema_name);
 
     -- ── D: make session_id NOT NULL, add FK, add new indexes ─────────────────
+    -- First delete any orphan key_moments whose session_id is still NULL
+    -- after backfill (e.g. their experience was already deleted, or the
+    -- experience_id pointed to a missing row). Without this cleanup, the
+    -- ALTER ... SET NOT NULL below would fail with a constraint violation
+    -- and abort the migration mid-way through the agent's schema.
+    EXECUTE format($sql$
+        DELETE FROM %I.key_moments WHERE session_id IS NULL;
+    $sql$, schema_name);
+
     EXECUTE format($sql$
         ALTER TABLE %I.key_moments
             ALTER COLUMN session_id SET NOT NULL;

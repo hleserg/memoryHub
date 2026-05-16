@@ -393,8 +393,29 @@ class StateStore(ABC):
         self,
         moment: "KeyMoment",
     ) -> "KeyMoment":
-        """Store a single key moment (standalone, v2 API). Delegates to create_key_moment."""
-        return self.create_key_moment(moment)
+        """Idempotent upsert (v2 API): create-if-new, replace-if-exists.
+
+        The base implementation handles the create case by delegating to
+        :meth:`create_key_moment`. Subclasses MUST override this method to
+        support **updating** an existing moment in place — required by
+        callers like ``SalienceDecayService.decay_pass`` which re-stores a
+        moment after mutating its salience.
+
+        If the default delegate raises ``ValueError("already exists")``,
+        this method raises ``NotImplementedError`` rather than silently
+        no-op'ing, so the broken contract surfaces loudly rather than
+        causing data corruption (stale salience never persisted).
+        """
+        try:
+            return self.create_key_moment(moment)
+        except ValueError as exc:
+            if "already exists" in str(exc):
+                raise NotImplementedError(
+                    f"{type(self).__name__}.store_key_moment must override the "
+                    f"default to update existing moments — the default only "
+                    f"handles create. Got duplicate id {moment.id}."
+                ) from exc
+            raise
 
     def mark_moment_accessed(self, moment_id: UUID) -> None:  # noqa: B027
         """Update last_accessed_at and increment access_count for a key moment."""
