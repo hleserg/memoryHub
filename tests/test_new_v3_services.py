@@ -439,3 +439,47 @@ class TestMaintenanceWorker:
         q.enqueue(JobName.memory_guardian_scan, agent_id=uuid4())
         worker.run_once()
         assert q.list_jobs()[0].status is JobStatus.failed
+
+
+def test_decay_pass_high_importance_decays_slower_than_low() -> None:
+    """High-importance (>0.8) moments must decay 30% slower per the contract
+    in calculate_lambda — decay_pass must apply the same adjustment so all
+    three decay paths agree."""
+    from datetime import UTC, datetime, timedelta
+
+    long_ago = datetime.now(UTC) - timedelta(days=10)
+    cutoff = datetime.now(UTC) - timedelta(days=1)
+
+    store_high = InMemoryStateStore()
+    m_high = KeyMoment(
+        what_happened="high importance",
+        how_i_felt=FeltSense(
+            emotional_valence=0.0, emotional_intensity=0.5, depth=EmotionalDepth.SURFACE
+        ),
+        why_it_matters="why",
+        salience=1.0,
+        importance=0.9,
+        last_accessed_at=long_ago,
+    )
+    store_high.store_key_moment(m_high)
+
+    store_low = InMemoryStateStore()
+    m_low = KeyMoment(
+        what_happened="low importance",
+        how_i_felt=FeltSense(
+            emotional_valence=0.0, emotional_intensity=0.5, depth=EmotionalDepth.SURFACE
+        ),
+        why_it_matters="why",
+        salience=1.0,
+        importance=0.3,
+        last_accessed_at=long_ago,
+    )
+    store_low.store_key_moment(m_low)
+
+    InMemorySalienceDecayService(store_high).decay_pass(uuid4(), cutoff=cutoff)
+    InMemorySalienceDecayService(store_low).decay_pass(uuid4(), cutoff=cutoff)
+
+    loaded_high = store_high.get_key_moment(m_high.id)
+    loaded_low = store_low.get_key_moment(m_low.id)
+    assert loaded_high is not None and loaded_low is not None
+    assert loaded_high.salience > loaded_low.salience

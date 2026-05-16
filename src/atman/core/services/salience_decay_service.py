@@ -94,11 +94,19 @@ class InMemorySalienceDecayService(SalienceDecayService):
 
             depth = moment.how_i_felt.depth
             if depth == EmotionalDepth.PROFOUND:
-                lam = decay_lambda_profound
+                base_lambda = decay_lambda_profound
             elif depth == EmotionalDepth.MEANINGFUL:
-                lam = decay_lambda_meaningful
+                base_lambda = decay_lambda_meaningful
             else:
-                lam = decay_lambda_surface
+                base_lambda = decay_lambda_surface
+
+            # Mirror the high-importance adjustment from calculate_lambda() and
+            # KeyMoment.calculate_current_salience() so all three decay paths
+            # (port-level, model-level, service-level) agree on lambda for the
+            # same moment. Without this the background worker decays a
+            # high-importance moment faster than the model preview suggests.
+            importance_adjustment = 0.7 if moment.importance > 0.8 else 1.0
+            lam = base_lambda * importance_adjustment
 
             days = (now_aware - last_accessed).total_seconds() / 86400.0
             new_salience = max(min_salience, moment.salience * math.exp(-lam * days))

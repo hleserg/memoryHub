@@ -75,36 +75,50 @@ BEGIN
     EXECUTE format('ALTER TABLE %I.key_moments ADD COLUMN IF NOT EXISTS structured_markers_version TEXT', schema_name);
 
     -- ── C: backfill key_moments from experiences and sessions from experiences ─
-    EXECUTE format($sql$
-        UPDATE %I.key_moments km
-        SET session_id           = e.session_id,
-            incomplete_coloring  = e.incomplete_coloring,
-            importance           = e.importance,
-            salience             = e.salience,
-            last_accessed_at     = e.last_accessed_at,
-            access_count         = e.access_count,
-            identity_snapshot_id = s.identity_snapshot_id
-        FROM %I.experiences e
-        JOIN %I.sessions s ON s.id = e.session_id
-        WHERE km.experience_id = e.id
-          AND km.session_id IS NULL;
-    $sql$, schema_name, schema_name, schema_name);
+    --   These UPDATEs reference the per-agent `experiences` table which only
+    --   exists in agent schemas created BEFORE migration 0008. New schemas
+    --   created by the redefined create_agent_schema (further down this file)
+    --   never have an `experiences` table, so the backfill is a no-op for them.
+    --   Guarding with an information_schema lookup prevents
+    --   `relation "agent_N.experiences" does not exist` from blowing up new-agent
+    --   registration after 0008/0009/0010 are applied.
+    IF EXISTS (
+        SELECT 1
+        FROM information_schema.tables
+        WHERE table_schema = schema_name
+          AND table_name = 'experiences'
+    ) THEN
+        EXECUTE format($sql$
+            UPDATE %I.key_moments km
+            SET session_id           = e.session_id,
+                incomplete_coloring  = e.incomplete_coloring,
+                importance           = e.importance,
+                salience             = e.salience,
+                last_accessed_at     = e.last_accessed_at,
+                access_count         = e.access_count,
+                identity_snapshot_id = s.identity_snapshot_id
+            FROM %I.experiences e
+            JOIN %I.sessions s ON s.id = e.session_id
+            WHERE km.experience_id = e.id
+              AND km.session_id IS NULL;
+        $sql$, schema_name, schema_name, schema_name);
 
-    -- Backfill session metadata from experiences. Note: pre-0008 experiences
-    -- did NOT have `close_reason` or `unexamined_fact_refs` (see migration 0004,
-    -- agent_N.experiences columns), so these are intentionally initialised to
-    -- NULL / '{}' — there is no prior value to preserve. Only `overall_tone`
-    -- and `key_insight` are copied from the soon-to-be-dropped experiences row.
-    EXECUTE format($sql$
-        UPDATE %I.sessions s
-        SET overall_tone         = e.overall_tone,
-            key_insight          = e.key_insight,
-            unexamined_fact_refs = '{}',
-            close_reason         = NULL
-        FROM %I.experiences e
-        WHERE e.session_id = s.id
-          AND s.overall_tone IS NULL;
-    $sql$, schema_name, schema_name);
+        -- Backfill session metadata from experiences. Note: pre-0008 experiences
+        -- did NOT have `close_reason` or `unexamined_fact_refs` (see migration 0004,
+        -- agent_N.experiences columns), so these are intentionally initialised to
+        -- NULL / '{}' — there is no prior value to preserve. Only `overall_tone`
+        -- and `key_insight` are copied from the soon-to-be-dropped experiences row.
+        EXECUTE format($sql$
+            UPDATE %I.sessions s
+            SET overall_tone         = e.overall_tone,
+                key_insight          = e.key_insight,
+                unexamined_fact_refs = '{}',
+                close_reason         = NULL
+            FROM %I.experiences e
+            WHERE e.session_id = s.id
+              AND s.overall_tone IS NULL;
+        $sql$, schema_name, schema_name);
+    END IF;
 
     -- ── D: make session_id NOT NULL, add FK, add new indexes ─────────────────
     -- First delete any orphan key_moments whose session_id is still NULL
@@ -145,13 +159,22 @@ BEGIN
     -- ── E: add session_id to reframing_notes, backfill from experiences ───────
     EXECUTE format('ALTER TABLE %I.reframing_notes ADD COLUMN IF NOT EXISTS session_id UUID', schema_name);
 
-    EXECUTE format($sql$
-        UPDATE %I.reframing_notes rn
-        SET session_id = e.session_id
-        FROM %I.experiences e
-        WHERE rn.experience_id = e.id
-          AND rn.session_id IS NULL;
-    $sql$, schema_name, schema_name);
+    -- Backfill guarded the same way as step C — for new schemas the
+    -- experiences table never existed.
+    IF EXISTS (
+        SELECT 1
+        FROM information_schema.tables
+        WHERE table_schema = schema_name
+          AND table_name = 'experiences'
+    ) THEN
+        EXECUTE format($sql$
+            UPDATE %I.reframing_notes rn
+            SET session_id = e.session_id
+            FROM %I.experiences e
+            WHERE rn.experience_id = e.id
+              AND rn.session_id IS NULL;
+        $sql$, schema_name, schema_name);
+    END IF;
 
     -- ── F: drop experience_id FK from key_moments, then drop experiences ──────
     EXECUTE format('ALTER TABLE %I.key_moments DROP CONSTRAINT IF EXISTS key_moments_experience_id_fkey', schema_name);
