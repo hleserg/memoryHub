@@ -228,6 +228,7 @@ CREATE TABLE IF NOT EXISTS reflections (
     schema_version INTEGER NOT NULL DEFAULT 1,
     metadata JSONB NOT NULL DEFAULT '{}'
 );
+-- DEPRECATED: use migrations/0015_move_subjective_tables.sql (agent_{N}.reflections).
 COMMENT ON TABLE public.reflections IS 'Reflection content across micro/daily/deep levels';
 COMMENT ON COLUMN public.reflections.level IS 'Reflection depth: micro (per-session), daily (pattern detection), deep (narrative integration)';
 COMMENT ON COLUMN public.reflections.session_id IS 'Session reference for micro reflections, NULL for daily/deep';

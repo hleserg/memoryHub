@@ -28,6 +28,11 @@ def _noop_class_row(_model: object) -> None:
     return None
 
 
+def _prime_schema_cache(store: object, agent_id: object, serial_id: int = 1) -> None:
+    """Avoid DB lookup for public.agents during unit tests."""
+    store._schema_resolver._serial_cache[agent_id] = serial_id  # type: ignore[attr-defined]
+
+
 class TestReflectionStore:
     """Tests for ReflectionStore."""
 
@@ -140,6 +145,7 @@ class TestReflectionStore:
 
         store = ReflectionStore(db_url="postgresql://test:pass@localhost/db")
         store._conn = mock_conn
+        _prime_schema_cache(store, agent_id)
         stored = store.add(event)
 
         assert stored.id == 123
@@ -188,7 +194,8 @@ class TestReflectionStore:
 
         store = ReflectionStore(db_url="postgresql://test:pass@localhost/db")
         store._conn = mock_conn
-        result = store.get(123)
+        _prime_schema_cache(store, agent_id)
+        result = store.get(123, agent_id=agent_id)
 
         assert result == expected_event
         mock_cursor.execute.assert_called_once()
@@ -207,9 +214,11 @@ class TestReflectionStore:
         mock_conn.cursor.return_value.__enter__.return_value = mock_cursor
         mock_psycopg.connect.return_value = mock_conn
 
+        agent_id = uuid4()
         store = ReflectionStore(db_url="postgresql://test:pass@localhost/db")
         store._conn = mock_conn
-        result = store.get(999)
+        _prime_schema_cache(store, agent_id)
+        result = store.get(999, agent_id=agent_id)
 
         assert result is None
 
@@ -246,7 +255,7 @@ class TestReflectionStore:
         mock_conn.cursor.return_value.__enter__.return_value = mock_cursor
         mock_psycopg.connect.return_value = mock_conn
 
-        store = ReflectionStore(db_url="postgresql://test:pass@localhost/db")
+        store = ReflectionStore(db_url="postgresql://test:pass@localhost/db", fixed_serial_id=1)
         store._conn = mock_conn
         result = store.list_by_session(session_id)
 
@@ -285,6 +294,7 @@ class TestReflectionStore:
 
         store = ReflectionStore(db_url="postgresql://test:pass@localhost/db")
         store._conn = mock_conn
+        _prime_schema_cache(store, agent_id)
         result = store.list_recent(agent_id, limit=10)
 
         assert len(result) == 2
@@ -322,6 +332,7 @@ class TestReflectionStore:
 
         store = ReflectionStore(db_url="postgresql://test:pass@localhost/db")
         store._conn = mock_conn
+        _prime_schema_cache(store, agent_id)
         result = store.list_by_level(agent_id, ReflectionLevel.DAILY)
 
         assert len(result) == 2
@@ -354,6 +365,7 @@ class TestReflectionStore:
 
         store = ReflectionStore(db_url="postgresql://test:pass@localhost/db")
         store._conn = mock_conn
+        _prime_schema_cache(store, agent_id)
         result = store.list_by_level(agent_id, ReflectionLevel.DAILY, since=since)
 
         assert len(result) == 1
@@ -397,6 +409,7 @@ class TestReflectionStoreDevinReviewFixes:
 
         store = ReflectionStore(db_url="postgresql://test:pass@localhost/db")
         store._conn = mock_conn
+        _prime_schema_cache(store, agent_id)
         store.add(event)
 
         assert mock_cursor.execute.call_args is not None
@@ -419,9 +432,11 @@ class TestReflectionStoreDevinReviewFixes:
         mock_conn.cursor.return_value.__enter__.return_value = mock_cursor
         mock_psycopg.connect.return_value = mock_conn
 
+        agent_id = uuid4()
         store = ReflectionStore(db_url="postgresql://test:pass@localhost/db")
         store._conn = mock_conn
-        store.get(1)
+        _prime_schema_cache(store, agent_id)
+        store.get(1, agent_id=agent_id)
 
         assert mock_conn.commit.called
 
@@ -440,9 +455,11 @@ class TestReflectionStoreDevinReviewFixes:
         mock_conn.cursor.return_value.__enter__.return_value = mock_cursor
         mock_psycopg.connect.return_value = mock_conn
 
+        agent_id = uuid4()
         store = ReflectionStore(db_url="postgresql://test:pass@localhost/db")
         store._conn = mock_conn
-        store.list_recent(uuid4(), limit=5)
+        _prime_schema_cache(store, agent_id)
+        store.list_recent(agent_id, limit=5)
 
         assert mock_conn.commit.called
 
@@ -461,7 +478,7 @@ class TestReflectionStoreDevinReviewFixes:
         mock_conn.cursor.return_value.__enter__.return_value = mock_cursor
         mock_psycopg.connect.return_value = mock_conn
 
-        store = ReflectionStore(db_url="postgresql://test:pass@localhost/db")
+        store = ReflectionStore(db_url="postgresql://test:pass@localhost/db", fixed_serial_id=1)
         store._conn = mock_conn
         store.list_by_session(uuid4())
 
@@ -482,8 +499,10 @@ class TestReflectionStoreDevinReviewFixes:
         mock_conn.cursor.return_value.__enter__.return_value = mock_cursor
         mock_psycopg.connect.return_value = mock_conn
 
+        agent_id = uuid4()
         store = ReflectionStore(db_url="postgresql://test:pass@localhost/db")
         store._conn = mock_conn
-        store.list_by_level(uuid4(), ReflectionLevel.DAILY)
+        _prime_schema_cache(store, agent_id)
+        store.list_by_level(agent_id, ReflectionLevel.DAILY)
 
         assert mock_conn.commit.called

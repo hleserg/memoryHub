@@ -15,11 +15,35 @@ def _compact(sql: str) -> str:
     return " ".join(sql.upper().split())
 
 
-def test_reflections_migration_forces_rls_for_owner_connections() -> None:
+def test_legacy_reflections_migration_had_rls() -> None:
+    """Migration 0001 created public.reflections with RLS (superseded by 0015/0016)."""
     sql = _compact(_migration("0001_create_reflections_table.sql"))
 
     assert "ALTER TABLE REFLECTIONS ENABLE ROW LEVEL SECURITY" in sql
     assert "ALTER TABLE REFLECTIONS FORCE ROW LEVEL SECURITY" in sql
+
+
+def test_subjective_tables_live_in_per_agent_schema() -> None:
+    sql = _compact(_migration("0015_move_subjective_tables.sql"))
+
+    assert "GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA" in sql
+    assert "GRANT_AGENT_SCHEMA_APP_PRIVILEGES" in sql
+    assert "CREATE TABLE IF NOT EXISTS %I.REFLECTIONS" in sql
+    assert "CREATE TABLE IF NOT EXISTS %I.SELF_APPLIED_CHANGES" in sql
+    assert "CREATE TABLE IF NOT EXISTS %I.PENDING_HUMAN_REVIEW" in sql
+    assert "PERFORM PUBLIC.EXTEND_AGENT_SCHEMA_0015(SCHEMA_NAME)" in sql
+    assert (
+        "ROW LEVEL SECURITY"
+        not in sql.split("EXTEND_AGENT_SCHEMA_0015")[1].split("MIGRATE_SUBJECTIVE_DATA_TO_AGENT")[0]
+    )
+
+
+def test_drop_public_subjective_tables_migration() -> None:
+    sql = _compact(_migration("0016_drop_public_subjective_tables.sql"))
+
+    assert "DROP TABLE IF EXISTS PUBLIC.REFLECTIONS" in sql
+    assert "DROP TABLE IF EXISTS PUBLIC.SELF_APPLIED_CHANGES" in sql
+    assert "DROP TABLE IF EXISTS PUBLIC.PENDING_HUMAN_REVIEW" in sql
 
 
 def test_facts_migration_protects_relation_edges_with_rls() -> None:
