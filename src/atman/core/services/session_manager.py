@@ -546,17 +546,24 @@ class SessionManager:
         # returns the session unchanged — no exception. Concrete adapters
         # (InMemoryStateStore, FileStateStore, PostgresStateStore) implement
         # real persistence and may raise on genuine failures (DB connection
-        # lost, disk full, etc.) — those errors propagate so callers can
-        # decide how to handle them, rather than being silently logged.
-        self._state_store.create_session(
-            Session(
-                id=context.session_id,
-                agent_id=agent_id,
-                started_at=context.started_at,
-                status="active",
-                identity_snapshot_id=stored_snapshot.id,
+        # lost, disk full, etc.). If that happens, roll back the in-memory
+        # registry entry so the orphan does not count toward
+        # max_active_sessions, then re-raise so the caller knows the start
+        # failed (the caller never receives the session_id here).
+        try:
+            self._state_store.create_session(
+                Session(
+                    id=context.session_id,
+                    agent_id=agent_id,
+                    started_at=context.started_at,
+                    status="active",
+                    identity_snapshot_id=stored_snapshot.id,
+                )
             )
-        )
+        except Exception:
+            with self._lock:
+                self._active_sessions.pop(context.session_id, None)
+            raise
 
         journal_lock = self._try_lock_journal(identity.id, context.session_id)
         if journal_lock is not None:
