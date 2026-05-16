@@ -59,10 +59,20 @@ class InMemoryStateStore(StateStore):
     def add_reframing_note(
         self, experience_id: UUID, note: ReframingNote
     ) -> ExperienceRecord | None:
-        """Add reframing note to experience (legacy — experience is read-only view in v2)."""
+        """Add reframing note to experience (legacy — experience is read-only view in v2).
+
+        Dedup-by-trigger: if a note with the same non-empty ``triggered_by``
+        already exists, the new note is NOT appended and the existing record
+        is returned unchanged. Mirrors :class:`FileStateStore` and
+        :class:`InMemoryExperienceStore` behaviour.
+        """
         record = self._experiences.get(experience_id)
         if record is None:
             return None
+        if note.triggered_by and any(
+            n.triggered_by == note.triggered_by for n in record.experience.reframing_notes
+        ):
+            return record
         updated = record.model_copy(deep=True)
         updated.experience.reframing_notes.append(note)
         self._experiences[experience_id] = updated

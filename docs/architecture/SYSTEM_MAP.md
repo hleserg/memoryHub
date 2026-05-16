@@ -54,6 +54,7 @@ All paths are absolute relative to the repository root.
 | `core/ports/memory_middleware.py` (E24) | Memory surfacing context wrapping | `MemoryMiddlewarePort` (Protocol), `MemoryContext` |
 | `core/ports/memory_usage_log.py` (E24.10) | Audit log for surfaced/used memory items | `MemoryUsageLog` (ABC), `MemoryUsageRecord`, `UsageType` |
 | `core/ports/reflection_store.py` (E27) | PostgreSQL `reflections` table interface | `ReflectionStore` (ABC): `add`, `get`, `list_by_session`, `list_recent`, `list_by_level`, `list_by_experience` |
+| `core/ports/session_repository.py` (R1) | Reflection-side view of sessions + key moments + reframing notes; planned replacement for `ExperienceRepository` per Этап 18 (REFLECTION_FUTURE.md §3) | `SessionRepository` (Protocol): `get_session`, `list_recent_sessions`, `get_sessions_in_range`, `get_key_moments_for_session`, `get_key_moments_in_range`, `add_reframing_note` |
 | `core/ports/self_applied_changes.py` (R11.5) | Audit store for reflection self-applied changes (append + revert) | `SelfAppliedChangeStore` (Protocol) |
 | `core/ports/pending_human_review.py` (R11.7) | Pending-review inbox for low-confidence reflection proposals | `PendingHumanReviewInbox` (Protocol) |
 | `core/ports/reflection_request_queue.py` (R12) | Queue for agent-driven reflection requests | `ReflectionRequestQueue` (Protocol) |
@@ -131,14 +132,15 @@ All paths are absolute relative to the repository root.
 | `adapters/maintenance/in_memory_queue.py` (`InMemoryMaintenanceQueue`) | `MaintenanceQueue` | run_key idempotency; atomic `claim_batch`; all status transitions |
 | `adapters/maintenance/postgres_queue.py` (`PostgresMaintenanceQueue`) | `MaintenanceQueue` | SKIP LOCKED `claim_batch` via CTE on `public.maintenance_jobs`; run_key idempotency; psycopg3 |
 | `adapters/linguistic/mrebel_adapter.py` (`MRebelRelationAdapter`) | `EntityRelationExtractor` | `Babelscape/mrebel-large` via transformers `text2text-generation`; lazy load; REBEL triplet parser; guarded imports |
-| `adapters/reflection_compat/experience_view_repository.py` (`ExperienceViewRepository`) | `ExperienceRepository` (Reflection compat) | maps `experience_id ≡ session_id`; builds virtual `SessionExperience` from `Session` + `list[KeyMoment]`; Reflection Engine unchanged via this adapter |
+| `adapters/reflection_compat/experience_view_repository.py` (`ExperienceViewRepository`) | `ExperienceRepository` (Reflection compat) | maps `experience_id ≡ session_id`; builds virtual `SessionExperience` from `Session` + `list[KeyMoment]`; Reflection Engine unchanged via this adapter (deprecated — removed in Этап 18 after R3+R4) |
+| `adapters/reflection/state_store_session_repository.py` (`StateStoreSessionRepository`) | `SessionRepository` | thin adapter over any `StateStore` (InMemory / File / Postgres v2); default `agent_id` constructor slot for single-agent deployments + explicit three-arg form for multi-agent registries; foundation for R3+R4 (Daily/Deep reflection migration) |
 | `adapters/storage/in_memory_reflection_store.py` | `PatternStore`, `ReflectionEventStore`, `HealthAssessmentStore` | reflection output stores |
 | `adapters/storage/in_memory_self_applied_changes.py` (R11.5) | `SelfAppliedChangeStore` | append-only audit; supports revert by walking back to before-snapshot |
 | `adapters/storage/in_memory_pending_human_review.py` (R11.7) | `PendingHumanReviewInbox` | priority-first / oldest-first ordering; resolution sets resolved_at + applied_change_id |
 | `adapters/storage/in_memory_reflection_request_queue.py` (R12) | `ReflectionRequestQueue` | idempotent within UTC hour bucket via `agent_driven_run_key(reason, hour)` |
 | `adapters/observability/in_memory_overload_alert_sink.py` (R13) | `ReflectionOverloadAlertSink` | captures alerts in-memory; sink failures suppressed so monitor cannot crash callers |
 | `adapters/agent/pending_reviews_context.py` (R11.7) | — | `format_pending_reviews_block` helper: priority-first, oldest-first, context truncation |
-|| **`adapters/state/postgres_state_store.py`** (`PostgresStateStore`) | **`StateStore`** | **PostgreSQL implementation** (KeyMoment operations only, psycopg3; other StateStore methods raise `NotImplementedError`) |
+| **`adapters/state/postgres_state_store.py`** (`PostgresStateStore`) | **`StateStore`** | **PostgreSQL v2** — per-agent schemas (`agent_N.sessions`, `agent_N.key_moments`); full Session API (`create_session`, `get_session`, `update_session`, `list_recent_sessions`) and v2 KeyMoment API (`create_key_moment`, `store_key_moment` upsert, `mark_moment_accessed`, `update_moment_structured_markers`, `find_moments_by_entity`); schema resolution via fixed `serial_id` or cached `public.agents` lookup; Identity/Narrative/Eigenstate still `NotImplementedError` (served by `FileStateStore`) |
 | **`adapters/storage/in_memory_postgres_reflection_store.py`** (`InMemoryReflectionStore`) | **`ReflectionStore`** | **E27**: in-memory with BIGSERIAL + RLS simulation |
 | `adapters/storage/reflection_persistence_helper.py` | — | **E27**: helper functions for persisting reflections (`persist_micro_reflection`, `persist_daily_reflection`, `persist_deep_reflection`) |
 | `adapters/reflection/mock_reflection_model.py` (`MockReflectionModel`) | `ReflectionModel` | deterministic mock |
@@ -263,6 +265,7 @@ Connections between two or more parts. These are seams that may break independen
 | `InMemoryMaintenanceQueue`, `PostgresMaintenanceQueue` | `MaintenanceQueue` |
 | `MRebelRelationAdapter` | `EntityRelationExtractor` |
 | `ExperienceViewRepository` (`adapters/reflection_compat/`) | `ExperienceRepository` (Reflection compat bridge) |
+| `StateStoreSessionRepository` (`adapters/reflection/`) | `SessionRepository` (R1 — successor to ExperienceRepository) |
 
 ### 2.2a. Agent adapter ↔ services
 

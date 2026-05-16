@@ -54,6 +54,7 @@
 | `core/ports/memory_guardian.py` | Сканирование качества памяти и персистенс находок | `MemoryGuardian` (ABC): `scan_orphan_entities`, `scan_merge_candidates`, `scan_stale_moments`, `scan_embedding_gaps`, `write_finding`, `get_unresolved`, `resolve_finding` |
 | `core/ports/reflection.py` | Зависимости Reflection Engine; `ReflectionModel` возвращает DTO (#146) | `ExperienceRepository`, `IdentityRepository`, `NarrativeRepository`, `ReflectionModel`, `PatternStore`, `ReflectionEventStore`, `HealthAssessmentStore`, `ReflectionEventPersistenceObserver`, `NarrativeWriteAuditPort` |
 | **`core/ports/reflection_store.py`** | **E27**: Интерфейс таблицы PostgreSQL `reflections` | `ReflectionStore` (ABC): `add`, `get`, `list_by_session`, `list_recent`, `list_by_level`, `list_by_experience` |
+| `core/ports/session_repository.py` (R1) | Reflection-сторона: чтение сессий + key moments + reframing notes; планируемая замена `ExperienceRepository` по Этапу 18 (REFLECTION_FUTURE.md §3) | `SessionRepository` (Protocol): `get_session`, `list_recent_sessions`, `get_sessions_in_range`, `get_key_moments_for_session`, `get_key_moments_in_range`, `add_reframing_note` |
 | `core/ports/self_applied_changes.py` (R11.5) | Аудит-стор самостоятельно применённых рефлексией изменений (append + revert) | `SelfAppliedChangeStore` (Protocol) |
 | `core/ports/pending_human_review.py` (R11.7) | Inbox для предложений с низкой уверенностью | `PendingHumanReviewInbox` (Protocol) |
 | `core/ports/reflection_request_queue.py` (R12) | Очередь запросов рефлексии от агента | `ReflectionRequestQueue` (Protocol) |
@@ -135,14 +136,15 @@
 | `adapters/linguistic/noop_adapter.py` (`NoOpLinguisticAnalyzer`) | `LinguisticAnalyzer` | возвращает пустые, но корректные объекты анализа; default при `LINGUISTIC_ENABLED=false` |
 | `adapters/linguistic/gliner_minilm_adapter.py` (`GLiNERPlusMiniLMAdapter`) | `LinguisticAnalyzer` | GLiNER (`urchade/gliner_multi-v2.1`) + MiniLM NLI; ленивая загрузка; guarded imports; эвристики расхождения для русского языка; требует `pip install -e ".[linguistic]"` |
 | `adapters/maintenance/in_memory_queue.py` (`InMemoryMaintenanceQueue`) | `MaintenanceQueue` | идемпотентность через run_key; атомарный `claim_batch`; все статусные переходы |
-| `adapters/reflection_compat/experience_view_repository.py` (`ExperienceViewRepository`) | `ExperienceRepository` (compat мост для Reflection) | `experience_id ≡ session_id`; строит виртуальный `SessionExperience` из `Session` + `list[KeyMoment]`; Reflection Engine без изменений |
+| `adapters/reflection_compat/experience_view_repository.py` (`ExperienceViewRepository`) | `ExperienceRepository` (compat мост для Reflection) | `experience_id ≡ session_id`; строит виртуальный `SessionExperience` из `Session` + `list[KeyMoment]`; Reflection Engine без изменений (deprecated — удаляется на Этапе 18 после R3+R4) |
+| `adapters/reflection/state_store_session_repository.py` (`StateStoreSessionRepository`) | `SessionRepository` | тонкий адаптер над любым `StateStore` (InMemory / File / Postgres v2); default `agent_id` через конструктор для single-agent + явная трёхаргументная форма для multi-agent; фундамент для R3+R4 (миграция Daily/Deep reflection) |
 | `adapters/storage/in_memory_reflection_store.py` | `PatternStore`, `ReflectionEventStore`, `HealthAssessmentStore` | хранилища выводов рефлексии |
 | `adapters/storage/in_memory_self_applied_changes.py` (R11.5) | `SelfAppliedChangeStore` | append-only аудит; поддерживает revert через snapshot до изменения |
 | `adapters/storage/in_memory_pending_human_review.py` (R11.7) | `PendingHumanReviewInbox` | сортировка priority-first / oldest-first; resolve выставляет resolved_at + applied_change_id |
 | `adapters/storage/in_memory_reflection_request_queue.py` (R12) | `ReflectionRequestQueue` | идемпотентность в пределах UTC-часа через `agent_driven_run_key(reason, hour)` |
 | `adapters/observability/in_memory_overload_alert_sink.py` (R13) | `ReflectionOverloadAlertSink` | алерты в памяти; падения sink подавляются, чтобы монитор не валил вызывающего |
 | `adapters/agent/pending_reviews_context.py` (R11.7) | — | `format_pending_reviews_block`: priority-first, oldest-first, обрезка контекста |
-|| **`adapters/state/postgres_state_store.py`** (`PostgresStateStore`) | **`StateStore`** | **Реализация PostgreSQL** (только операции KeyMoment, psycopg3; другие методы StateStore выбрасывают `NotImplementedError`) |
+| **`adapters/state/postgres_state_store.py`** (`PostgresStateStore`) | **`StateStore`** | **PostgreSQL v2** — per-agent schemas (`agent_N.sessions`, `agent_N.key_moments`); полный Session API (`create_session`, `get_session`, `update_session`, `list_recent_sessions`) и v2 KeyMoment API (`create_key_moment`, `store_key_moment` upsert, `mark_moment_accessed`, `update_moment_structured_markers`, `find_moments_by_entity`); резолв схемы через фиксированный `serial_id` или кэшированный lookup по `public.agents`; Identity/Narrative/Eigenstate по-прежнему `NotImplementedError` (обслуживается `FileStateStore`) |
 | **`adapters/storage/in_memory_postgres_reflection_store.py`** (`InMemoryReflectionStore`) | **`ReflectionStore`** | **E27**: в памяти с симуляцией BIGSERIAL + RLS |
 | `adapters/storage/reflection_persistence_helper.py` | — | **E27**: функции-помощники для персистенса рефлексий (`persist_micro_reflection`, `persist_daily_reflection`, `persist_deep_reflection`) |
 | `adapters/reflection/mock_reflection_model.py` (`MockReflectionModel`) | `ReflectionModel` | детерминированный мок |
@@ -261,6 +263,7 @@
 | `InMemoryMaintenanceQueue`, `PostgresMaintenanceQueue` | `MaintenanceQueue` |
 | `MRebelRelationAdapter` | `EntityRelationExtractor` |
 | `ExperienceViewRepository` (`adapters/reflection_compat/`) | `ExperienceRepository` (compat мост для Reflection) |
+| `StateStoreSessionRepository` (`adapters/reflection/`) | `SessionRepository` (R1 — преемник ExperienceRepository) |
 
 ### 2.2a. Agent adapter ↔ сервисы
 
