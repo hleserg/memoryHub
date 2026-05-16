@@ -219,17 +219,21 @@ class PassiveMemoryInjector:
             include_invalidated=False,
         )
 
-        # Embedding scoring + working-memory dedup + empty-content skip
+        # Embedding scoring + working-memory dedup + empty-content skip.
+        # Use embed_batch so remote adapters (Ollama, flag) make one round-trip
+        # instead of one per fact.
+        eligible: list[FactRecord] = [
+            fact
+            for fact in candidate_facts
+            if fact.content.strip() and not (working_memory and working_memory.has(fact.id))
+        ]
         scored_facts: list[tuple[FactRecord, float]] = []
-        for fact in candidate_facts:
-            if not fact.content.strip():
-                continue
-            if working_memory and working_memory.has(fact.id):
-                continue
-            fact_embedding = self.embedding.embed(fact.content)
-            score = self.embedding.similarity(query_embedding, fact_embedding)
-            if score >= self.min_threshold:
-                scored_facts.append((fact, float(score)))
+        if eligible:
+            batch_embeddings = self.embedding.embed_batch([f.content for f in eligible])
+            for fact, fact_embedding in zip(eligible, batch_embeddings):
+                score = self.embedding.similarity(query_embedding, fact_embedding)
+                if score >= self.min_threshold:
+                    scored_facts.append((fact, float(score)))
 
         if not scored_facts:
             return surfaced
@@ -281,10 +285,12 @@ class PassiveMemoryInjector:
             return sorted(scored_facts, key=lambda x: x[1], reverse=True)
 
         bm25_qvec = self._bm25.embed(context_text)
-        bm25_scores: dict[UUID, float] = {}
-        for fact, _ in scored_facts:
-            vec = self._bm25.embed(fact.content)
-            bm25_scores[fact.id] = float(self._bm25.similarity(bm25_qvec, vec))
+        facts_only = [f for f, _ in scored_facts]
+        bm25_vecs = self._bm25.embed_batch([f.content for f in facts_only])
+        bm25_scores: dict[UUID, float] = {
+            fact.id: float(self._bm25.similarity(bm25_qvec, vec))
+            for fact, vec in zip(facts_only, bm25_vecs)
+        }
 
         emb_sorted = sorted(scored_facts, key=lambda x: x[1], reverse=True)
         bm25_sorted = sorted(bm25_scores.items(), key=lambda x: x[1], reverse=True)
