@@ -1159,14 +1159,21 @@ class AtmanRunner:
                 return "exit"
 
             elif cmd == "save_to_memory":
-                if not arg:
+                if not arg.strip():
                     print_warn("Usage: save_to_memory <content>")
                     retry_count += 1
                     continue
-                # Save to factual memory - placeholder for future implementation
-                # Full implementation would require FactualMemory port in AtmanDeps
-                print_warn(f"save_to_memory not yet implemented (content NOT saved): {arg[:50]}...")
-                print_info("Returning to menu. Use 'wait' to continue session.")
+                if deps.passive_memory_injector is None:
+                    print_warn(
+                        "Memory not available (set ATMAN_LINGUISTIC_ENABLED=true to enable)"
+                    )
+                    retry_count += 1
+                    continue
+                from atman.core.models.fact import FactRecord
+
+                fact = FactRecord(content=arg.strip(), source="user_command")
+                saved = deps.passive_memory_injector.factual_memory.add_fact(fact)
+                print_info(f"Saved to memory: {saved.id}")
                 retry_count += 1
                 continue
 
