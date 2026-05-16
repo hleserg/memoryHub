@@ -695,6 +695,9 @@ class AtmanRunner:
             restart_session,
             wait_session,
         )
+        from atman.core.services.passive_memory_injector import build_rag_context
+        from atman.core.services.session_cache import SessionCache
+        from atman.core.services.session_working_memory import SessionWorkingMemory
         from atman.term import print_err, print_info, print_plain, print_prompt, print_warn
 
         deps, session_manager, _store = build_deps(self._workspace, self._agent_id, self._config)
@@ -706,6 +709,9 @@ class AtmanRunner:
         interrupted = False
         original_sigterm_handler: Any = None
         user_language = "ru"  # updated from user messages as session progresses
+        # Per-session optimization caches (live exactly one session)
+        working_memory = SessionWorkingMemory()
+        session_cache = SessionCache()
 
         # E22.6: Start dedicated stdin reader thread with current event loop
         loop = asyncio.get_event_loop()
@@ -774,6 +780,13 @@ class AtmanRunner:
 
             print_info("Session started. Empty line or Ctrl-D to exit.\n")
             timeout_seconds = self._config.session_timeout_minutes * 60
+            # Snapshot the static context (identity + narrative) set at session start.
+            # Per-turn RAG results are layered on top of this base each turn, never
+            # accumulated, so injected_context stays bounded by rag_token_budget.
+            _base_injected_context = deps.injected_context
+            # Tracks the last RAG message appended to history (assistant_message /
+            # user_message modes) so it can be removed before the next turn's injection.
+            _last_rag_history_msg: object = None
 
             while True:
                 print_prompt("You: ")
@@ -810,6 +823,57 @@ class AtmanRunner:
                 # Detect user language from their message (most recent wins)
                 if len(user_text.strip()) >= 4:
                     user_language = "ru" if _is_mostly_cyrillic(user_text) else "en"
+
+                # Surface relevant memories via RAG when PassiveMemoryInjector is wired.
+                # build_rag_context caps the result to rag_token_budget tokens.
+                _pmi = deps.passive_memory_injector
+                if _pmi is not None:
+                    from atman.core.services.passive_memory_injector import _surfaced_text
+
+                    # Remove last turn's RAG message from history (assistant_message /
+                    # user_message modes) before injecting fresh results, so only one
+                    # turn's worth of RAG is present in the context at any time.
+                    if _last_rag_history_msg is not None:
+                        with contextlib.suppress(ValueError):
+                            history.remove(_last_rag_history_msg)
+                        _last_rag_history_msg = None
+
+                    # Reset injected_context to base so the previous turn's RAG
+                    # doesn't persist in system_prompt mode when the current turn
+                    # finds zero relevant memories.
+                    deps = replace(deps, injected_context=_base_injected_context)
+
+                    _candidates = _pmi.surface_for_context(user_text, working_memory=working_memory)
+                    _rag = build_rag_context(_candidates, budget=self._config.rag_token_budget)
+                    _LOG.debug(
+                        "RAG: items=%d tokens=%d session_cache=%s",
+                        len(_rag.items),
+                        _rag.tokens_used,
+                        session_cache.stats(),
+                    )
+                    if _rag.items:
+                        _rag_bundle = "\n".join(
+                            f"[{m.source}] {_surfaced_text(m)}" for m in _rag.items
+                        )
+                        _history_len_before = len(history)
+                        _rag_extra = inject_memory(
+                            _rag_bundle,
+                            mode=self._config.memory_injection_mode,
+                            history=history,
+                            prepend=False,
+                        )
+                        if _rag_extra is not None:
+                            # system_prompt mode: combine base + current RAG.
+                            _combined = (
+                                f"{_base_injected_context}\n{_rag_extra}"
+                                if _base_injected_context
+                                else _rag_extra
+                            )
+                            deps = replace(deps, injected_context=_combined)
+                        elif len(history) > _history_len_before:
+                            # History-based modes: capture the appended message so
+                            # we can remove it before the next turn's injection.
+                            _last_rag_history_msg = history[-1]
 
                 try:
                     result = await agent.run(
@@ -850,6 +914,27 @@ class AtmanRunner:
                         session_id = new_session_id
                         deps = new_deps
                         reflected_this_session = False  # Reset for new session
+
+                        # Rebuild base context for the new session so subsequent RAG
+                        # injections are anchored to the restarted session's identity,
+                        # not the original one (which may have been updated by reflection).
+                        _new_memory_bundle = build_memory_context(deps)
+                        if _new_memory_bundle:
+                            _new_extra = inject_memory(
+                                _new_memory_bundle,
+                                mode=self._config.memory_injection_mode,
+                                history=history,
+                                prepend=False,
+                            )
+                            if _new_extra is not None:
+                                deps = replace(deps, injected_context=_new_extra)
+                        _base_injected_context = deps.injected_context
+                        _last_rag_history_msg = None
+
+                        working_memory.clear()
+                        session_cache.entity_resolutions.clear()
+                        session_cache.rag_results.clear()
+                        session_cache.dirty_entities.clear()
 
                         print_info("Session restarted successfully.\n")
                         continue  # Skip output, continue loop with new session
@@ -944,6 +1029,16 @@ class AtmanRunner:
             if original_sigterm_handler is not None:
                 signal.signal(signal.SIGTERM, original_sigterm_handler)
             self._stop_stdin_reader()
+            # Release per-session caches to free memory
+            working_memory.clear()
+            session_cache.entity_resolutions.clear()
+            session_cache.rag_results.clear()
+            session_cache.dirty_entities.clear()
+            if deps.passive_memory_injector is not None:
+                with contextlib.suppress(Exception):
+                    la = getattr(deps.passive_memory_injector, "_linguistic_analyzer", None)
+                    if la is not None and hasattr(la, "clear_session_cache"):
+                        la.clear_session_cache()
             if session_id is not None:
                 try:
                     # Pass close_reason if session was interrupted

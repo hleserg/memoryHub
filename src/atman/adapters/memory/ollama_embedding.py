@@ -33,6 +33,7 @@ class OllamaEmbeddingAdapter(EmbeddingPort):
         base_url: str | None = None,
         model: str | None = None,
         timeout: float = 30.0,
+        cache_size: int = 4096,
     ) -> None:
         """
         Initialize Ollama embedding adapter.
@@ -41,6 +42,7 @@ class OllamaEmbeddingAdapter(EmbeddingPort):
             base_url: Ollama server URL (defaults to EMBEDDING_OLLAMA_HOST env var or localhost)
             model: Model name (defaults to EMBEDDING_MODEL env var or bge-m3)
             timeout: Request timeout in seconds
+            cache_size: LRU cache size for single-text embed(). 0 disables caching.
         """
         resolved_url = base_url or os.environ.get(
             "EMBEDDING_OLLAMA_HOST", os.environ.get("OLLAMA_HOST", "http://localhost:11434")
@@ -55,40 +57,27 @@ class OllamaEmbeddingAdapter(EmbeddingPort):
         )
         self.timeout = timeout
         self._dimension: int | None = None
+        from functools import lru_cache
 
-    @override
-    def embed(self, text: str) -> list[float]:
-        """Generate embedding via Ollama API."""
+        if cache_size > 0:
+            self._embed_cached = lru_cache(maxsize=cache_size)(self._embed_raw)
+        else:
+            self._embed_cached = self._embed_raw  # type: ignore[assignment]
+
+    def _embed_raw(self, text: str) -> tuple[float, ...]:
+        """Single-text embed as a hashable tuple (used by the LRU cache)."""
+        return tuple(self._embed_http(text))
+
+    def _embed_http(self, text: str) -> list[float]:
+        """Direct HTTP call to Ollama embed endpoint (no caching)."""
         url = f"{self.base_url}/api/embed"
-
-        payload = json.dumps(
-            {
-                "model": self.model,
-                "input": text,
-            }
-        ).encode("utf-8")
-
-        headers = {
-            "Content-Type": "application/json",
-        }
-
+        payload = json.dumps({"model": self.model, "input": text}).encode("utf-8")
         req = urllib.request.Request(
-            url,
-            data=payload,
-            headers=headers,
-            method="POST",
+            url, data=payload, headers={"Content-Type": "application/json"}, method="POST"
         )
-
         try:
-            # ``url`` is built from ``self.base_url`` (configured Ollama endpoint,
-            # validated as ``http(s)://...`` at construction) — the file:// /
-            # custom-scheme attack surface B310 warns about does not apply.
             with urllib.request.urlopen(req, timeout=self.timeout) as response:  # nosec B310
                 data = json.loads(response.read().decode("utf-8"))
-                # Ollama returns the vector under "embedding" for single inputs;
-                # newer servers may return ``"embeddings": [[...]]`` or even an
-                # explicit empty list. Normalize both shapes without indexing
-                # into a possibly empty list.
                 embedding = data.get("embedding")
                 if not embedding:
                     embeddings = data.get("embeddings") or []
@@ -100,6 +89,15 @@ class OllamaEmbeddingAdapter(EmbeddingPort):
             raise RuntimeError(f"Failed to connect to Ollama: {e}") from e
         except json.JSONDecodeError as e:
             raise RuntimeError(f"Invalid JSON response from Ollama: {e}") from e
+
+    @override
+    def embed(self, text: str) -> list[float]:
+        """Generate embedding via Ollama API, using LRU cache when enabled."""
+        return list(self._embed_cached(text))
+
+    def embedding_cache_info(self) -> object:
+        """Return lru_cache statistics (hits, misses, …) for monitoring."""
+        return getattr(self._embed_cached, "cache_info", lambda: None)()
 
     @override
     def embed_batch(self, texts: list[str]) -> list[list[float]]:

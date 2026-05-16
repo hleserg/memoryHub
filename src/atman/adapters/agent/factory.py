@@ -8,6 +8,7 @@ IdentityService, ExperienceService, MicroReflectionService.
 from __future__ import annotations
 
 import json
+import os
 from datetime import datetime
 from pathlib import Path
 from uuid import UUID
@@ -181,6 +182,30 @@ def build_deps(
         event_store=InMemoryReflectionEventStore(),
     )
 
+    # Build optional RAG pipeline when ATMAN_LINGUISTIC_ENABLED=true.
+    # Uses the configured embedding backend (ollama/flag) and the same
+    # state_store that the session will write to.
+    passive_memory_injector = None
+    if os.getenv("ATMAN_LINGUISTIC_ENABLED", "false").lower() == "true":
+        from atman.config import build_embedding_adapter
+        from atman.config import build_memory_backend as _build_mem
+        from atman.core.services.passive_memory_injector import PassiveMemoryInjector
+
+        try:
+            _embedding = build_embedding_adapter()
+            _factual_memory = _build_mem()
+            passive_memory_injector = PassiveMemoryInjector(
+                embedding=_embedding,
+                factual_memory=_factual_memory,
+                state_store=state_store,
+            )
+        except Exception:
+            import logging as _logging
+
+            _logging.getLogger(__name__).warning(
+                "Failed to build PassiveMemoryInjector — RAG disabled", exc_info=True
+            )
+
     deps = AtmanDeps.from_config(
         config=config,
         session_manager=session_manager,
@@ -192,6 +217,7 @@ def build_deps(
         session_id=None,
         pending_review_inbox=InMemoryPendingHumanReviewInbox(),
         reflection_request_queue=InMemoryReflectionRequestQueue(),
+        passive_memory_injector=passive_memory_injector,
     )
 
     return deps, session_manager, state_store

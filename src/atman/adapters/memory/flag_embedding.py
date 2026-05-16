@@ -40,6 +40,7 @@ class FlagEmbeddingAdapter(EmbeddingPort):
         batch_size: int = 32,
         max_length: int = 512,
         device: str | None = None,
+        cache_size: int = 4096,
     ) -> None:
         self._model_name = model_name
         self._use_fp16 = use_fp16
@@ -47,6 +48,14 @@ class FlagEmbeddingAdapter(EmbeddingPort):
         self._max_length = max_length
         self._device = device
         self._model: Any = None  # lazy load
+        # Per-instance LRU so repeated entity mentions skip model inference.
+        # cache_size=0 disables caching (useful in tests / low-memory envs).
+        from functools import lru_cache
+
+        if cache_size > 0:
+            self._embed_cached = lru_cache(maxsize=cache_size)(self._embed_raw)
+        else:
+            self._embed_cached = self._embed_raw  # type: ignore[assignment]
 
     def _get_model(self) -> Any:
         """Lazy-load BGEM3FlagModel on first use."""
@@ -65,10 +74,18 @@ class FlagEmbeddingAdapter(EmbeddingPort):
             self._model = BGEM3FlagModel(self._model_name, **kwargs)
         return self._model
 
+    def _embed_raw(self, text: str) -> tuple[float, ...]:
+        """Produce a dense embedding as a hashable tuple (used by the LRU cache)."""
+        return tuple(self.embed_batch([text])[0])
+
     @override
     def embed(self, text: str) -> list[float]:
-        """Generate dense embedding for a single text."""
-        return self.embed_batch([text])[0]
+        """Generate dense embedding for a single text, using LRU cache when enabled."""
+        return list(self._embed_cached(text))
+
+    def embedding_cache_info(self) -> object:
+        """Return lru_cache statistics (hits, misses, …) for monitoring."""
+        return getattr(self._embed_cached, "cache_info", lambda: None)()
 
     @override
     def embed_batch(self, texts: list[str]) -> list[list[float]]:

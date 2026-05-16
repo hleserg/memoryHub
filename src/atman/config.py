@@ -67,6 +67,7 @@ class EmbeddingSettings(BaseSettings):
     use_fp16: bool = True  # Use float16 for faster inference (recommended with GPU)
     batch_size: int = 32  # Batch size for FlagEmbedding encode
     max_length: int = 512  # Max token length for FlagEmbedding (BGE-M3 supports up to 8192)
+    cache_size: int = 4096  # LRU cache size for single-text embed() calls; 0 = disabled
 
 
 class LLMSettings(BaseSettings):
@@ -173,6 +174,7 @@ def build_embedding_adapter() -> Any:
             use_fp16=settings.embedding.use_fp16,
             batch_size=settings.embedding.batch_size,
             max_length=settings.embedding.max_length,
+            cache_size=settings.embedding.cache_size,
         )
         if not adapter.is_available():
             raise RuntimeError(
@@ -188,6 +190,7 @@ def build_embedding_adapter() -> Any:
             base_url=settings.embedding.ollama_host,
             model=settings.embedding.model,
             timeout=settings.embedding.timeout,
+            cache_size=settings.embedding.cache_size,
         )
 
     if backend == "mock":
