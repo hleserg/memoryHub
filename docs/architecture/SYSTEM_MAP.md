@@ -316,7 +316,7 @@ MicroReflectionService — reads ExperienceRepository
   ↓ updates
 NarrativeRepository (recent layer) — optimistic locking
   ↓
-DailyReflectionService — reads experience for the UTC day, detects patterns
+DailyReflectionService — reads sessions + key moments via SessionRepository for the UTC day, detects patterns
   ↓ stores
 PatternStore + ReflectionEventStore
   ↓

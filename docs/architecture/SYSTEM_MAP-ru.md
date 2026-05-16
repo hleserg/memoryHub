@@ -314,7 +314,7 @@ MicroReflectionService — читает ExperienceRepository
   ↓ обновляет
 NarrativeRepository (recent-слой) — оптимистическая блокировка
   ↓
-DailyReflectionService — читает опыт за UTC-сутки, детектит паттерны
+DailyReflectionService — читает сессии + key moments через SessionRepository за UTC-сутки, детектит паттерны
   ↓ сохраняет
 PatternStore + ReflectionEventStore
   ↓
