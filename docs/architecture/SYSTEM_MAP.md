@@ -139,7 +139,11 @@ All paths are absolute relative to the repository root.
 | `adapters/reflection/state_store_session_repository.py` (`StateStoreSessionRepository`) | `SessionRepository` | thin adapter over any `StateStore` (InMemory / File / Postgres v2); default `agent_id` constructor slot for single-agent deployments + explicit three-arg form for multi-agent registries; foundation for R3+R4 (Daily/Deep reflection migration) |
 | `adapters/storage/in_memory_reflection_store.py` | `PatternStore`, `ReflectionEventStore`, `HealthAssessmentStore` | reflection output stores |
 | `adapters/storage/in_memory_self_applied_changes.py` (R11.5) | `SelfAppliedChangeStore` | append-only audit; supports revert by walking back to before-snapshot |
+| `adapters/storage/postgres_self_applied_changes.py` (R11.5) | `SelfAppliedChangeStore` | `agent_{N}.self_applied_changes`; bound to one `agent_id` at construction |
 | `adapters/storage/in_memory_pending_human_review.py` (R11.7) | `PendingHumanReviewInbox` | priority-first / oldest-first ordering; resolution sets resolved_at + applied_change_id |
+| `adapters/storage/postgres_pending_human_review.py` (R11.7) | `PendingHumanReviewInbox` | `agent_{N}.pending_human_review`; enqueues `agent_id` into `context` |
+| `reflection/store.py` (`ReflectionStore`) | — | PostgreSQL `agent_{N}.reflections` via `AgentSchemaResolver` (no RLS) |
+| `adapters/storage/postgres_agent_schema.py` | — | `agent_id` → `agent_{serial_id}` schema resolution for subjective Postgres adapters |
 | `adapters/storage/in_memory_reflection_request_queue.py` (R12) | `ReflectionRequestQueue` | idempotent within UTC hour bucket via `agent_driven_run_key(reason, hour)` |
 | `adapters/observability/in_memory_overload_alert_sink.py` (R13) | `ReflectionOverloadAlertSink` | captures alerts in-memory; sink failures suppressed so monitor cannot crash callers |
 | `adapters/agent/pending_reviews_context.py` (R11.7) | — | `format_pending_reviews_block` helper: priority-first, oldest-first, context truncation |

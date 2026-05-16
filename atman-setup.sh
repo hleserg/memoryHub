@@ -776,7 +776,7 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON public.sessions           TO atman_app;
 GRANT SELECT, INSERT, UPDATE, DELETE ON public.experiences        TO atman_app;
 GRANT SELECT, INSERT, UPDATE, DELETE ON public.key_moments        TO atman_app;
 GRANT SELECT, INSERT, UPDATE, DELETE ON public.reframing_notes    TO atman_app;
-GRANT SELECT, INSERT, UPDATE, DELETE ON public.reflections        TO atman_app;
+-- reflections: per-agent agent_{N}.reflections (migration 0015); legacy public grant removed
 GRANT SELECT, INSERT, UPDATE, DELETE ON public.identity           TO atman_app;
 GRANT SELECT, INSERT, UPDATE, DELETE ON public.identity_snapshots TO atman_app;
 GRANT SELECT, INSERT, UPDATE, DELETE ON public.narrative          TO atman_app;
