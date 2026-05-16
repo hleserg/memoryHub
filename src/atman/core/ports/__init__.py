@@ -16,6 +16,7 @@ from atman.core.ports.reflection import (
     ReflectionEventStore,
     ReflectionModel,
 )
+from atman.core.ports.pending_human_review import PendingHumanReviewInbox
 from atman.core.ports.self_applied_changes import SelfAppliedChangeStore
 from atman.core.ports.state_store import (
     DateRangeQuery,
@@ -42,6 +43,7 @@ __all__ = [
     "NarrativeRepository",
     "NarrativeWriteAuditPort",
     "PatternStore",
+    "PendingHumanReviewInbox",
     "ReflectionEventPersistenceObserver",
     "ReflectionEventStore",
     "ReflectionModel",

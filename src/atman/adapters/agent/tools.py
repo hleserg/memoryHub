@@ -11,11 +11,15 @@ All tools receive RunContext[AtmanDeps] as the first parameter,
 giving them access to services and session state.
 """
 
+from datetime import UTC, datetime
+from uuid import UUID
+
 from pydantic_ai import RunContext
 
 from atman.adapters.agent.deps import AtmanDeps
 from atman.affect.models import AgentMemoryReport
 from atman.core.models.experience import EmotionalDepth
+from atman.core.models.pending_human_review import PendingReviewResolution
 
 # PLAYBOOK-START
 # id: error-returning-tool-callbacks
@@ -213,3 +217,81 @@ def wait_session(ctx: RunContext[AtmanDeps], minutes: int) -> str:
         return f"Error: minutes must be positive, got {minutes}"
 
     return f"__ATMAN_WAIT_REQUESTED__{minutes}"
+
+
+_RESOLUTION_ALIASES: dict[str, PendingReviewResolution] = {
+    "accept": PendingReviewResolution.ACCEPTED,
+    "accepted": PendingReviewResolution.ACCEPTED,
+    "yes": PendingReviewResolution.ACCEPTED,
+    "approve": PendingReviewResolution.ACCEPTED,
+    "reject": PendingReviewResolution.REJECTED,
+    "rejected": PendingReviewResolution.REJECTED,
+    "no": PendingReviewResolution.REJECTED,
+    "decline": PendingReviewResolution.REJECTED,
+    "modify": PendingReviewResolution.MODIFIED,
+    "modified": PendingReviewResolution.MODIFIED,
+    "dismiss": PendingReviewResolution.DISMISSED,
+    "dismissed": PendingReviewResolution.DISMISSED,
+    "skip": PendingReviewResolution.DISMISSED,
+}
+
+
+def resolve_pending_review(
+    ctx: RunContext[AtmanDeps],
+    review_id: str,
+    decision: str,
+    note: str,
+) -> str:
+    """
+    Resolve a pending human review item raised by reflection.
+
+    Use this tool to answer the questions surfaced at the start of the
+    session. Pass the id shown in the "Перед тем как продолжить" section.
+
+    Args:
+        ctx: Run context with AtmanDeps
+        review_id: UUID of the review item to resolve
+        decision: One of "accepted" | "rejected" | "modified" | "dismissed".
+            Common synonyms ("approve", "yes", "no", "skip") are also accepted.
+        note: Brief explanation of the decision (required, non-empty)
+
+    Returns:
+        Confirmation message or "Error: …" string for self-correction.
+    """
+    inbox = ctx.deps.pending_review_inbox
+    if inbox is None:
+        return "Error: no pending review inbox is configured in this session"
+
+    decision_norm = decision.strip().lower()
+    resolution = _RESOLUTION_ALIASES.get(decision_norm)
+    if resolution is None:
+        return (
+            f"Error: unknown decision '{decision}'. "
+            "Use accepted | rejected | modified | dismissed."
+        )
+
+    note_clean = note.strip()
+    if not note_clean:
+        return "Error: note is required and must be non-empty"
+
+    try:
+        review_uuid = UUID(review_id)
+    except (TypeError, ValueError):
+        return f"Error: review_id is not a valid UUID: {review_id!r}"
+
+    try:
+        resolved = inbox.resolve(
+            review_uuid,
+            resolution=resolution,
+            note=note_clean,
+            resolved_at=datetime.now(UTC),
+        )
+    except KeyError:
+        return f"Error: no pending review with id {review_id}"
+    except ValueError as exc:
+        return f"Error: {exc}"
+
+    return (
+        f"Resolved review {resolved.id} as {resolved.resolution.value}. "
+        f"Note: {note_clean}"
+    )

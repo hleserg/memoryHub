@@ -60,6 +60,13 @@ from atman.core.models.reflection import (
     ReflectionRecord,
     ReframingNoteOutput,
 )
+from atman.core.models.pending_human_review import (
+    PendingReview,
+    PendingReviewDraft,
+    PendingReviewKind,
+    PendingReviewPriority,
+    PendingReviewResolution,
+)
 from atman.core.models.self_applied_change import (
     SelfAppliedChange,
     SelfChangeActor,
@@ -134,6 +141,11 @@ __all__ = [
     "PatternDetectionOutput",
     "PatternStatus",
     "PatternType",
+    "PendingReview",
+    "PendingReviewDraft",
+    "PendingReviewKind",
+    "PendingReviewPriority",
+    "PendingReviewResolution",
     "Principle",
     "ReflectionEvent",
     "ReflectionLevel",

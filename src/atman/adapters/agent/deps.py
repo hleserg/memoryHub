@@ -20,6 +20,7 @@ from uuid import UUID
 
 if TYPE_CHECKING:
     from atman.adapters.agent.config import AgentConfig, ModelConfig
+    from atman.core.ports.pending_human_review import PendingHumanReviewInbox
     from atman.core.ports.state_store import StateStore
     from atman.core.services.experience_service import ExperienceService
     from atman.core.services.identity_service import IdentityService
@@ -70,6 +71,11 @@ class AtmanDeps:
     injected_context: str | None = None
     """Pending memory context for system_prompt injection mode.
     Set via replace(deps, injected_context=...) and consumed by build_instructions()."""
+
+    pending_review_inbox: PendingHumanReviewInbox | None = None
+    """Optional pending human review inbox. When provided, the runner surfaces
+    unresolved items at session start and exposes the `resolve_pending_review`
+    tool. None disables both behaviors."""
 
     @classmethod
     def from_config(

@@ -686,9 +686,11 @@ class AtmanRunner:
 
         from atman.adapters.agent.factory import build_deps
         from atman.adapters.agent.instructions import build_instructions
+        from atman.adapters.agent.pending_reviews_context import format_pending_reviews_block
         from atman.adapters.agent.tools import (
             log_experience,
             record_key_moment,
+            resolve_pending_review,
             restart_session,
             wait_session,
         )
@@ -728,6 +730,9 @@ class AtmanRunner:
             else:
                 tool_funcs = (log_experience, restart_session, wait_session)
 
+            if deps.pending_review_inbox is not None:
+                tool_funcs = (*tool_funcs, resolve_pending_review)
+
             agent = Agent(
                 self._config.model.model,
                 deps_type=AtmanDeps,
@@ -744,6 +749,11 @@ class AtmanRunner:
                 prev_text = self._build_wake_up_message(recent_experiences[0].experience)
 
             memory_bundle = build_memory_context(deps, prev_session_text=prev_text)
+            pending_block = format_pending_reviews_block(deps.pending_review_inbox)
+            if pending_block:
+                memory_bundle = (
+                    f"{pending_block}\n{memory_bundle}" if memory_bundle else pending_block
+                )
             if memory_bundle:
                 _LOG.info(
                     "Injecting memory bundle for session %s (mode=%s)",
