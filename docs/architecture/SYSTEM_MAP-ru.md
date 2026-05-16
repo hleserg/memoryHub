@@ -244,7 +244,7 @@
 | `request_reflection` ↔ `ReflectionRequestQueue` | `adapters/agent/tools.py` → `core/ports/reflection_request_queue.py` | **R12** инструмент регистрируется только при наличии очереди в `AtmanDeps`; идемпотентность через `agent_driven_run_key` (UTC hour bucket) |
 | `MicroReflectionService` ↔ `ExperienceRepository` + `NarrativeRepository` | `core/services/reflection_service.py` | чтение опыта, апдейт recent-слоя |
 | `DailyReflectionService` ↔ `SessionRepository` + `PatternStore` + `ReflectionEventStore` | `core/services/reflection_service.py` | детекция паттернов (R3 — мигрирован с `ExperienceRepository`; синтезирует виртуальные `SessionExperience` через `services/session_experience_view.build_session_experience`) |
-| `DeepReflectionService` ↔ все рефлексионные порты | `core/services/reflection_service.py` | здоровье + апдейт identity и нарратива |
+| `DeepReflectionService` ↔ `SessionRepository` + `IdentityRepository` + `NarrativeRepository` + `PatternStore` + `HealthAssessmentStore` + `ReflectionEventStore` | `core/services/reflection_service.py` | здоровье + апдейт identity и нарратива (R4 — мигрирован с `ExperienceRepository`; синтезирует виртуальные `SessionExperience` через `services/session_experience_view.build_session_experience`) |
 | `PrincipleRevisionAdvisor` ↔ `PatternCandidate` + `Identity` | `core/services/principle_advisor.py` | анализ паттернов в контексте identity |
 
 ### 2.2. Адаптер ↔ порт
@@ -320,7 +320,7 @@ DailyReflectionService — читает сессии + key moments через Se
   ↓ сохраняет
 PatternStore + ReflectionEventStore
   ↓
-DeepReflectionService — читает все репозитории, оценивает здоровье,
+DeepReflectionService — читает сессии + key moments через SessionRepository, оценивает здоровье,
   обновляет identity и нарратив (с governance)
   ↓ предлагает
 PrincipleRevisionAdvisor — пересмотр принципов

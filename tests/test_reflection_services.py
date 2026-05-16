@@ -761,7 +761,7 @@ def test_deep_reflection_performs_health_assessment() -> None:
     event_store = InMemoryReflectionEventStore()
 
     service = DeepReflectionService(
-        experience_repo=exp_repo,
+        session_repo=exp_repo,
         identity_repo=identity_repo,
         narrative_repo=narrative_repo,
         pattern_store=pattern_store,
@@ -808,7 +808,7 @@ def test_deep_reflection_proposes_changes() -> None:
     event_store = InMemoryReflectionEventStore()
 
     service = DeepReflectionService(
-        experience_repo=exp_repo,
+        session_repo=exp_repo,
         identity_repo=identity_repo,
         narrative_repo=narrative_repo,
         pattern_store=pattern_store,
@@ -854,7 +854,7 @@ def test_deep_reflection_promotes_structured_pattern_implications() -> None:
         reframing_text="Strategic reframing note",
     )
     service = DeepReflectionService(
-        experience_repo=exp_repo,
+        session_repo=exp_repo,
         identity_repo=identity_repo,
         narrative_repo=narrative_repo,
         pattern_store=pattern_store,
@@ -896,7 +896,7 @@ def test_deep_reflection_fixture_json_adds_reframing() -> None:
     event_store = InMemoryReflectionEventStore()
 
     service = DeepReflectionService(
-        experience_repo=exp_repo,
+        session_repo=exp_repo,
         identity_repo=identity_repo,
         narrative_repo=narrative_repo,
         pattern_store=pattern_store,
@@ -966,7 +966,7 @@ def test_deep_reflection_skipped_no_identity_preserves_experience_ids() -> None:
     event_store = InMemoryReflectionEventStore()
 
     service = DeepReflectionService(
-        experience_repo=exp_repo,
+        session_repo=exp_repo,
         identity_repo=identity_repo,
         narrative_repo=narrative_repo,
         pattern_store=pattern_store,
@@ -1010,7 +1010,7 @@ def test_deep_reflection_persist_failure_links_health_assessment() -> None:
     observer = _CapturingReflectionEventObserver()
 
     service = DeepReflectionService(
-        experience_repo=exp_repo,
+        session_repo=exp_repo,
         identity_repo=identity_repo,
         narrative_repo=narrative_repo,
         pattern_store=pattern_store,
@@ -1278,7 +1278,7 @@ def test_deep_empty_period_is_idempotent() -> None:
     event_store = InMemoryReflectionEventStore()
 
     service = DeepReflectionService(
-        experience_repo=exp_repo,
+        session_repo=exp_repo,
         identity_repo=identity_repo,
         narrative_repo=narrative_repo,
         pattern_store=pattern_store,
@@ -1392,7 +1392,7 @@ def test_deep_reflection_retry_after_event_save_failure_counts_duplicate_reframi
     observer = _CapturingReflectionEventObserver()
 
     service = DeepReflectionService(
-        experience_repo=exp_repo,
+        session_repo=exp_repo,
         identity_repo=identity_repo,
         narrative_repo=narrative_repo,
         pattern_store=pattern_store,
@@ -1495,7 +1495,7 @@ def test_deep_reflection_empty_window_is_idempotent() -> None:
     event_store = InMemoryReflectionEventStore()
 
     service = DeepReflectionService(
-        experience_repo=exp_repo,
+        session_repo=exp_repo,
         identity_repo=identity_repo,
         narrative_repo=narrative_repo,
         pattern_store=pattern_store,
@@ -1538,7 +1538,7 @@ def test_deep_reflection_no_identity_is_idempotent() -> None:
     event_store = InMemoryReflectionEventStore()
 
     service = DeepReflectionService(
-        experience_repo=exp_repo,
+        session_repo=exp_repo,
         identity_repo=identity_repo,
         narrative_repo=narrative_repo,
         pattern_store=pattern_store,
@@ -1579,7 +1579,7 @@ def test_deep_reflection_second_successful_run_is_idempotent() -> None:
     event_store = InMemoryReflectionEventStore()
 
     service = DeepReflectionService(
-        experience_repo=exp_repo,
+        session_repo=exp_repo,
         identity_repo=identity_repo,
         narrative_repo=narrative_repo,
         pattern_store=pattern_store,
@@ -1643,7 +1643,7 @@ def test_deep_reflection_repeated_run_does_not_duplicate_snapshot() -> None:
     event_store = InMemoryReflectionEventStore()
 
     service = DeepReflectionService(
-        experience_repo=exp_repo,
+        session_repo=exp_repo,
         identity_repo=identity_repo,
         narrative_repo=narrative_repo,
         pattern_store=pattern_store,

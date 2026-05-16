@@ -641,7 +641,7 @@ def _run_e2e_loop(workspace_path: Path) -> int:
     health_store = InMemoryHealthAssessmentStore()
 
     deep_service = DeepReflectionService(
-        experience_repo=experience_repo,
+        session_repo=session_repo,
         identity_repo=identity_repo,
         narrative_repo=narrative_repo,
         pattern_store=pattern_store,

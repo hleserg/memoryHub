@@ -499,7 +499,7 @@ class DeepReflectionService:
 
     def __init__(
         self,
-        experience_repo: ExperienceRepository,
+        session_repo: SessionRepository,
         identity_repo: IdentityRepository,
         narrative_repo: NarrativeRepository,
         pattern_store: PatternStore,
@@ -511,7 +511,7 @@ class DeepReflectionService:
         reflection_event_observer: ReflectionEventPersistenceObserver | None = None,
     ):
         """Initialize deep reflection service."""
-        self.experience_repo = experience_repo
+        self.session_repo = session_repo
         self.identity_repo = identity_repo
         self.narrative_repo = narrative_repo
         self.pattern_store = pattern_store
@@ -536,7 +536,13 @@ class DeepReflectionService:
         """
         since_utc = ensure_utc(since)
         until_utc = ensure_utc(until)
-        experiences = self.experience_repo.get_in_range(since_utc, until_utc)
+        sessions = self.session_repo.get_sessions_in_range(since_utc, until_utc)
+        experiences: list[SessionExperience] = []
+        for s in sessions:
+            moments = self.session_repo.get_key_moments_for_session(s.id)
+            if not moments:
+                continue
+            experiences.append(build_session_experience(s, moments))
 
         if not experiences:
             return self._create_empty_event(since_utc, until_utc)
@@ -732,7 +738,7 @@ class DeepReflectionService:
                     reflection_type=reframing_out.reflection_type,
                     triggered_by=reframing_trigger_key(run_key, exp.id),
                 )
-                outcome = self.experience_repo.add_reframing_note(exp.id, note)
+                outcome = self.session_repo.add_reframing_note(exp.id, note)
                 if outcome == ReframingNoteAppendResult.STORED:
                     count += 1
                 elif outcome == ReframingNoteAppendResult.EXPERIENCE_NOT_FOUND:
