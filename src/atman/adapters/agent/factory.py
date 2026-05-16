@@ -15,6 +15,8 @@ from uuid import UUID
 from atman.adapters.agent.config import AgentConfig
 from atman.adapters.agent.deps import AtmanDeps
 from atman.adapters.storage.file_state_store import FileStateStore
+from atman.adapters.storage.in_memory_pending_human_review import InMemoryPendingHumanReviewInbox
+from atman.adapters.storage.in_memory_reflection_request_queue import InMemoryReflectionRequestQueue
 from atman.adapters.storage.in_memory_reflection_store import InMemoryReflectionEventStore
 
 try:
@@ -188,6 +190,8 @@ def build_deps(
         state_store=state_store,
         agent_id=agent_id,
         session_id=None,
+        pending_review_inbox=InMemoryPendingHumanReviewInbox(),
+        reflection_request_queue=InMemoryReflectionRequestQueue(),
     )
 
     return deps, session_manager, state_store

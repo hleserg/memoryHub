@@ -94,6 +94,8 @@ class AtmanDeps:
         state_store: StateStore,
         agent_id: UUID,
         session_id: UUID | None = None,
+        pending_review_inbox: PendingHumanReviewInbox | None = None,
+        reflection_request_queue: ReflectionRequestQueue | None = None,
     ) -> AtmanDeps:
         """
         Build :class:`AtmanDeps` from a validated :class:`AgentConfig`.
@@ -116,4 +118,6 @@ class AtmanDeps:
             truncate_narrative_recent=config.truncate_narrative_recent,
             truncate_narrative_core=config.truncate_narrative_core,
             model_config=config.model,
+            pending_review_inbox=pending_review_inbox,
+            reflection_request_queue=reflection_request_queue,
         )
