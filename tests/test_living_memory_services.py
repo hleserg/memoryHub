@@ -29,7 +29,7 @@ from atman.core.services.conflict_detector import ConflictDetector, FactConflict
 from atman.core.services.emotional_echo import EmotionalEcho
 from atman.core.services.passive_memory_injector import (
     PassiveMemoryInjector,
-    SurfacedMemory,
+    SurfacedMemoryItem,
 )
 from atman.core.services.session_working_memory import (
     CachedItem,
@@ -438,7 +438,7 @@ class TestPassiveMemoryInjector:
         )
         results = injector.surface_for_context("user prefers dark mode UI")
         assert results, "expected at least one surfaced fact"
-        assert all(isinstance(r, SurfacedMemory) for r in results)
+        assert all(isinstance(r, SurfacedMemoryItem) for r in results)
         assert all(r.source == "similarity" for r in results)
         # The exact-match fact should appear with the highest score.
         ids = [r.item.id for r in results if isinstance(r.item, FactRecord)]
