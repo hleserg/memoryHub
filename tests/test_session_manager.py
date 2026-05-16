@@ -1771,7 +1771,9 @@ def test_orphan_recovery_completes_existing_experience_after_crash(
         )
 
     experience_id = deterministic_session_experience_id(context.session_id)
-    assert store.get_experience(experience_id) is not None
+    persisted_experience = store.get_experience(experience_id)
+    assert persisted_experience is not None
+    assert persisted_experience.experience.agent_recap == "Recovered insight"
     assert store.load_latest_eigenstate(session_id=context.session_id) is None
 
     # Simulate process death: the OS would release the advisory lock while the journal remains.
@@ -1787,12 +1789,15 @@ def test_orphan_recovery_completes_existing_experience_after_crash(
         identity_id=identity_fixture.id,
     )
     assert recovered_eigenstate is not None
+    assert recovered_eigenstate.emotional_tone == 0.5
+    assert recovered_eigenstate.key_insight == "Recovered insight"
     assert next_context.last_eigenstate is not None
     assert next_context.last_eigenstate.session_id == context.session_id
 
     recovered_narrative = store.load_narrative(identity_fixture.id)
     assert recovered_narrative is not None
-    assert "Experienced 1 significant moment with an overall neutral emotional tone." in (
+    assert "Recovered insight" in recovered_narrative.recent_layer.content
+    assert "Experienced 1 significant moment with an overall positive emotional tone." in (
         recovered_narrative.recent_layer.content
     )
     assert str(context.session_id) in recovered_narrative.recent_layer.content

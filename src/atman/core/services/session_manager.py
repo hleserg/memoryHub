@@ -21,6 +21,8 @@ import asyncio
 import json
 import logging
 import threading
+from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 from typing import IO, TYPE_CHECKING, Literal, cast
 from uuid import UUID, uuid5
@@ -57,6 +59,18 @@ _SESSION_EXPERIENCE_ID_NS = UUID("018e5a2b-7c3d-7b2a-9f01-2a3b4c5d6e7f")
 _NARRATIVE_SAVE_RETRIES = 5
 
 _LOG = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True, slots=True)
+class _FinishJournalMetadata:
+    """Finish-time fields needed to rebuild downstream artifacts after a crash."""
+
+    finished_at: datetime | None = None
+    overall_emotional_tone: float = 0.0
+    key_insight: str = ""
+    alignment_check: bool = True
+    alignment_notes: str = ""
+    incomplete_coloring: bool | None = None
 
 
 def _session_finish_marker(session_id: UUID) -> str:
@@ -217,11 +231,12 @@ class SessionManager:
     # PLAYBOOK-END
     def _load_journal_payload(
         self, journal_file: Path
-    ) -> tuple[list[UUID], dict[UUID, KeyMoment], set[UUID]]:
+    ) -> tuple[list[UUID], dict[UUID, KeyMoment], set[UUID], _FinishJournalMetadata | None]:
         """Load recoverable key moments and fact references from a session journal."""
         key_moment_ids: list[UUID] = []
         journaled_moments: dict[UUID, KeyMoment] = {}
         fact_refs_set: set[UUID] = set()
+        finish_metadata: _FinishJournalMetadata | None = None
 
         with journal_file.open("r", encoding="utf-8") as f:
             for line in f:
@@ -242,11 +257,44 @@ class SessionManager:
                     elif entry.get("type") == "facts_read":
                         for fact_id_str in entry.get("fact_ids", []):
                             fact_refs_set.add(UUID(fact_id_str))
+                    elif entry.get("type") == "finish_session":
+                        finish_metadata = self._finish_metadata_from_journal(entry)
                 except (json.JSONDecodeError, KeyError, ValueError) as exc:
                     _LOG.warning("Skipping malformed journal line in %s: %s", journal_file, exc)
                     continue
 
-        return key_moment_ids, journaled_moments, fact_refs_set
+        return key_moment_ids, journaled_moments, fact_refs_set, finish_metadata
+
+    def _finish_metadata_from_journal(self, entry: dict[str, object]) -> _FinishJournalMetadata:
+        """Parse finish metadata conservatively; malformed fields fall back to safe defaults."""
+        finished_at_raw = entry.get("finished_at")
+        finished_at: datetime | None = None
+        if isinstance(finished_at_raw, str):
+            try:
+                finished_at = datetime.fromisoformat(finished_at_raw)
+            except ValueError:
+                finished_at = None
+
+        tone_raw = entry.get("overall_emotional_tone")
+        overall_emotional_tone = float(tone_raw) if isinstance(tone_raw, int | float) else 0.0
+        if not -1.0 <= overall_emotional_tone <= 1.0:
+            overall_emotional_tone = 0.0
+
+        key_insight_raw = entry.get("key_insight")
+        alignment_check_raw = entry.get("alignment_check")
+        alignment_notes_raw = entry.get("alignment_notes")
+        incomplete_coloring_raw = entry.get("incomplete_coloring")
+
+        return _FinishJournalMetadata(
+            finished_at=finished_at,
+            overall_emotional_tone=overall_emotional_tone,
+            key_insight=key_insight_raw if isinstance(key_insight_raw, str) else "",
+            alignment_check=alignment_check_raw if isinstance(alignment_check_raw, bool) else True,
+            alignment_notes=alignment_notes_raw if isinstance(alignment_notes_raw, str) else "",
+            incomplete_coloring=incomplete_coloring_raw
+            if isinstance(incomplete_coloring_raw, bool)
+            else None,
+        )
 
     def _load_recovery_key_moments(
         self,
@@ -299,6 +347,7 @@ class SessionManager:
         agent_id: UUID,
         existing_exp: ExperienceRecord,
         journaled_moments: dict[UUID, KeyMoment],
+        finish_metadata: _FinishJournalMetadata | None,
     ) -> bool:
         """Complete eigenstate/narrative writes after a crash post-experience persistence."""
         session_id = existing_exp.experience.session_id
@@ -313,16 +362,32 @@ class SessionManager:
         if self._finish_artifacts_complete(agent_id, session_id):
             return True
 
+        key_insight = existing_exp.experience.agent_recap or ""
+        finished_at = existing_exp.experience.timestamp
+        overall_emotional_tone = 0.0
+        alignment_check = True
+        alignment_notes = ""
+        incomplete_coloring = existing_exp.experience.incomplete_coloring
+        if finish_metadata is not None:
+            key_insight = finish_metadata.key_insight or key_insight
+            finished_at = finish_metadata.finished_at or finished_at
+            overall_emotional_tone = finish_metadata.overall_emotional_tone
+            alignment_check = finish_metadata.alignment_check
+            alignment_notes = finish_metadata.alignment_notes
+            if finish_metadata.incomplete_coloring is not None:
+                incomplete_coloring = finish_metadata.incomplete_coloring
+
         recovered_result = SessionResult(
             session_id=session_id,
             started_at=existing_exp.experience.timestamp,
-            finished_at=existing_exp.experience.timestamp,
+            finished_at=finished_at,
             events=[],
             key_moments=loaded_moments,
-            overall_emotional_tone=0.0,
-            key_insight=existing_exp.experience.agent_recap or "",
-            alignment_check=True,
-            incomplete_coloring=existing_exp.experience.incomplete_coloring,
+            overall_emotional_tone=overall_emotional_tone,
+            key_insight=key_insight,
+            alignment_check=alignment_check,
+            alignment_notes=alignment_notes,
+            incomplete_coloring=incomplete_coloring,
             is_finished=True,
             identity_snapshot_id=existing_exp.experience.identity_snapshot_id,
             identity_id=agent_id,
@@ -375,9 +440,12 @@ class SessionManager:
                     continue
 
                 # Parse journal to extract key moments and facts
-                key_moment_ids, journaled_moments, fact_refs_set = self._load_journal_payload(
-                    journal_file
-                )
+                (
+                    key_moment_ids,
+                    journaled_moments,
+                    fact_refs_set,
+                    finish_metadata,
+                ) = self._load_journal_payload(journal_file)
 
                 # Compute deterministic experience_id
                 experience_id = deterministic_session_experience_id(session_id)
@@ -394,6 +462,7 @@ class SessionManager:
                         agent_id,
                         existing_exp,
                         journaled_moments,
+                        finish_metadata,
                     ):
                         journal_file.unlink()
                         _LOG.info("Deleted stale journal for completed session %s", session_id)
@@ -806,6 +875,7 @@ class SessionManager:
         session_result.key_insight = key_insight
         session_result.alignment_check = alignment_check
         session_result.alignment_notes = alignment_notes
+        self._write_finish_journal_entry(session_result)
 
         experience_id = deterministic_session_experience_id(session_id)
 
@@ -892,6 +962,7 @@ class SessionManager:
                     incomplete_coloring=session_result.incomplete_coloring,
                     fact_refs=list(fact_refs_set),
                     close_reason=safe_close_reason,
+                    agent_recap=key_insight or None,
                     restart_reason=restart_reason or "",
                     user_language=user_language,
                 )
@@ -935,6 +1006,28 @@ class SessionManager:
             self._release_journal_file(journal_lock, unlink=True)
 
         return session_result.model_copy(deep=True)
+
+    def _write_finish_journal_entry(self, session_result: SessionResult) -> None:
+        """Persist finish-time metadata before downstream artifacts can partially fail."""
+        if session_result.identity_id is None:
+            return
+        self._write_journal_entry(
+            session_result.identity_id,
+            session_result.session_id,
+            {
+                "type": "finish_session",
+                "session_id": str(session_result.session_id),
+                "finished_at": session_result.finished_at.isoformat(),
+                "overall_emotional_tone": session_result.overall_emotional_tone,
+                "key_insight": session_result.key_insight,
+                "alignment_check": session_result.alignment_check,
+                "alignment_notes": session_result.alignment_notes,
+                "incomplete_coloring": session_result.incomplete_coloring,
+                "identity_snapshot_id": str(session_result.identity_snapshot_id)
+                if session_result.identity_snapshot_id is not None
+                else None,
+            },
+        )
 
     def _save_session_narrative_update(self, session_result: SessionResult) -> None:
         """Append session summary to recent narrative with optimistic concurrency."""
