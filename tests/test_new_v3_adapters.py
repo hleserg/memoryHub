@@ -655,3 +655,59 @@ def test_default_store_key_moment_raises_not_implemented_on_duplicate() -> None:
     # Second call must raise NotImplementedError (not ValueError or silent no-op)
     with pytest.raises(NotImplementedError, match="must override"):
         store.store_key_moment(m)
+
+
+# ---------------------------------------------------------------------------
+# Regression: FileStateStore.store_key_moment must update ALL three storage
+# layers — JSONL, per-moment .json (read first by get_key_moment), and the
+# per-session _moments.json (read by get_key_moments_for_session). Decay
+# updates were previously silently lost because only the JSONL was rewritten.
+# ---------------------------------------------------------------------------
+
+
+def test_file_state_store_store_key_moment_updates_per_moment_file(tmp_path) -> None:
+    from atman.adapters.storage.file_state_store import FileStateStore
+
+    store = FileStateStore(tmp_path)
+    session_id = uuid4()
+    m = KeyMoment(
+        what_happened="initial",
+        how_i_felt=FeltSense(
+            emotional_valence=0.0, emotional_intensity=0.5, depth=EmotionalDepth.SURFACE
+        ),
+        why_it_matters="reason",
+        session_id=session_id,
+        salience=1.0,
+    )
+    # Initial creation via store_key_moments (writes both .json and JSONL)
+    store.store_key_moments(session_id, [m])
+    # Now update salience and call store_key_moment (singular)
+    m.salience = 0.42
+    store.store_key_moment(m)
+    # get_key_moment reads the per-moment .json first — must show new value
+    loaded = store.get_key_moment(m.id)
+    assert loaded is not None
+    assert loaded.salience == pytest.approx(0.42)
+
+
+def test_file_state_store_store_key_moment_updates_session_file(tmp_path) -> None:
+    from atman.adapters.storage.file_state_store import FileStateStore
+
+    store = FileStateStore(tmp_path)
+    session_id = uuid4()
+    m = KeyMoment(
+        what_happened="initial",
+        how_i_felt=FeltSense(
+            emotional_valence=0.0, emotional_intensity=0.5, depth=EmotionalDepth.SURFACE
+        ),
+        why_it_matters="reason",
+        session_id=session_id,
+        salience=1.0,
+    )
+    store.store_key_moments(session_id, [m])
+    m.salience = 0.42
+    store.store_key_moment(m)
+    # get_key_moments_for_session reads the per-session file — must show new value
+    moments = store.get_key_moments_for_session(session_id)
+    assert len(moments) == 1
+    assert moments[0].salience == pytest.approx(0.42)

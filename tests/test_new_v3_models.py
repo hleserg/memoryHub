@@ -786,3 +786,35 @@ def test_maintenance_job_full_construction():
     assert job.error == "boom"
     assert job.result == {"ok": False}
     assert job.is_terminal is True
+
+
+# ---------------------------------------------------------------------------
+# Regression: Session.status and Session.close_reason validate against the
+# DB CHECK constraints at construction time via Literal types.
+# ---------------------------------------------------------------------------
+
+
+def test_session_rejects_invalid_status():
+    from pydantic import ValidationError as _VE
+
+    from atman.core.models.session import Session
+
+    with pytest.raises(_VE):
+        Session(agent_id=uuid4(), status="bogus")  # type: ignore[arg-type]
+
+
+def test_session_rejects_invalid_close_reason():
+    from pydantic import ValidationError as _VE
+
+    from atman.core.models.session import Session
+
+    with pytest.raises(_VE):
+        Session(agent_id=uuid4(), close_reason="bogus")  # type: ignore[arg-type]
+
+
+def test_session_accepts_valid_status_and_close_reason():
+    from atman.core.models.session import Session
+
+    s = Session(agent_id=uuid4(), status="completed", close_reason="forced")
+    assert s.status == "completed"
+    assert s.close_reason == "forced"

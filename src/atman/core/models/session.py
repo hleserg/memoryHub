@@ -9,6 +9,7 @@ These models represent the session runtime that experiences sessions in real-tim
 """
 
 from datetime import UTC, datetime
+from typing import Literal
 from uuid import UUID, uuid4
 
 from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, field_validator
@@ -17,12 +18,20 @@ from atman.core.models.experience import EmotionalDepth, FeltSense, KeyMoment
 from atman.core.models.identity import Identity
 from atman.core.models.narrative import Eigenstate, NarrativeDocument
 
+# Mirrors the DB CHECK constraints on agent_N.sessions (see migrations 0008).
+SessionStatus = Literal["active", "completed", "interrupted"]
+SessionCloseReason = Literal["timeout_sleep", "menu_timeout", "restart", "forced", "interrupted"]
+
 
 class Session(BaseModel):
     """
     Persisted session record — the DB row for agent_N.sessions after migration 0008.
 
     Separate from SessionResult (runtime) and SessionContext (startup context).
+
+    `status` and `close_reason` are constrained at the Pydantic level via
+    Literal types matching the DB CHECK constraints, so invalid values are
+    rejected on object construction rather than at insert time.
     """
 
     model_config = ConfigDict(validate_assignment=True)
@@ -31,17 +40,11 @@ class Session(BaseModel):
     agent_id: UUID
     started_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     ended_at: datetime | None = None
-    status: str = Field(
-        default="active",
-        description="active | completed | interrupted",
-    )
+    status: SessionStatus = Field(default="active")
     identity_snapshot_id: UUID | None = None
 
     # Fields added by migration 0008
-    close_reason: str | None = Field(
-        default=None,
-        description="timeout_sleep | menu_timeout | restart | forced | interrupted",
-    )
+    close_reason: SessionCloseReason | None = Field(default=None)
     agent_recap: str | None = None
     restart_reason: str = ""
     user_language: str = "ru"

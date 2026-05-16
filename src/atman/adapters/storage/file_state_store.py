@@ -465,7 +465,15 @@ class FileStateStore(StateStore):
         return key_moment
 
     def store_key_moment(self, moment: KeyMoment) -> KeyMoment:
-        """Idempotent upsert — replaces existing record by id, or appends if new (v2 API)."""
+        """Idempotent upsert — replaces existing record by id, or appends if new (v2 API).
+
+        Updates all three storage layers used by FileStateStore so subsequent
+        reads see the new state (no stale data from decay/access updates):
+          1. key_moments.jsonl          — JSONL log of all moments
+          2. {key_moments_dir}/{id}.json — per-moment file (checked first by get_key_moment)
+          3. {key_moments_dir}/{session_id}_moments.json — per-session file
+             (read by get_key_moments_for_session) — only updated if it exists
+        """
         target_id = str(moment.id)
         existed = False
         rebuilt_lines: list[str] = []
@@ -493,6 +501,34 @@ class FileStateStore(StateStore):
         else:
             with self.key_moments_path.open("a", encoding="utf-8") as f:
                 f.write(moment.model_dump_json() + "\n")
+
+        # Per-moment file: get_key_moment reads this first, so it MUST reflect
+        # the latest state, not the stale snapshot from store_key_moments().
+        moment_file = self.key_moments_dir / f"{moment.id}.json"
+        self._write_json_atomically(moment_file, moment.model_dump_json(indent=2))
+
+        # Per-session file: get_key_moments_for_session reads only from here.
+        # Update in place (replace by id) if the file exists; do not create
+        # the session file on first solo store_key_moment — the per-session
+        # collection is owned by store_key_moments (plural).
+        if moment.session_id is not None:
+            session_file = self.key_moments_dir / f"{moment.session_id}_moments.json"
+            if session_file.exists():
+                try:
+                    existing = _read_json_file(session_file)
+                except (json.JSONDecodeError, ValueError):
+                    existing = []
+                if isinstance(existing, list):
+                    replaced = False
+                    for i, entry in enumerate(existing):
+                        if isinstance(entry, dict) and entry.get("id") == target_id:
+                            existing[i] = moment.model_dump(mode="json")
+                            replaced = True
+                            break
+                    if not replaced:
+                        existing.append(moment.model_dump(mode="json"))
+                    self._write_json_atomically(session_file, json.dumps(existing, indent=2))
+
         return moment
 
     def list_key_moments(self, session_id: UUID | None = None) -> list[KeyMoment]:
