@@ -246,6 +246,12 @@
 | `DailyReflectionService` ↔ `SessionRepository` + `PatternStore` + `ReflectionEventStore` | `core/services/reflection_service.py` | детекция паттернов (R3 — мигрирован с `ExperienceRepository`; синтезирует виртуальные `SessionExperience` через `services/session_experience_view.build_session_experience`) |
 | `DeepReflectionService` ↔ все рефлексионные порты | `core/services/reflection_service.py` | здоровье + апдейт identity и нарратива |
 | `PrincipleRevisionAdvisor` ↔ `PatternCandidate` + `Identity` | `core/services/principle_advisor.py` | анализ паттернов в контексте identity |
+| `ConflictDetector` ↔ `FactualMemory` | `core/services/conflict_detector.py` → `core/ports/memory_backend.py` | DI; лёгкий поиск противоречий среди ACTIVE-кандидатов, возвращённых `search()` |
+| `EmotionalEcho` ↔ `StateStore` | `core/services/emotional_echo.py` → `core/ports/state_store.py` | DI; окно `lookback_days` через `search_experiences` |
+| `PassiveMemoryInjector` ↔ `EmbeddingPort` + `FactualMemory` + `StateStore` + опциональные `LinguisticAnalyzer` + `MemoryReranker` + второй `EmbeddingPort` (BM25) | `core/services/passive_memory_injector.py` → `core/ports/embedding.py`, `core/ports/memory_backend.py`, `core/ports/state_store.py`, `core/ports/linguistic.py`, `core/ports/memory_reranker.py` | DI; пул кандидатов по salience (`query=None` в бэкенд) → dense similarity → опциональный BM25 RRF fusion → опциональный reranker → 1-hop associative expansion с реальными similarity-скорами; опциональный `SessionWorkingMemory` кеш |
+| `MaintenanceWorker` ↔ `MaintenanceQueue` + `SalienceDecayService` + `MemoryGuardian` | `core/services/maintenance_worker.py` → `core/ports/maintenance_queue.py`, `core/ports/salience_decay.py`, `core/ports/memory_guardian.py` | DI; `run_once()` забирает батч и диспетчеризует задачи |
+| `DivergenceDetector` ↔ `AgentMessageAnalysis` | `core/services/divergence_detector.py` | stateless; маппинг сигнальных меток из анализа в список `DivergenceEvent` |
+| `KeyMomentBuilder` ↔ `KeyMomentInput` + `KeyMomentAnalysis` | `core/services/key_moment_builder.py` | stateless; заполняет `structured_markers` из анализа |
 
 ### 2.2. Адаптер ↔ порт
 
