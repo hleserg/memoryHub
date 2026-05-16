@@ -21,6 +21,7 @@ from atman.core.ports.reflection_overload_alert import (
     ReflectionOverloadAlertSink,
     ReflectionOverloadSeverity,
 )
+from atman.core.ports.reflection_request_queue import ReflectionRequestQueue
 from atman.core.ports.self_applied_changes import SelfAppliedChangeStore
 from atman.core.ports.state_store import (
     DateRangeQuery,
@@ -53,6 +54,7 @@ __all__ = [
     "ReflectionModel",
     "ReflectionOverloadAlertSink",
     "ReflectionOverloadSeverity",
+    "ReflectionRequestQueue",
     "SelfAppliedChangeStore",
     "SessionExperienceQuery",
     "StateStore",

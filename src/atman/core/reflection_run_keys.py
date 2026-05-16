@@ -98,3 +98,28 @@ def identity_anchor_snapshot_id_for_run_key(run_key: str) -> UUID:
 def reframing_trigger_key(run_key: str, experience_id: UUID) -> str:
     """Stable ``triggered_by`` for deduplicating reframing per job and experience."""
     return f"reflection|{run_key}|reframe|{experience_id}"
+
+
+def _hour_bucket_utc(dt: datetime) -> str:
+    """ISO-formatted UTC hour bucket; minutes/seconds discarded."""
+    d = ensure_utc(dt).replace(minute=0, second=0, microsecond=0)
+    return d.isoformat()
+
+
+def agent_driven_run_key(level: str, reason: str, when: datetime) -> str:
+    """
+    Idempotency key for an agent-initiated reflection request.
+
+    Same reason inside the same UTC hour bucket collapses to one request, so
+    the agent does not flood the queue with duplicates if it asks twice in a
+    short interval.
+
+    Args:
+        level: ``"daily"`` or ``"deep"``.
+        reason: free-form text from the agent. Whitespace-stripped and lowercased
+            before hashing so trivially-different phrasings collide.
+        when: timestamp used to assign the hour bucket.
+    """
+    normalized = " ".join(reason.strip().lower().split())
+    digest = hashlib.sha256(normalized.encode("utf-8")).hexdigest()[:24]
+    return f"request|{level}|{_hour_bucket_utc(when)}|{digest}"

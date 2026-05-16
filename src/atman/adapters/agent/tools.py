@@ -20,6 +20,11 @@ from atman.adapters.agent.deps import AtmanDeps
 from atman.affect.models import AgentMemoryReport
 from atman.core.models.experience import EmotionalDepth
 from atman.core.models.pending_human_review import PendingReviewResolution
+from atman.core.models.reflection_request import (
+    ReflectionRequest,
+    ReflectionRequestLevel,
+)
+from atman.core.reflection_run_keys import agent_driven_run_key
 
 # PLAYBOOK-START
 # id: error-returning-tool-callbacks
@@ -295,3 +300,65 @@ def resolve_pending_review(
         f"Resolved review {resolved.id} as {resolved.resolution.value}. "
         f"Note: {note_clean}"
     )
+
+
+_LEVEL_ALIASES: dict[str, ReflectionRequestLevel] = {
+    "daily": ReflectionRequestLevel.DAILY,
+    "day": ReflectionRequestLevel.DAILY,
+    "deep": ReflectionRequestLevel.DEEP,
+    "weekly": ReflectionRequestLevel.DEEP,
+}
+
+
+def request_reflection(
+    ctx: RunContext[AtmanDeps],
+    reason: str,
+    level: str = "daily",
+) -> str:
+    """
+    Request that reflection look at something specific later.
+
+    Use this when something happens in a session that you sense should be
+    revisited in a calmer moment — not now, not as part of the current turn.
+    The reason will be threaded into the startup context of the next
+    reflection job at the requested level.
+
+    Same reason inside the same hour is collapsed to one request: it is fine
+    to call this without checking whether you've asked already.
+
+    Args:
+        ctx: Run context with AtmanDeps
+        reason: Why this matters and what to look at. Required.
+        level: "daily" (default) or "deep".
+
+    Returns:
+        Confirmation or "Error: …" for self-correction.
+    """
+    queue = ctx.deps.reflection_request_queue
+    if queue is None:
+        return "Error: no reflection request queue is configured in this session"
+
+    reason_clean = reason.strip()
+    if not reason_clean:
+        return "Error: reason is required and must be non-empty"
+
+    level_norm = level.strip().lower()
+    resolved_level = _LEVEL_ALIASES.get(level_norm)
+    if resolved_level is None:
+        return f"Error: unknown level '{level}'. Use 'daily' or 'deep'."
+
+    now = datetime.now(UTC)
+    run_key = agent_driven_run_key(resolved_level.value, reason_clean, now)
+    request = ReflectionRequest(
+        level=resolved_level,
+        reason=reason_clean,
+        run_key=run_key,
+        requested_at=now,
+    )
+    stored = queue.enqueue(request)
+    if stored.id != request.id:
+        return (
+            f"Already queued (same reason within the hour): "
+            f"id={stored.id}, level={stored.level.value}"
+        )
+    return f"Queued reflection request {stored.id} at level={stored.level.value}"

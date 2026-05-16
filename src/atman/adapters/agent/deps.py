@@ -21,6 +21,7 @@ from uuid import UUID
 if TYPE_CHECKING:
     from atman.adapters.agent.config import AgentConfig, ModelConfig
     from atman.core.ports.pending_human_review import PendingHumanReviewInbox
+    from atman.core.ports.reflection_request_queue import ReflectionRequestQueue
     from atman.core.ports.state_store import StateStore
     from atman.core.services.experience_service import ExperienceService
     from atman.core.services.identity_service import IdentityService
@@ -76,6 +77,10 @@ class AtmanDeps:
     """Optional pending human review inbox. When provided, the runner surfaces
     unresolved items at session start and exposes the `resolve_pending_review`
     tool. None disables both behaviors."""
+
+    reflection_request_queue: ReflectionRequestQueue | None = None
+    """Optional queue for agent-initiated reflection requests. When provided,
+    the runner exposes the `request_reflection` tool."""
 
     @classmethod
     def from_config(

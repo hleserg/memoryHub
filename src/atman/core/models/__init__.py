@@ -67,6 +67,10 @@ from atman.core.models.pending_human_review import (
     PendingReviewPriority,
     PendingReviewResolution,
 )
+from atman.core.models.reflection_request import (
+    ReflectionRequest,
+    ReflectionRequestLevel,
+)
 from atman.core.models.self_applied_change import (
     SelfAppliedChange,
     SelfChangeActor,
@@ -150,6 +154,8 @@ __all__ = [
     "ReflectionEvent",
     "ReflectionLevel",
     "ReflectionRecord",
+    "ReflectionRequest",
+    "ReflectionRequestLevel",
     "ReframingNote",
     "ReframingNoteAppendResult",
     "ReframingNoteOutput",

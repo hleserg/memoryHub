@@ -690,6 +690,7 @@ class AtmanRunner:
         from atman.adapters.agent.tools import (
             log_experience,
             record_key_moment,
+            request_reflection,
             resolve_pending_review,
             restart_session,
             wait_session,
@@ -732,6 +733,8 @@ class AtmanRunner:
 
             if deps.pending_review_inbox is not None:
                 tool_funcs = (*tool_funcs, resolve_pending_review)
+            if deps.reflection_request_queue is not None:
+                tool_funcs = (*tool_funcs, request_reflection)
 
             agent = Agent(
                 self._config.model.model,
