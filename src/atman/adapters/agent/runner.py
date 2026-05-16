@@ -640,8 +640,7 @@ class AtmanRunner:
 
         # 3. Build restart package
         # Preserve tail messages (last N exchanges = 2N messages)
-        # TODO: Make context_tail_messages configurable via AgentConfig
-        tail_size = 10 * 2  # 10 exchanges = 20 messages
+        tail_size = self._config.context_tail_messages * 2
         tail_messages = history[-tail_size:] if len(history) > tail_size else history.copy()
 
         package_text = _build_restart_package(
