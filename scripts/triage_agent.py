@@ -1,20 +1,20 @@
 """
 Atman Intelligent Issue Triage Agent
 
-Собирает issues из GitHub и Linear, классифицирует, дедуплицирует,
-создаёт задачи в Linear и сохраняет отчёт в Notion.
+Collects issues from GitHub and Linear, classifies and deduplicates them,
+creates Linear tasks, and saves a report to Notion.
 
-Запуск через Claude Code (требует MCP: github, Linear, Notion).
-Не запускается напрямую через python — это prompt-скрипт для агента.
+Run via Claude Code (requires MCP: github, Linear, Notion).
+Not executed directly with Python — this is a prompt spec for an agent.
 """
 
 # === TRIAGE AGENT PROMPT ===
 #
-# Этот файл описывает логику агента как читаемую спецификацию.
-# Агент запускается через Claude Code с доступом к MCP-инструментам.
+# This file describes agent logic as a readable specification.
+# The agent runs in Claude Code with MCP tool access.
 #
-# Для запуска: откройте Claude Code и выполните:
-#   "Запусти triage_agent по инструкциям из scripts/triage_agent.py"
+# To run: open Claude Code and ask:
+#   "Run triage_agent following scripts/triage_agent.py"
 
 AGENT_VERSION = "1.0"
 AGENT_NAME = "Atman Intelligent Issue Triage Agent"
@@ -144,7 +144,6 @@ KNOWN_DUPLICATES = {
     },
 }
 
-LINEAR_TEAM_ID = "56e6baf2-3994-42d4-8aa5-0b851dac4c66"
 GITHUB_REPO = {"owner": "hleserg", "repo": "atman"}
 
 PRIORITY_MAP = {
