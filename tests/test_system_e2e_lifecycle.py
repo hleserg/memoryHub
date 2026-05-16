@@ -334,7 +334,7 @@ def test_bootstrap_to_deep_reflection_full_lifecycle():
         until = today + timedelta(hours=12)
 
         deep = DeepReflectionService(
-            experience_repo=exp_repo,
+            session_repo=session_repo,
             identity_repo=identity_repo,
             narrative_repo=narrative_repo,
             pattern_store=pattern_store,

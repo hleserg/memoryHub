@@ -240,7 +240,7 @@ Connections between two or more parts. These are seams that may break independen
 | `request_reflection` ↔ `ReflectionRequestQueue` | `adapters/agent/tools.py` → `core/ports/reflection_request_queue.py` | **R12** tool registered only when queue is in `AtmanDeps`; idempotent via `agent_driven_run_key` (UTC hour bucket) |
 | `MicroReflectionService` ↔ `ExperienceRepository` + `NarrativeRepository` | `core/services/reflection_service.py` | reads experience, updates recent layer |
 | `DailyReflectionService` ↔ `SessionRepository` + `PatternStore` + `ReflectionEventStore` | `core/services/reflection_service.py` | pattern detection (R3 — migrated off `ExperienceRepository`; synthesises virtual `SessionExperience` via `services/session_experience_view.build_session_experience`) |
-| `DeepReflectionService` ↔ all reflection ports | `core/services/reflection_service.py` | health + identity + narrative update |
+| `DeepReflectionService` ↔ `SessionRepository` + `IdentityRepository` + `NarrativeRepository` + `PatternStore` + `HealthAssessmentStore` + `ReflectionEventStore` | `core/services/reflection_service.py` | health + identity + narrative update (R4 — migrated off `ExperienceRepository`; synthesises virtual `SessionExperience` via `services/session_experience_view.build_session_experience`) |
 | `PrincipleRevisionAdvisor` ↔ `PatternCandidate` + `Identity` | `core/services/principle_advisor.py` | analyzes patterns in identity context |
 | `ConflictDetector` ↔ `FactualMemory` | `core/services/conflict_detector.py` → `core/ports/memory_backend.py` | DI; lightweight contradiction scan over ACTIVE candidates returned by `search()` |
 | `EmotionalEcho` ↔ `StateStore` | `core/services/emotional_echo.py` → `core/ports/state_store.py` | DI; `lookback_days` window via `search_experiences` |
@@ -322,7 +322,7 @@ DailyReflectionService — reads sessions + key moments via SessionRepository fo
   ↓ stores
 PatternStore + ReflectionEventStore
   ↓
-DeepReflectionService — reads all repositories, assesses health,
+DeepReflectionService — reads sessions + key moments via SessionRepository, assesses health,
   updates identity and narrative (with governance)
   ↓ proposes
 PrincipleRevisionAdvisor — principle revision

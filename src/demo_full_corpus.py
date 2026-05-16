@@ -123,7 +123,7 @@ def _reflection_bundle(
         clock=clock,
     )
     deep = DeepReflectionService(
-        experience_repo=experience_repo,
+        session_repo=session_repo,
         identity_repo=identity_repo,
         narrative_repo=narrative_repo,
         pattern_store=pattern_store,

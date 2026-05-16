@@ -391,7 +391,7 @@ def demo_deep_reflection(
     event_store = InMemoryReflectionEventStore()
 
     service = DeepReflectionService(
-        experience_repo=exp_repo,
+        session_repo=exp_repo,
         identity_repo=identity_repo,
         narrative_repo=narrative_repo,
         pattern_store=pattern_store,
