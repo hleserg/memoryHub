@@ -9,6 +9,7 @@ Responsibilities:
 """
 
 from datetime import UTC, datetime
+from typing import Any, ClassVar
 from uuid import UUID
 
 from atman.core.models import (
@@ -19,7 +20,11 @@ from atman.core.models import (
     IdentitySnapshot,
     OpenQuestion,
     Principle,
+    SelfAppliedChange,
+    SelfChangeSource,
+    SelfChangeTargetKind,
 )
+from atman.core.ports.self_applied_changes import SelfAppliedChangeStore
 from atman.core.ports.state_store import StateStore
 
 
@@ -33,14 +38,21 @@ class IdentityService:
     - No fake or seeded principles
     """
 
-    def __init__(self, state_store: StateStore):
+    def __init__(
+        self,
+        state_store: StateStore,
+        self_applied_change_store: SelfAppliedChangeStore | None = None,
+    ):
         """
         Initialize identity service.
 
         Args:
             state_store: StateStore implementation for persistence
+            self_applied_change_store: Audit store for `apply_self_change`/`revert_self_change`.
+                Optional — only required if those methods are used.
         """
         self.state_store = state_store
+        self._self_applied_change_store = self_applied_change_store
 
     def bootstrap_identity(self, agent_id: UUID) -> Identity:
         """
@@ -359,3 +371,236 @@ class IdentityService:
             list[IdentitySnapshot]: List of snapshots, newest first
         """
         return self.state_store.list_identity_snapshots(agent_id, limit)
+
+    # ---------------------------------------------------------------------
+    # Self-apply API (reflection-initiated changes with audit and revert)
+    # ---------------------------------------------------------------------
+
+    _IDENTITY_LIST_FIELDS: ClassVar[dict[SelfChangeTargetKind, str]] = {
+        SelfChangeTargetKind.IDENTITY_CORE_VALUE: "core_values",
+        SelfChangeTargetKind.IDENTITY_PRINCIPLE: "principles",
+        SelfChangeTargetKind.IDENTITY_HABIT: "habits",
+        SelfChangeTargetKind.IDENTITY_GOAL: "goals",
+        SelfChangeTargetKind.IDENTITY_OPEN_QUESTION: "open_questions",
+    }
+
+    def apply_self_change(
+        self,
+        agent_id: UUID,
+        target_kind: SelfChangeTargetKind,
+        payload: Any,
+        source: SelfChangeSource,
+    ) -> SelfAppliedChange:
+        """
+        Apply an identity change initiated by reflection itself.
+
+        Records a `SelfAppliedChange` audit row with full before/after snapshot
+        so the change can be reverted later. This path does **not** require a
+        `GovernanceDecision` — it is reflection's own prerogative — but the
+        source must carry rationale, confidence statement, and supporting
+        moment ids (enforced by `SelfChangeSource`).
+
+        Args:
+            agent_id: identity to modify
+            target_kind: which aspect of identity is being changed; must be
+                one of the ``IDENTITY_*`` kinds. ``NARRATIVE_*`` is rejected.
+            payload: change payload. For list-shaped kinds (core_value,
+                principle, habit, goal, open_question) this is the item to
+                append. For ``IDENTITY_SELF_DESCRIPTION`` this is the new
+                description string.
+            source: provenance with rationale and supporting moments.
+
+        Returns:
+            SelfAppliedChange: persisted audit record.
+
+        Raises:
+            RuntimeError: if the service was not constructed with a
+                `SelfAppliedChangeStore`.
+            ValueError: if identity not found or target_kind is not an
+                identity kind.
+            TypeError: if payload type does not match target_kind.
+        """
+        store = self._require_self_applied_store("apply_self_change")
+        identity = self.state_store.load_identity(agent_id)
+        if identity is None:
+            raise ValueError(f"Identity {agent_id} not found")
+
+        if target_kind == SelfChangeTargetKind.IDENTITY_SELF_DESCRIPTION:
+            target_ref, before_snapshot, after_snapshot = self._apply_self_description(
+                identity, payload
+            )
+        elif target_kind in self._IDENTITY_LIST_FIELDS:
+            target_ref, before_snapshot, after_snapshot = self._apply_identity_list_append(
+                identity, target_kind, payload
+            )
+        else:
+            raise ValueError(
+                f"apply_self_change does not handle target_kind={target_kind.value!r}; "
+                "narrative kinds go through NarrativeRevisionService.apply_self_layer_update"
+            )
+
+        identity.updated_at = datetime.now(UTC)
+        self.state_store.save_identity(identity)
+
+        change = SelfAppliedChange(
+            actor=source.actor,
+            reflection_event_id=source.reflection_event_id,
+            target_kind=target_kind,
+            target_ref=target_ref,
+            before_snapshot=before_snapshot,
+            after_snapshot=after_snapshot,
+            rationale=source.rationale,
+            confidence_self_assessment=source.confidence_self_assessment,
+            based_on_moment_ids=list(source.based_on_moment_ids),
+        )
+        store.save(change)
+        return change
+
+    def revert_self_change(
+        self,
+        agent_id: UUID,
+        self_applied_id: UUID,
+        reason: str,
+    ) -> SelfAppliedChange:
+        """
+        Revert a previously self-applied identity change.
+
+        The revert restores the change's `before_snapshot` onto the current
+        identity and records the revert by updating the original audit row
+        (`reverted_at`, `reverted_reason`). The actual restoration is itself
+        a write to identity; existing IdentitySnapshots are not touched.
+
+        Args:
+            agent_id: identity to modify
+            self_applied_id: id of the SelfAppliedChange to revert
+            reason: human-readable explanation
+
+        Returns:
+            SelfAppliedChange: the original record with revert fields populated.
+
+        Raises:
+            RuntimeError: if no SelfAppliedChangeStore.
+            KeyError: if the change does not exist.
+            ValueError: if the change targets a different agent, has already
+                been reverted, or is not an identity kind.
+        """
+        if not reason or not reason.strip():
+            raise ValueError("reason must be non-empty")
+
+        store = self._require_self_applied_store("revert_self_change")
+        change = store.get(self_applied_id)
+        if change is None:
+            raise KeyError(f"self_applied_change {self_applied_id} not found")
+        if change.reverted_at is not None:
+            raise ValueError(f"self_applied_change {self_applied_id} already reverted")
+
+        identity = self.state_store.load_identity(agent_id)
+        if identity is None:
+            raise ValueError(f"Identity {agent_id} not found")
+
+        if change.target_kind == SelfChangeTargetKind.IDENTITY_SELF_DESCRIPTION:
+            self._revert_self_description(identity, change)
+        elif change.target_kind in self._IDENTITY_LIST_FIELDS:
+            self._revert_identity_list_append(identity, change)
+        else:
+            raise ValueError(
+                f"revert_self_change cannot revert target_kind={change.target_kind.value!r}; "
+                "use NarrativeRevisionService.revert_self_change for narrative kinds"
+            )
+
+        identity.updated_at = datetime.now(UTC)
+        self.state_store.save_identity(identity)
+
+        return store.mark_reverted(
+            self_applied_id,
+            reverted_at=datetime.now(UTC),
+            reason=reason.strip(),
+        )
+
+    # ----- helpers -----
+
+    def _require_self_applied_store(self, method: str) -> SelfAppliedChangeStore:
+        if self._self_applied_change_store is None:
+            raise RuntimeError(
+                f"IdentityService.{method} requires a SelfAppliedChangeStore; "
+                "pass one to the constructor"
+            )
+        return self._self_applied_change_store
+
+    def _apply_self_description(
+        self, identity: Identity, payload: Any
+    ) -> tuple[str, dict[str, Any], dict[str, Any]]:
+        if not isinstance(payload, str):
+            raise TypeError(
+                f"IDENTITY_SELF_DESCRIPTION expects str payload, got {type(payload).__name__}"
+            )
+        before = identity.self_description
+        identity.self_description = payload
+        return (
+            "self_description",
+            {"self_description": before},
+            {"self_description": payload},
+        )
+
+    _IDENTITY_LIST_TYPES: ClassVar[dict[SelfChangeTargetKind, type]] = {
+        SelfChangeTargetKind.IDENTITY_CORE_VALUE: CoreValue,
+        SelfChangeTargetKind.IDENTITY_PRINCIPLE: Principle,
+        SelfChangeTargetKind.IDENTITY_HABIT: Habit,
+        SelfChangeTargetKind.IDENTITY_GOAL: Goal,
+        SelfChangeTargetKind.IDENTITY_OPEN_QUESTION: OpenQuestion,
+    }
+
+    def _apply_identity_list_append(
+        self, identity: Identity, kind: SelfChangeTargetKind, payload: Any
+    ) -> tuple[str, dict[str, Any], dict[str, Any]]:
+        field_name = self._IDENTITY_LIST_FIELDS[kind]
+        model_cls = self._IDENTITY_LIST_TYPES[kind]
+        if not isinstance(payload, model_cls):
+            raise TypeError(
+                f"{kind.value} expects payload of type {model_cls.__name__}, "
+                f"got {type(payload).__name__}"
+            )
+        current_list = list(getattr(identity, field_name))
+        new_list = [*current_list, payload]
+        setattr(identity, field_name, new_list)
+        target_ref = self._target_ref_for_item(kind, payload)
+        return (
+            target_ref,
+            {field_name: [item.model_dump(mode="json") for item in current_list]},
+            {field_name: [item.model_dump(mode="json") for item in new_list]},
+        )
+
+    @staticmethod
+    def _target_ref_for_item(kind: SelfChangeTargetKind, payload: Any) -> str:
+        if kind == SelfChangeTargetKind.IDENTITY_CORE_VALUE:
+            return f"core_value:{payload.name}"
+        if kind == SelfChangeTargetKind.IDENTITY_PRINCIPLE:
+            return f"principle:{payload.statement[:80]}"
+        if kind == SelfChangeTargetKind.IDENTITY_HABIT:
+            return f"habit:{payload.statement[:80]}"
+        if kind == SelfChangeTargetKind.IDENTITY_GOAL:
+            return f"goal:{payload.statement[:80]}"
+        if kind == SelfChangeTargetKind.IDENTITY_OPEN_QUESTION:
+            return f"open_question:{payload.question[:80]}"
+        return kind.value
+
+    def _revert_self_description(self, identity: Identity, change: SelfAppliedChange) -> None:
+        before = change.before_snapshot.get("self_description")
+        if not isinstance(before, str):
+            raise ValueError(
+                f"self_applied_change {change.id} has malformed before_snapshot for self_description"
+            )
+        identity.self_description = before
+
+    def _revert_identity_list_append(
+        self, identity: Identity, change: SelfAppliedChange
+    ) -> None:
+        field_name = self._IDENTITY_LIST_FIELDS[change.target_kind]
+        before_list = change.before_snapshot.get(field_name)
+        if not isinstance(before_list, list):
+            raise ValueError(
+                f"self_applied_change {change.id} has malformed before_snapshot for {field_name}"
+            )
+        model_cls = self._IDENTITY_LIST_TYPES[change.target_kind]
+        rehydrated = [model_cls.model_validate(item) for item in before_list]
+        setattr(identity, field_name, rehydrated)

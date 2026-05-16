@@ -60,6 +60,12 @@ from atman.core.models.reflection import (
     ReflectionRecord,
     ReframingNoteOutput,
 )
+from atman.core.models.self_applied_change import (
+    SelfAppliedChange,
+    SelfChangeActor,
+    SelfChangeSource,
+    SelfChangeTargetKind,
+)
 from atman.core.models.session import (
     ActiveSessionSummary,
     KeyMomentInput,
@@ -137,6 +143,10 @@ __all__ = [
     "ReframingNoteOutput",
     "Relation",
     "ResolutionMethod",
+    "SelfAppliedChange",
+    "SelfChangeActor",
+    "SelfChangeSource",
+    "SelfChangeTargetKind",
     "Session",
     "SessionContext",
     "SessionEvent",

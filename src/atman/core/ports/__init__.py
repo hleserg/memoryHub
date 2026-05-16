@@ -16,6 +16,7 @@ from atman.core.ports.reflection import (
     ReflectionEventStore,
     ReflectionModel,
 )
+from atman.core.ports.self_applied_changes import SelfAppliedChangeStore
 from atman.core.ports.state_store import (
     DateRangeQuery,
     DepthQuery,
@@ -44,6 +45,7 @@ __all__ = [
     "ReflectionEventPersistenceObserver",
     "ReflectionEventStore",
     "ReflectionModel",
+    "SelfAppliedChangeStore",
     "SessionExperienceQuery",
     "StateStore",
     "UsageType",
