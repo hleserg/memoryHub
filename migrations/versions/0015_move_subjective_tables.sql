@@ -201,17 +201,14 @@ DECLARE
 BEGIN
     PERFORM public.extend_agent_schema_0015(schema_name);
 
-    IF to_regclass('public.reflections') IS NULL THEN
-        RETURN;
-    END IF;
+    IF to_regclass('public.reflections') IS NOT NULL THEN
+        CREATE TEMP TABLE IF NOT EXISTS _reflection_id_map (
+            old_id BIGINT PRIMARY KEY,
+            new_id BIGINT NOT NULL
+        ) ON COMMIT DROP;
+        TRUNCATE _reflection_id_map;
 
-    CREATE TEMP TABLE IF NOT EXISTS _reflection_id_map (
-        old_id BIGINT PRIMARY KEY,
-        new_id BIGINT NOT NULL
-    ) ON COMMIT DROP;
-    TRUNCATE _reflection_id_map;
-
-    EXECUTE format($sql$
+        EXECUTE format($sql$
         WITH ordered AS (
             SELECT *
             FROM public.reflections
@@ -242,20 +239,21 @@ BEGIN
             SELECT id, row_number() OVER (ORDER BY id) AS rn
             FROM ins
         ) n ON o.rn = n.rn
-    $sql$, p_agent_uuid, schema_name, p_agent_uuid);
+        $sql$, p_agent_uuid, schema_name, p_agent_uuid);
 
-    IF to_regclass(format('%I.reflection_entities', schema_name)) IS NOT NULL THEN
-        EXECUTE format(
-            'ALTER TABLE %I.reflection_entities DROP CONSTRAINT IF EXISTS reflection_entities_reflection_id_fkey',
-            schema_name
-        );
-        EXECUTE format($sql$
-            UPDATE %I.reflection_entities re
-            SET reflection_id = m.new_id
-            FROM _reflection_id_map m
-            WHERE re.reflection_id = m.old_id
-        $sql$, schema_name);
-        PERFORM public.repoint_reflection_entities_fk(schema_name);
+        IF to_regclass(format('%I.reflection_entities', schema_name)) IS NOT NULL THEN
+            EXECUTE format(
+                'ALTER TABLE %I.reflection_entities DROP CONSTRAINT IF EXISTS reflection_entities_reflection_id_fkey',
+                schema_name
+            );
+            EXECUTE format($sql$
+                UPDATE %I.reflection_entities re
+                SET reflection_id = m.new_id
+                FROM _reflection_id_map m
+                WHERE re.reflection_id = m.old_id
+            $sql$, schema_name);
+            PERFORM public.repoint_reflection_entities_fk(schema_name);
+        END IF;
     END IF;
 
     IF to_regclass('public.self_applied_changes') IS NOT NULL THEN
@@ -435,6 +433,7 @@ BEGIN
         CREATE INDEX IF NOT EXISTS km_embedding_idx
             ON %I.key_moments USING hnsw (embedding halfvec_cosine_ops)
             WHERE embedding IS NOT NULL;
+        -- Immutability: block UPDATE only; DELETE allowed (session/agent CASCADE cleanup).
         DROP TRIGGER IF EXISTS key_moments_immutable ON %I.key_moments;
         CREATE TRIGGER key_moments_immutable
             BEFORE UPDATE ON %I.key_moments
