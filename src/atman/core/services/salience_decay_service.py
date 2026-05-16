@@ -65,7 +65,21 @@ class InMemorySalienceDecayService(SalienceDecayService):
           - otherwise                 → decay_lambda_surface
 
         Returns the count of records whose salience was actually updated.
+
+        Note on `agent_id` scoping:
+            This in-memory adapter operates on a per-process StateStore that is
+            single-agent by construction (one InMemoryStateStore per agent in tests
+            and demos), and per-agent in Postgres via the `agent_N.*` schema
+            mechanism (each PostgresStateStore is bound to one agent's schema).
+            Therefore `list_recent_experiences()` is already agent-scoped at the
+            store boundary, and we do not need to filter records here. If a future
+            shared-tenant StateStore is introduced, `StateStore` will need an
+            agent-filtered listing method, and this implementation will be updated
+            to use it.
         """
+        # agent_id is accepted to satisfy the port contract; scoping happens at
+        # the StateStore boundary (per-agent schema / per-process instance).
+        del agent_id
         now = datetime.now(UTC)
         # Retrieve all experiences; large limit covers in-memory stores.
         records = self._store.list_recent_experiences(limit=10_000)

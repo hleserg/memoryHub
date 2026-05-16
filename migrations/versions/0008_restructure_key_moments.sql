@@ -90,6 +90,11 @@ BEGIN
           AND km.session_id IS NULL;
     $sql$, schema_name, schema_name, schema_name);
 
+    -- Backfill session metadata from experiences. Note: pre-0008 experiences
+    -- did NOT have `close_reason` or `unexamined_fact_refs` (see migration 0004,
+    -- agent_N.experiences columns), so these are intentionally initialised to
+    -- NULL / '{}' — there is no prior value to preserve. Only `overall_tone`
+    -- and `key_insight` are copied from the soon-to-be-dropped experiences row.
     EXECUTE format($sql$
         UPDATE %I.sessions s
         SET overall_tone         = e.overall_tone,

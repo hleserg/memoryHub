@@ -14,7 +14,7 @@ import os
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 
@@ -36,6 +36,7 @@ from atman.core.models import (
     NarrativeDocument,
     NarrativeLayer,
     ReframingNote,
+    Session,
     SessionExperience,
 )
 from atman.core.ports.state_store import (
@@ -655,3 +656,122 @@ def test_list_key_moments_with_session_id_raises_not_implemented(store: StateSto
     # session_id filtering is now supported — returns empty list for unknown session
     result = store.list_key_moments(session_id=uuid4())
     assert result == []
+
+
+# ---------------------------------------------------------------------------
+# v2 contract: standalone KeyMoment API
+# ---------------------------------------------------------------------------
+
+
+def _make_moment(what: str = "test event") -> KeyMoment:
+    return KeyMoment(
+        what_happened=what,
+        how_i_felt=FeltSense(
+            emotional_valence=0.1,
+            emotional_intensity=0.5,
+            depth=EmotionalDepth.SURFACE,
+        ),
+        why_it_matters="reason",
+    )
+
+
+def test_store_key_moment_idempotent_upsert(store: StateStore) -> None:
+    """store_key_moment must be idempotent — calling twice with the same id is OK."""
+    if isinstance(store, InMemoryExperienceStore | JsonlExperienceStore):
+        pytest.skip("Store doesn't support KeyMoment operations")
+    km = _make_moment()
+    store.store_key_moment(km)
+    # Second call with same id should not raise (unlike create_key_moment)
+    store.store_key_moment(km)
+    assert store.get_key_moment(km.id) is not None
+
+
+def test_mark_moment_accessed_does_not_raise(store: StateStore) -> None:
+    """mark_moment_accessed is a default no-op; must not raise for unknown id."""
+    if isinstance(store, InMemoryExperienceStore | JsonlExperienceStore):
+        pytest.skip("Store doesn't support KeyMoment operations")
+    # Should not raise even for an unknown moment_id (default no-op contract).
+    store.mark_moment_accessed(uuid4())
+
+
+def test_update_moment_structured_markers_does_not_raise(store: StateStore) -> None:
+    """update_moment_structured_markers is a default no-op; must not raise."""
+    if isinstance(store, InMemoryExperienceStore | JsonlExperienceStore):
+        pytest.skip("Store doesn't support KeyMoment operations")
+    km = _make_moment()
+    store.create_key_moment(km)
+    store.update_moment_structured_markers(km.id, {"marker": "test"}, "v1")
+
+
+def test_find_moments_by_entity_default_returns_empty(store: StateStore) -> None:
+    """find_moments_by_entity returns [] by default (no entity link table here)."""
+    if isinstance(store, InMemoryExperienceStore | JsonlExperienceStore):
+        pytest.skip("Store doesn't support KeyMoment operations")
+    result = store.find_moments_by_entity(uuid4())
+    assert result == []
+
+
+# ---------------------------------------------------------------------------
+# v2 contract: Session API
+# ---------------------------------------------------------------------------
+
+
+def _make_session(agent_id: UUID | None = None) -> Session:
+    return Session(agent_id=agent_id or uuid4())
+
+
+def test_create_and_get_session(store: StateStore) -> None:
+    """Sessions can be created and retrieved by id."""
+    if not isinstance(store, InMemoryStateStore):
+        pytest.skip("Only InMemoryStateStore persists Session in this iteration")
+    s = _make_session()
+    store.create_session(s)
+    fetched = store.get_session(s.id)
+    assert fetched is not None
+    assert fetched.id == s.id
+    assert fetched.agent_id == s.agent_id
+
+
+def test_get_session_unknown_returns_none(store: StateStore) -> None:
+    """Unknown session id returns None (port contract)."""
+    # Default StateStore.get_session returns None — all implementations
+    # MUST return None for unknown ids.
+    assert store.get_session(uuid4()) is None
+
+
+def test_update_session_persists_changes(store: StateStore) -> None:
+    """update_session persists field changes (close_reason, agent_recap)."""
+    if not isinstance(store, InMemoryStateStore):
+        pytest.skip("Only InMemoryStateStore persists Session in this iteration")
+    s = _make_session()
+    store.create_session(s)
+    s.close_reason = "forced"
+    s.agent_recap = "wrap up"
+    store.update_session(s)
+    fetched = store.get_session(s.id)
+    assert fetched is not None
+    assert fetched.close_reason == "forced"
+    assert fetched.agent_recap == "wrap up"
+
+
+def test_list_recent_sessions_filters_by_agent_and_orders(store: StateStore) -> None:
+    """list_recent_sessions returns only matching agent's sessions, newest first."""
+    if not isinstance(store, InMemoryStateStore):
+        pytest.skip("Only InMemoryStateStore persists Session in this iteration")
+    agent_a = uuid4()
+    agent_b = uuid4()
+
+    s1 = Session(agent_id=agent_a, started_at=datetime.now(UTC) - timedelta(hours=2))
+    s2 = Session(agent_id=agent_a, started_at=datetime.now(UTC) - timedelta(hours=1))
+    s_other = Session(agent_id=agent_b)
+    store.create_session(s1)
+    store.create_session(s2)
+    store.create_session(s_other)
+
+    result = store.list_recent_sessions(agent_a, limit=10)
+    ids = [s.id for s in result]
+    assert s_other.id not in ids
+    assert s1.id in ids
+    assert s2.id in ids
+    # Newest first
+    assert ids.index(s2.id) < ids.index(s1.id)

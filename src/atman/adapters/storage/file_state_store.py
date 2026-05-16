@@ -464,6 +464,22 @@ class FileStateStore(StateStore):
 
         return key_moment
 
+    def store_key_moment(self, moment: KeyMoment) -> KeyMoment:
+        """Idempotent upsert — append if new, no-op if already stored (v2 API)."""
+        if self.key_moments_path.exists():
+            for line in self.key_moments_path.read_text(encoding="utf-8").splitlines():
+                if not line.strip():
+                    continue
+                try:
+                    data = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                if data.get("id") == str(moment.id):
+                    return moment
+        with self.key_moments_path.open("a", encoding="utf-8") as f:
+            f.write(moment.model_dump_json() + "\n")
+        return moment
+
     def list_key_moments(self, session_id: UUID | None = None) -> list[KeyMoment]:
         """List key moments from JSONL file, optionally filtered by session_id."""
         import warnings

@@ -12,7 +12,7 @@ uses ambient-anchor mode: parallel queries per entity/anchor type, then rerankin
 from dataclasses import dataclass
 from uuid import UUID
 
-from atman.core.models import FactRecord, SessionExperience
+from atman.core.models import FactRecord, KeyMoment, SessionExperience
 from atman.core.models.fact import FactStatus
 from atman.core.ports import EmbeddingPort, FactualMemory
 from atman.core.ports.state_store import StateStore
@@ -23,8 +23,8 @@ from atman.core.services.session_working_memory import SessionWorkingMemory
 class SurfacedMemory:
     """A memory item surfaced by the injector."""
 
-    item: FactRecord | SessionExperience
-    source: str  # "similarity" or "associative"
+    item: FactRecord | SessionExperience | KeyMoment
+    source: str  # "similarity" or "associative" or "dense" or "ambient_rerank"
     score: float  # relevance score
 
 
@@ -82,6 +82,10 @@ class PassiveMemoryInjector:
 
         query_embedding = self.embedding.embed(context_text)
         all_moments = self.state_store.list_key_moments()
+        # Build a quick lookup so we can return the actual KeyMoment objects rather
+        # than wrapping the text in a FactRecord (which would conflate types for
+        # downstream isinstance checks).
+        moment_by_id: dict[UUID, KeyMoment] = {m.id: m for m in all_moments}
         candidates: list[RankedMemory] = []
 
         for moment in all_moments:
@@ -108,14 +112,12 @@ class PassiveMemoryInjector:
 
         return [
             SurfacedMemory(
-                item=FactRecord(
-                    content=r.text,
-                    source=f"key_moment:{r.key_moment_id}",
-                ),
+                item=moment_by_id[r.key_moment_id],
                 source=r.source,
                 score=r.final_score or r.score,
             )
             for r in ranked
+            if r.key_moment_id in moment_by_id
         ]
 
     def surface_for_context(
