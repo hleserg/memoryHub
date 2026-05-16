@@ -45,6 +45,13 @@ from atman.core.models.narrative import (
     NarrativeLayer,
     NarrativeThread,
 )
+from atman.core.models.pending_human_review import (
+    PendingReview,
+    PendingReviewDraft,
+    PendingReviewKind,
+    PendingReviewPriority,
+    PendingReviewResolution,
+)
 from atman.core.models.reflection import (
     CriterionAssessment,
     HealthAssessment,
@@ -59,6 +66,16 @@ from atman.core.models.reflection import (
     ReflectionLevel,
     ReflectionRecord,
     ReframingNoteOutput,
+)
+from atman.core.models.reflection_request import (
+    ReflectionRequest,
+    ReflectionRequestLevel,
+)
+from atman.core.models.self_applied_change import (
+    SelfAppliedChange,
+    SelfChangeActor,
+    SelfChangeSource,
+    SelfChangeTargetKind,
 )
 from atman.core.models.session import (
     ActiveSessionSummary,
@@ -128,15 +145,26 @@ __all__ = [
     "PatternDetectionOutput",
     "PatternStatus",
     "PatternType",
+    "PendingReview",
+    "PendingReviewDraft",
+    "PendingReviewKind",
+    "PendingReviewPriority",
+    "PendingReviewResolution",
     "Principle",
     "ReflectionEvent",
     "ReflectionLevel",
     "ReflectionRecord",
+    "ReflectionRequest",
+    "ReflectionRequestLevel",
     "ReframingNote",
     "ReframingNoteAppendResult",
     "ReframingNoteOutput",
     "Relation",
     "ResolutionMethod",
+    "SelfAppliedChange",
+    "SelfChangeActor",
+    "SelfChangeSource",
+    "SelfChangeTargetKind",
     "Session",
     "SessionContext",
     "SessionEvent",

@@ -20,6 +20,8 @@ from uuid import UUID
 
 if TYPE_CHECKING:
     from atman.adapters.agent.config import AgentConfig, ModelConfig
+    from atman.core.ports.pending_human_review import PendingHumanReviewInbox
+    from atman.core.ports.reflection_request_queue import ReflectionRequestQueue
     from atman.core.ports.state_store import StateStore
     from atman.core.services.experience_service import ExperienceService
     from atman.core.services.identity_service import IdentityService
@@ -71,6 +73,15 @@ class AtmanDeps:
     """Pending memory context for system_prompt injection mode.
     Set via replace(deps, injected_context=...) and consumed by build_instructions()."""
 
+    pending_review_inbox: PendingHumanReviewInbox | None = None
+    """Optional pending human review inbox. When provided, the runner surfaces
+    unresolved items at session start and exposes the `resolve_pending_review`
+    tool. None disables both behaviors."""
+
+    reflection_request_queue: ReflectionRequestQueue | None = None
+    """Optional queue for agent-initiated reflection requests. When provided,
+    the runner exposes the `request_reflection` tool."""
+
     @classmethod
     def from_config(
         cls,
@@ -83,6 +94,8 @@ class AtmanDeps:
         state_store: StateStore,
         agent_id: UUID,
         session_id: UUID | None = None,
+        pending_review_inbox: PendingHumanReviewInbox | None = None,
+        reflection_request_queue: ReflectionRequestQueue | None = None,
     ) -> AtmanDeps:
         """
         Build :class:`AtmanDeps` from a validated :class:`AgentConfig`.
@@ -105,4 +118,6 @@ class AtmanDeps:
             truncate_narrative_recent=config.truncate_narrative_recent,
             truncate_narrative_core=config.truncate_narrative_core,
             model_config=config.model,
+            pending_review_inbox=pending_review_inbox,
+            reflection_request_queue=reflection_request_queue,
         )

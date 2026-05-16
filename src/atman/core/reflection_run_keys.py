@@ -98,3 +98,50 @@ def identity_anchor_snapshot_id_for_run_key(run_key: str) -> UUID:
 def reframing_trigger_key(run_key: str, experience_id: UUID) -> str:
     """Stable ``triggered_by`` for deduplicating reframing per job and experience."""
     return f"reflection|{run_key}|reframe|{experience_id}"
+
+
+def _hour_bucket_utc(dt: datetime) -> str:
+    """ISO-formatted UTC hour bucket; minutes/seconds discarded."""
+    d = ensure_utc(dt).replace(minute=0, second=0, microsecond=0)
+    return d.isoformat()
+
+
+# PLAYBOOK-START
+# id: time-bucketed-hash-idempotency-keys
+# category: design-patterns
+# title: Time-Bucketed Hash Idempotency Keys for Async Request Queues
+# status: draft
+#
+# Pattern: derive an idempotency key by hashing the normalized request
+# payload together with a coarse time bucket (e.g. UTC hour, calendar day).
+# Identical requests within the same bucket collapse to one queue entry;
+# the bucket boundary acts as a natural rate limit and prevents permanent
+# deduplication of legitimately recurring requests.
+#
+# Why generalizable: async pipelines that accept retried or duplicated
+# user/agent input need to be safe under replay without rejecting valid
+# follow-ups forever. Pairing content-hash with a time bucket gives
+# stateless dedup (no per-request marker store) while still allowing the
+# same intent to be re-queued after the window rolls over.
+#
+# Trade-offs: a request submitted near the bucket boundary may dedup
+# against the prior window or skip into the next; bucket size is a
+# correctness/usability knob the caller must pick deliberately.
+# PLAYBOOK-END
+def agent_driven_run_key(level: str, reason: str, when: datetime) -> str:
+    """
+    Idempotency key for an agent-initiated reflection request.
+
+    Same reason inside the same UTC hour bucket collapses to one request, so
+    the agent does not flood the queue with duplicates if it asks twice in a
+    short interval.
+
+    Args:
+        level: ``"daily"`` or ``"deep"``.
+        reason: free-form text from the agent. Whitespace-stripped and lowercased
+            before hashing so trivially-different phrasings collide.
+        when: timestamp used to assign the hour bucket.
+    """
+    normalized = " ".join(reason.strip().lower().split())
+    digest = hashlib.sha256(normalized.encode("utf-8")).hexdigest()[:24]
+    return f"request|{level}|{_hour_bucket_utc(when)}|{digest}"

@@ -730,3 +730,101 @@ def test_invariant_incomplete_coloring_flag_propagates(_session_manager, _temp_s
     experiences = _temp_storage.list_recent_experiences(limit=1)
     assert len(experiences) == 1
     assert experiences[0].experience.incomplete_coloring is True
+
+
+# Invariant (R12): agent_driven_run_key is idempotent inside the same UTC
+# hour bucket: identical reason + same hour ⇒ identical key (so the queue
+# collapses duplicates). Crossing the hour boundary breaks the dedup.
+def test_invariant_agent_driven_run_key_same_hour_collapses() -> None:
+    from datetime import datetime
+
+    from atman.core.reflection_run_keys import agent_driven_run_key
+
+    t1 = datetime(2026, 5, 16, 12, 5, 0, tzinfo=UTC)
+    t2 = datetime(2026, 5, 16, 12, 59, 0, tzinfo=UTC)
+    t3 = datetime(2026, 5, 16, 13, 0, 0, tzinfo=UTC)
+
+    k1 = agent_driven_run_key("daily", "review affect spikes", t1)
+    k2 = agent_driven_run_key("daily", "review affect spikes", t2)
+    k3 = agent_driven_run_key("daily", "review affect spikes", t3)
+    k4 = agent_driven_run_key("daily", "  review   AFFECT  spikes ", t1)
+
+    assert k1 == k2, "same hour bucket must produce identical run key"
+    assert k1 != k3, "next hour bucket must produce a different run key"
+    assert k1 == k4, "whitespace and case must be normalized before hashing"
+
+
+# Invariant (R11.7): pending review resolution is one-shot — resolving an
+# already-resolved review must raise rather than silently overwrite.
+def test_invariant_pending_review_resolution_is_one_shot() -> None:
+    from datetime import datetime
+
+    from atman.adapters.storage.in_memory_pending_human_review import (
+        InMemoryPendingHumanReviewInbox,
+    )
+    from atman.core.models import (
+        PendingReviewDraft,
+        PendingReviewKind,
+        PendingReviewResolution,
+    )
+
+    inbox = InMemoryPendingHumanReviewInbox()
+    draft = PendingReviewDraft(
+        created_by="reflection_daily",
+        reflection_event_id=uuid4(),
+        kind=PendingReviewKind.IDENTITY_CHANGE_DOUBT,
+        question="Add a 'patience' principle?",
+        context={},
+    )
+    review = inbox.enqueue(draft)
+
+    now = datetime(2026, 5, 16, 12, 0, 0, tzinfo=UTC)
+    inbox.resolve(
+        review.id,
+        resolution=PendingReviewResolution.ACCEPTED,
+        note="ok",
+        resolved_at=now,
+    )
+
+    with pytest.raises(ValueError, match="already resolved"):
+        inbox.resolve(
+            review.id,
+            resolution=PendingReviewResolution.DISMISSED,
+            note="oops",
+            resolved_at=now,
+        )
+
+
+# Invariant (R11.5): a self-applied change cannot be reverted twice — the
+# audit row remains the single source of truth for revert state.
+def test_invariant_self_applied_change_double_revert_rejected() -> None:
+    from datetime import datetime
+
+    from atman.adapters.storage.in_memory_self_applied_changes import (
+        InMemorySelfAppliedChangeStore,
+    )
+    from atman.core.models import (
+        SelfAppliedChange,
+        SelfChangeActor,
+        SelfChangeTargetKind,
+    )
+
+    store = InMemorySelfAppliedChangeStore()
+    change = SelfAppliedChange(
+        actor=SelfChangeActor.REFLECTION_DAILY,
+        reflection_event_id=uuid4(),
+        target_kind=SelfChangeTargetKind.IDENTITY_PRINCIPLE,
+        target_ref="principle:test",
+        before_snapshot={"principles": []},
+        after_snapshot={"principles": [{"statement": "x"}]},
+        rationale="why",
+        confidence_self_assessment="self check",
+        based_on_moment_ids=[],
+    )
+    store.save(change)
+
+    now = datetime(2026, 5, 16, 12, 0, 0, tzinfo=UTC)
+    store.mark_reverted(change.id, reverted_at=now, reason="undo")
+
+    with pytest.raises(ValueError, match="already reverted"):
+        store.mark_reverted(change.id, reverted_at=now, reason="undo again")

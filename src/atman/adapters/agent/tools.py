@@ -11,11 +11,20 @@ All tools receive RunContext[AtmanDeps] as the first parameter,
 giving them access to services and session state.
 """
 
+from datetime import UTC, datetime
+from uuid import UUID
+
 from pydantic_ai import RunContext
 
 from atman.adapters.agent.deps import AtmanDeps
 from atman.affect.models import AgentMemoryReport
 from atman.core.models.experience import EmotionalDepth
+from atman.core.models.pending_human_review import PendingReviewResolution
+from atman.core.models.reflection_request import (
+    ReflectionRequest,
+    ReflectionRequestLevel,
+)
+from atman.core.reflection_run_keys import agent_driven_run_key
 
 # PLAYBOOK-START
 # id: error-returning-tool-callbacks
@@ -213,3 +222,142 @@ def wait_session(ctx: RunContext[AtmanDeps], minutes: int) -> str:
         return f"Error: minutes must be positive, got {minutes}"
 
     return f"__ATMAN_WAIT_REQUESTED__{minutes}"
+
+
+_RESOLUTION_ALIASES: dict[str, PendingReviewResolution] = {
+    "accept": PendingReviewResolution.ACCEPTED,
+    "accepted": PendingReviewResolution.ACCEPTED,
+    "yes": PendingReviewResolution.ACCEPTED,
+    "approve": PendingReviewResolution.ACCEPTED,
+    "reject": PendingReviewResolution.REJECTED,
+    "rejected": PendingReviewResolution.REJECTED,
+    "no": PendingReviewResolution.REJECTED,
+    "decline": PendingReviewResolution.REJECTED,
+    "modify": PendingReviewResolution.MODIFIED,
+    "modified": PendingReviewResolution.MODIFIED,
+    "dismiss": PendingReviewResolution.DISMISSED,
+    "dismissed": PendingReviewResolution.DISMISSED,
+    "skip": PendingReviewResolution.DISMISSED,
+}
+
+
+def resolve_pending_review(
+    ctx: RunContext[AtmanDeps],
+    review_id: str,
+    decision: str,
+    note: str,
+) -> str:
+    """
+    Resolve a pending human review item raised by reflection.
+
+    Use this tool to answer the questions surfaced at the start of the
+    session. Pass the id shown in the "Перед тем как продолжить" section.
+
+    Args:
+        ctx: Run context with AtmanDeps
+        review_id: UUID of the review item to resolve
+        decision: One of "accepted" | "rejected" | "modified" | "dismissed".
+            Common synonyms ("approve", "yes", "no", "skip") are also accepted.
+        note: Brief explanation of the decision (required, non-empty)
+
+    Returns:
+        Confirmation message or "Error: …" string for self-correction.
+    """
+    inbox = ctx.deps.pending_review_inbox
+    if inbox is None:
+        return "Error: no pending review inbox is configured in this session"
+
+    decision_norm = decision.strip().lower()
+    resolution = _RESOLUTION_ALIASES.get(decision_norm)
+    if resolution is None:
+        return (
+            f"Error: unknown decision '{decision}'. Use accepted | rejected | modified | dismissed."
+        )
+
+    note_clean = note.strip()
+    if not note_clean:
+        return "Error: note is required and must be non-empty"
+
+    try:
+        review_uuid = UUID(review_id)
+    except (TypeError, ValueError):
+        return f"Error: review_id is not a valid UUID: {review_id!r}"
+
+    try:
+        resolved = inbox.resolve(
+            review_uuid,
+            resolution=resolution,
+            note=note_clean,
+            resolved_at=datetime.now(UTC),
+        )
+    except KeyError:
+        return f"Error: no pending review with id {review_id}"
+    except ValueError as exc:
+        return f"Error: {exc}"
+
+    return f"Resolved review {resolved.id} as {resolution.value}. Note: {note_clean}"
+
+
+_LEVEL_ALIASES: dict[str, ReflectionRequestLevel] = {
+    "daily": ReflectionRequestLevel.DAILY,
+    "day": ReflectionRequestLevel.DAILY,
+    "deep": ReflectionRequestLevel.DEEP,
+    "weekly": ReflectionRequestLevel.DEEP,
+}
+
+
+def request_reflection(
+    ctx: RunContext[AtmanDeps],
+    reason: str,
+    level: str = "daily",
+) -> str:
+    """
+    Request that reflection look at something specific later.
+
+    Use this when something happens in a session that you sense should be
+    revisited in a calmer moment — not now, not as part of the current turn.
+    The reason will be threaded into the startup context of the next
+    reflection job at the requested level.
+
+    Same reason inside the same hour is collapsed to one request: it is fine
+    to call this without checking whether you've asked already.
+
+    Args:
+        ctx: Run context with AtmanDeps
+        reason: Why this matters and what to look at. Required.
+        level: "daily" (default) or "deep".
+
+    Returns:
+        Confirmation or "Error: …" for self-correction.
+    """
+    queue = ctx.deps.reflection_request_queue
+    if queue is None:
+        return "Error: no reflection request queue is configured in this session"
+
+    reason_clean = reason.strip()
+    if not reason_clean:
+        return "Error: reason is required and must be non-empty"
+
+    level_norm = level.strip().lower()
+    resolved_level = _LEVEL_ALIASES.get(level_norm)
+    if resolved_level is None:
+        return f"Error: unknown level '{level}'. Use 'daily' or 'deep'."
+
+    now = datetime.now(UTC)
+    run_key = agent_driven_run_key(resolved_level.value, reason_clean, now)
+    request = ReflectionRequest(
+        level=resolved_level,
+        reason=reason_clean,
+        run_key=run_key,
+        requested_at=now,
+    )
+    try:
+        stored = queue.enqueue(request)
+    except Exception as exc:
+        return f"Error queuing reflection request: {exc!s}"
+    if stored.id != request.id:
+        return (
+            f"Already queued (same reason within the hour): "
+            f"id={stored.id}, level={stored.level.value}"
+        )
+    return f"Queued reflection request {stored.id} at level={stored.level.value}"
