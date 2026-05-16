@@ -15,6 +15,9 @@ Not executed directly with Python — this is a prompt spec for an agent.
 #
 # To run: open Claude Code and ask:
 #   "Run triage_agent following scripts/triage_agent.py"
+#
+# MCP tool names inside SYSTEM_PROMPT must match your Claude Code MCP servers;
+# update the prompt if those servers or parameter names change.
 
 AGENT_VERSION = "1.0"
 AGENT_NAME = "Atman Intelligent Issue Triage Agent"
