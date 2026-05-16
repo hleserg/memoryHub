@@ -321,6 +321,11 @@ class GLiNERPlusMiniLMAdapter(LinguisticAnalyzer):
             or len(boundary_markers) > 0
         )
 
+        # principle_invocations are explicit references to principles/values,
+        # NOT generic refusal phrases (those go in boundary_event). Match the
+        # narrower _PRINCIPLE_PATTERNS_RU substrings to avoid false positives.
+        principle_invocations = [pat for pat in _PRINCIPLE_PATTERNS_RU if pat in combined.lower()]
+
         cognitive_load = min(1.0, max(0.0, scores.get("high cognitive load", 0.0)))
 
         positive_score = scores.get("positive trust", 0.0)
@@ -342,5 +347,5 @@ class GLiNERPlusMiniLMAdapter(LinguisticAnalyzer):
             cognitive_load=cognitive_load,
             boundary_event=boundary_event,
             trust_signal=trust_signal,
-            principle_invocations=boundary_markers,
+            principle_invocations=principle_invocations,
         )

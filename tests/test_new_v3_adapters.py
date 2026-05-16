@@ -503,3 +503,50 @@ class TestExperienceViewRepository:
             uuid4(), ReframingNote(reflection="r", reflection_type="growth")
         )
         assert result is ReframingNoteAppendResult.EXPERIENCE_NOT_FOUND
+
+
+# ---------------------------------------------------------------------------
+# Regression: ExperienceViewRepository.get returns None for sessions with
+# zero key moments instead of crashing with ValidationError (key_moment_ids
+# requires min_length=1).
+# ---------------------------------------------------------------------------
+
+
+def test_experience_view_repo_get_session_with_no_moments_returns_none() -> None:
+    store = InMemoryStateStore()
+    repo = ExperienceViewRepository(store)
+    s = Session(agent_id=uuid4())
+    store.create_session(s)
+    # No key moments stored yet
+    assert repo.get(s.id) is None
+
+
+# ---------------------------------------------------------------------------
+# Regression: FileStateStore.store_key_moment is a true upsert (replaces
+# existing record by id, not just append-only no-op). Required for
+# salience_decay_service to actually persist updates against FileStateStore.
+# ---------------------------------------------------------------------------
+
+
+def test_file_state_store_store_key_moment_replaces_existing(tmp_path) -> None:
+    from atman.adapters.storage.file_state_store import FileStateStore
+
+    store = FileStateStore(tmp_path)
+    session_id = uuid4()
+    m = KeyMoment(
+        what_happened="initial",
+        how_i_felt=FeltSense(
+            emotional_valence=0.0, emotional_intensity=0.5, depth=EmotionalDepth.SURFACE
+        ),
+        why_it_matters="reason",
+        session_id=session_id,
+        salience=1.0,
+    )
+    store.store_key_moment(m)
+    # Now mutate salience and re-store
+    m.salience = 0.42
+    store.store_key_moment(m)
+    # Should reflect the updated salience, not the original
+    loaded = store.get_key_moment(m.id)
+    assert loaded is not None
+    assert loaded.salience == pytest.approx(0.42)

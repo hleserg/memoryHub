@@ -96,6 +96,7 @@ all = [
 atman = "atman.cli:main"
 atman-experience = "atman.cli_experience:main"
 atman-identity = "atman.cli_identity:main"
+atman-maintenance = "atman.cli_maintenance:main"
 atman-dev = "atman.tui.app:main"
 atman-web = "atman.web_dashboard:main"
 devui = "atman.tui.app:main"

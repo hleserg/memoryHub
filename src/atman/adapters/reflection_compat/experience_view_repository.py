@@ -103,11 +103,16 @@ class ExperienceViewRepository:
         return sessions
 
     def get(self, experience_id: UUID) -> SessionExperience | None:
-        """Get virtual experience (= session) by ID."""
+        """Get virtual experience (= session) by ID. Returns None if no key moments yet."""
         session = self._store.get_session(experience_id)
         if session is None:
             return None
         moments = self._store.get_key_moments_for_session(experience_id)
+        if not moments:
+            # SessionExperience.key_moment_ids requires min_length=1, so a
+            # session that hasn't recorded a key moment yet cannot be viewed
+            # as a virtual experience. Return None rather than crash.
+            return None
         return _build_session_experience(session, moments)
 
     def get_all(self) -> list[SessionExperience]:
