@@ -20,6 +20,13 @@ dependencies = [
 flag = [
     "FlagEmbedding>=1.3",
 ]
+linguistic = [
+    "gliner>=0.2",
+    "transformers>=4.40",
+    "torch>=2.2",
+    "FlagEmbedding>=1.3",
+    "sentencepiece>=0.2",
+]
 dev = [
     "pytest>=7.0.0",
     "pytest-asyncio>=0.21.0",
@@ -89,6 +96,7 @@ all = [
 atman = "atman.cli:main"
 atman-experience = "atman.cli_experience:main"
 atman-identity = "atman.cli_identity:main"
+atman-maintenance = "atman.cli_maintenance:main"
 atman-dev = "atman.tui.app:main"
 atman-web = "atman.web_dashboard:main"
 devui = "atman.tui.app:main"
@@ -125,6 +133,7 @@ omit = [
     "src/atman/cli_experience.py",
     "src/atman/cli_identity.py",
     "src/atman/cli_reflection.py",
+    "src/atman/cli_maintenance.py",
     "src/atman/adapters/agent/runner.py",
     "src/atman/core/ports/reflection.py",
     "src/atman/reflection/store.py",
@@ -133,6 +142,9 @@ omit = [
     "src/atman/adapters/reflection/ollama_reflection_model_with_persistence.py",
     "src/atman/adapters/memory/postgres_backend.py",
     "src/atman/adapters/memory/bm25_embedding.py",
+    "src/atman/adapters/linguistic/gliner_minilm_adapter.py",
+    "src/atman/adapters/state/postgres_state_store.py",
+    "src/atman/agents_registry.py",
     "src/atman/core/services/passive_memory_injector.py",
     "src/atman/core/services/session_working_memory.py",
     "src/atman/core/services/conflict_detector.py",

@@ -2,9 +2,12 @@
 Domain models for Experience Store.
 
 These models represent first-hand lived experiences of the agent.
-All experiences are immutable after recording - only reframing notes can be added.
+Key moments are the primary unit; SessionExperience is a read-only view for compat.
 """
 
+from __future__ import annotations
+
+import math
 from datetime import UTC, datetime
 from enum import StrEnum
 from typing import Any, Literal
@@ -149,6 +152,44 @@ class KeyMoment(BaseModel):
         description="IDs of facts that were accessed during this moment",
     )
 
+    # SESSION BINDING (v2) - which session this moment belongs to
+    session_id: UUID | None = Field(
+        default=None,
+        description="Session this moment was recorded in. Required for new moments; None for legacy.",
+    )
+
+    # SALIENCE (v2) - decays over time, updated by maintenance worker
+    salience: float = Field(default=1.0, ge=0.0, le=1.0, description="Current memory salience")
+    salience_at: datetime = Field(
+        default_factory=lambda: datetime.now(UTC), description="When salience was last updated"
+    )
+    last_accessed_at: datetime = Field(
+        default_factory=lambda: datetime.now(UTC), description="When this moment was last accessed"
+    )
+    access_count: int = Field(default=0, ge=0, description="How many times accessed")
+    importance: float = Field(
+        default=0.5, ge=0.0, le=1.0, description="Base importance (affects decay rate)"
+    )
+
+    # PROVENANCE (v2)
+    incomplete_coloring: bool = Field(
+        default=False, description="True if emotional coloring was uncertain at recording time"
+    )
+    recorded_by: str = Field(default="session_manager", description="Who recorded this moment")
+    identity_snapshot_id: UUID | None = Field(
+        default=None, description="Identity snapshot active at recording time"
+    )
+
+    # LINGUISTIC ENRICHMENT (v2) - filled asynchronously by LinguisticAnalyzer
+    structured_markers: dict[str, Any] | None = Field(
+        default=None, description="Structured signals from linguistic analysis"
+    )
+    structured_markers_version: str | None = Field(
+        default=None, description="Version of the structured_markers schema"
+    )
+
+    schema_version: str = Field(default="2.0.0", description="Model schema version")
+
     @field_validator("what_happened", "why_it_matters")
     @classmethod
     def validate_not_empty(cls, v: str) -> str:
@@ -163,8 +204,39 @@ class KeyMoment(BaseModel):
         """Normalize string lists."""
         return [item.strip() for item in v if item.strip()]
 
+    def mark_accessed(self) -> None:
+        """Update last_accessed_at and increment access_count (for salience tracking)."""
+        self.last_accessed_at = datetime.now(UTC)
+        self.access_count += 1
+
+    def calculate_current_salience(
+        self, decay_lambda: float | None = None, current_time: datetime | None = None
+    ) -> float:
+        """
+        Calculate effective salience after time decay.
+
+        Formula: salience_t = salience * exp(-lambda * days_since_access)
+        Lambda is adjusted by depth and importance if decay_lambda is None.
+        """
+        if current_time is None:
+            current_time = datetime.now(UTC)
+
+        depth = self.how_i_felt.depth
+        if decay_lambda is None:
+            if depth == EmotionalDepth.PROFOUND:
+                decay_lambda = 0.005
+            elif depth == EmotionalDepth.MEANINGFUL:
+                decay_lambda = 0.02
+            else:
+                decay_lambda = 0.05
+            if self.importance > 0.8:
+                decay_lambda *= 0.7
+
+        days = (current_time - self.last_accessed_at).total_seconds() / 86400
+        effective = self.salience * math.exp(-decay_lambda * days)
+        return max(0.0, min(1.0, effective))
+
     model_config = ConfigDict(
-        # Ensure immutability by making validation strict
         validate_assignment=True,
         json_schema_extra={
             "example": {
@@ -371,60 +443,27 @@ class SessionExperience(BaseModel):
         return v
 
     def add_reframing_note(self, note: ReframingNote) -> None:
-        """
-        Add a new reframing note to this experience.
-
-        This is the ONLY way to modify an experience after creation.
-        The original key_moments remain untouched.
-        """
+        """Append a reframing note. In v2 the view is read-only; persistence is via state_store."""
         self.reframing_notes.append(note)
 
     def mark_accessed(self) -> None:
-        """
-        Mark this experience as accessed.
-
-        Updates last_accessed_at and increments access_count.
-        Used for salience calculation.
-        """
+        """Update last_accessed_at and increment access_count."""
         self.last_accessed_at = datetime.now(UTC)
         self.access_count += 1
 
     def calculate_current_salience(
         self, decay_lambda: float = 0.1, current_time: datetime | None = None
     ) -> float:
-        """
-        Calculate current salience based on time decay.
-
-        Formula: salience_t = salience_0 * exp(-lambda * days_since_access)
-
-        This DOES NOT modify the stored salience value.
-        It only calculates what the current effective salience would be.
-
-        Args:
-            decay_lambda: Decay rate parameter (default 0.1)
-            current_time: Current time for calculation (defaults to now)
-
-        Returns:
-            float: Current effective salience (0.0-1.0)
-        """
-        import math
-
+        """Calculate effective salience after time decay (does NOT modify stored value)."""
         if current_time is None:
             current_time = datetime.now(UTC)
-
-        days_since_access = (current_time - self.last_accessed_at).total_seconds() / 86400
-
-        # Adjust decay rate based on emotional intensity and depth metadata
-        adjusted_lambda = decay_lambda
-
-        # Profound or intense experiences decay more slowly
+        days = (current_time - self.last_accessed_at).total_seconds() / 86400
+        adj = decay_lambda
         if self.has_profound_moment:
-            adjusted_lambda *= 0.5
+            adj *= 0.5
         elif self.avg_emotional_intensity > 0.7:
-            adjusted_lambda *= 0.7
-
-        effective_salience = self.salience * math.exp(-adjusted_lambda * days_since_access)
-        return max(0.0, min(1.0, effective_salience))
+            adj *= 0.7
+        return max(0.0, min(1.0, self.salience * math.exp(-adj * days)))
 
     model_config = ConfigDict(
         validate_assignment=True,

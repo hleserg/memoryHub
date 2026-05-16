@@ -22,6 +22,7 @@ from atman.core.models import (
     NarrativeDocument,
     ReframingNote,
 )
+from atman.core.models.session import Session
 
 
 class ExperienceQuery:
@@ -380,29 +381,68 @@ class StateStore(ABC):
 
     @abstractmethod
     def create_key_moment(self, key_moment: "KeyMoment") -> "KeyMoment":
-        """
-        Create a new key moment in storage.
-
-        Args:
-            key_moment: KeyMoment to store
-
-        Returns:
-            KeyMoment: The stored key moment
-
-        Raises:
-            ValueError: If the key moment is invalid or already exists
-        """
+        """Create a new key moment in storage (idempotent by id)."""
         pass
 
     @abstractmethod
     def list_key_moments(self, session_id: UUID | None = None) -> list["KeyMoment"]:
-        """
-        List key moments, optionally filtered by session_id.
-
-        Args:
-            session_id: If provided, return only key moments from this session
-
-        Returns:
-            list[KeyMoment]: List of key moments
-        """
+        """List key moments, optionally filtered by session_id."""
         pass
+
+    def store_key_moment(
+        self,
+        moment: "KeyMoment",
+    ) -> "KeyMoment":
+        """Idempotent upsert (v2 API): create-if-new, replace-if-exists.
+
+        The base implementation handles the create case by delegating to
+        :meth:`create_key_moment`. Subclasses MUST override this method to
+        support **updating** an existing moment in place — required by
+        callers like ``SalienceDecayService.decay_pass`` which re-stores a
+        moment after mutating its salience.
+
+        If the default delegate raises ``ValueError("already exists")``,
+        this method raises ``NotImplementedError`` rather than silently
+        no-op'ing, so the broken contract surfaces loudly rather than
+        causing data corruption (stale salience never persisted).
+        """
+        try:
+            return self.create_key_moment(moment)
+        except ValueError as exc:
+            if "already exists" in str(exc):
+                raise NotImplementedError(
+                    f"{type(self).__name__}.store_key_moment must override the "
+                    f"default to update existing moments — the default only "
+                    f"handles create. Got duplicate id {moment.id}."
+                ) from exc
+            raise
+
+    def mark_moment_accessed(self, moment_id: UUID) -> None:  # noqa: B027
+        """Update last_accessed_at and increment access_count for a key moment."""
+
+    def update_moment_structured_markers(  # noqa: B027
+        self, moment_id: UUID, markers: dict, version: str
+    ) -> None:
+        """Update structured_markers and structured_markers_version for a key moment."""
+
+    def find_moments_by_entity(self, entity_id: UUID, *, limit: int = 20) -> list["KeyMoment"]:
+        """Find key moments linked to an entity (requires entity_link tables)."""
+        return []
+
+    # Session operations (v2 — per-agent sessions table after migration 0008)
+
+    def create_session(self, session: Session) -> Session:
+        """Persist a new session record."""
+        return session
+
+    def get_session(self, session_id: UUID) -> Session | None:
+        """Retrieve session by ID."""
+        return None
+
+    def update_session(self, session: Session) -> Session:
+        """Update session metadata (close_reason, agent_recap, overall_tone, etc.)."""
+        return session
+
+    def list_recent_sessions(self, agent_id: UUID, *, limit: int = 10) -> list[Session]:
+        """List most recent sessions for an agent, newest first."""
+        return []

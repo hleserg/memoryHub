@@ -18,6 +18,7 @@ class TriggerReason(StrEnum):
     SELF_REPORT = "self_report"
     DIVERGENCE = "divergence"
     EMPHASIS = "emphasis"
+    STRUCTURAL_MARKER = "structural_marker"
 
 
 class AffectMetrics(BaseModel):

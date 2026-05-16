@@ -168,7 +168,7 @@ class JsonlExperienceStore(StateStore):
         ):
             return record
 
-        record.experience.add_reframing_note(note)
+        record.experience.reframing_notes.append(note)
 
         self._write_all_experiences(experiences)
 
@@ -176,13 +176,16 @@ class JsonlExperienceStore(StateStore):
 
     def mark_accessed(self, experience_id: UUID) -> ExperienceRecord | None:
         """Mark an experience as accessed."""
+        from datetime import UTC, datetime
+
         experiences = self._read_all_experiences()
 
         if experience_id not in experiences:
             return None
 
         record = experiences[experience_id]
-        record.experience.mark_accessed()
+        record.experience.last_accessed_at = datetime.now(UTC)
+        record.experience.access_count += 1
 
         self._write_all_experiences(experiences)
 

@@ -22,6 +22,7 @@ from atman.core.models import (
     NarrativeDocument,
     ReframingNote,
 )
+from atman.core.models.session import Session
 from atman.core.ports.state_store import (
     DateRangeQuery,
     DepthQuery,
@@ -80,6 +81,9 @@ class FileStateStore(StateStore):
 
         self.key_moments_dir = self.workspace / "key_moments"
         self.key_moments_dir.mkdir(exist_ok=True)
+
+        self.sessions_dir = self.workspace / "sessions"
+        self.sessions_dir.mkdir(exist_ok=True)
 
         # Paths for current state files
         self.identity_path = self.workspace / "identity.json"
@@ -142,17 +146,18 @@ class FileStateStore(StateStore):
             n.triggered_by == note.triggered_by for n in record.experience.reframing_notes
         ):
             return record
-        record.experience.add_reframing_note(note)
+        record.experience.reframing_notes.append(note)
         experience_file = self.experiences_dir / f"{experience_id}.json"
         self._write_json_atomically(experience_file, record.model_dump_json(indent=2))
         return record
 
     def mark_accessed(self, experience_id: UUID) -> ExperienceRecord | None:
-        """Mark experience as accessed."""
+        """Mark experience as accessed (legacy)."""
         record = self.get_experience(experience_id)
         if record is None:
             return None
-        record.experience.mark_accessed()
+        record.experience.last_accessed_at = datetime.now(UTC)
+        record.experience.access_count += 1
         experience_file = self.experiences_dir / f"{experience_id}.json"
         self._write_json_atomically(experience_file, record.model_dump_json(indent=2))
         return record
@@ -463,15 +468,78 @@ class FileStateStore(StateStore):
 
         return key_moment
 
+    def store_key_moment(self, moment: KeyMoment) -> KeyMoment:
+        """Idempotent upsert — replaces existing record by id, or appends if new (v2 API).
+
+        Updates all three storage layers used by FileStateStore so subsequent
+        reads see the new state (no stale data from decay/access updates):
+          1. key_moments.jsonl          — JSONL log of all moments
+          2. {key_moments_dir}/{id}.json — per-moment file (checked first by get_key_moment)
+          3. {key_moments_dir}/{session_id}_moments.json — per-session file
+             (read by get_key_moments_for_session) — only updated if it exists
+        """
+        target_id = str(moment.id)
+        existed = False
+        rebuilt_lines: list[str] = []
+
+        if self.key_moments_path.exists():
+            for line in self.key_moments_path.read_text(encoding="utf-8").splitlines():
+                if not line.strip():
+                    continue
+                try:
+                    data = json.loads(line)
+                except json.JSONDecodeError:
+                    rebuilt_lines.append(line)
+                    continue
+                if data.get("id") == target_id:
+                    existed = True
+                    rebuilt_lines.append(moment.model_dump_json())
+                else:
+                    rebuilt_lines.append(line)
+
+        if existed:
+            # Atomic rewrite: tmpfile + rename, so a crash mid-write cannot
+            # truncate or corrupt the JSONL file (decay_pass calls this in a
+            # loop over every moment, making partial-write risk significant).
+            self._write_json_atomically(self.key_moments_path, "\n".join(rebuilt_lines) + "\n")
+        else:
+            with self.key_moments_path.open("a", encoding="utf-8") as f:
+                f.write(moment.model_dump_json() + "\n")
+
+        # Per-moment file: get_key_moment reads this first, so it MUST reflect
+        # the latest state, not the stale snapshot from store_key_moments().
+        moment_file = self.key_moments_dir / f"{moment.id}.json"
+        self._write_json_atomically(moment_file, moment.model_dump_json(indent=2))
+
+        # Per-session file: get_key_moments_for_session reads only from here.
+        # Update in place (replace by id) if the file exists; do not create
+        # the session file on first solo store_key_moment — the per-session
+        # collection is owned by store_key_moments (plural).
+        if moment.session_id is not None:
+            session_file = self.key_moments_dir / f"{moment.session_id}_moments.json"
+            if session_file.exists():
+                try:
+                    existing = _read_json_file(session_file)
+                except (json.JSONDecodeError, ValueError):
+                    existing = []
+                if isinstance(existing, list):
+                    replaced = False
+                    for i, entry in enumerate(existing):
+                        if isinstance(entry, dict) and entry.get("id") == target_id:
+                            existing[i] = moment.model_dump(mode="json")
+                            replaced = True
+                            break
+                    if not replaced:
+                        existing.append(moment.model_dump(mode="json"))
+                    self._write_json_atomically(session_file, json.dumps(existing, indent=2))
+
+        return moment
+
     def list_key_moments(self, session_id: UUID | None = None) -> list[KeyMoment]:
         """List key moments from JSONL file, optionally filtered by session_id."""
         import warnings
 
-        # KeyMoment model doesn't have session_id field yet; filtering not implemented
-        if session_id is not None:
-            raise NotImplementedError(
-                "Filtering by session_id not yet supported - KeyMoment model needs session_id field"
-            )
+        # session_id filtering is now supported via KeyMoment.session_id field
 
         if not self.key_moments_path.exists():
             return []
@@ -484,10 +552,60 @@ class FileStateStore(StateStore):
                     key_moment = KeyMoment.model_validate(data)
                     key_moments.append(key_moment)
                 except (json.JSONDecodeError, ValueError) as e:
+                    import warnings
+
                     warnings.warn(
                         f"Skipping corrupted line in {self.key_moments_path}: {e}",
                         stacklevel=2,
                     )
                     continue
 
+        if session_id is not None:
+            key_moments = [km for km in key_moments if km.session_id == session_id]
+
         return key_moments
+
+    # ----- Session operations (v2 — needed by ExperienceViewRepository) ------
+
+    def _session_path(self, session_id: UUID) -> Path:
+        return self.sessions_dir / f"{session_id}.json"
+
+    def create_session(self, session: Session) -> Session:
+        """Persist a new session record as {sessions_dir}/{id}.json."""
+        path = self._session_path(session.id)
+        self._write_json_atomically(path, session.model_dump_json(indent=2))
+        return session
+
+    def get_session(self, session_id: UUID) -> Session | None:
+        """Retrieve session by ID, or None if not stored."""
+        path = self._session_path(session_id)
+        if not path.exists():
+            return None
+        data = _read_json_file(path)
+        return Session.model_validate(data)
+
+    def update_session(self, session: Session) -> Session:
+        """Update session metadata via atomic write (replace-by-id)."""
+        path = self._session_path(session.id)
+        self._write_json_atomically(path, session.model_dump_json(indent=2))
+        return session
+
+    def list_recent_sessions(self, agent_id: UUID, *, limit: int = 10) -> list[Session]:
+        """List most recent sessions for an agent, newest first."""
+        sessions: list[Session] = []
+        for session_file in self.sessions_dir.glob("*.json"):
+            try:
+                data = _read_json_file(session_file)
+                s = Session.model_validate(data)
+            except (json.JSONDecodeError, ValueError):
+                import warnings
+
+                warnings.warn(
+                    f"Skipping corrupted session file {session_file}",
+                    stacklevel=2,
+                )
+                continue
+            if s.agent_id == agent_id:
+                sessions.append(s)
+        sessions.sort(key=lambda s: s.started_at, reverse=True)
+        return sessions[:limit]

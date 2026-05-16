@@ -57,17 +57,20 @@ class InMemoryExperienceStore(StateStore):
         ):
             return record
 
-        record.experience.add_reframing_note(note)
+        record.experience.reframing_notes.append(note)
 
         return record
 
     def mark_accessed(self, experience_id: UUID) -> ExperienceRecord | None:
         """Mark an experience as accessed."""
+        from datetime import UTC, datetime
+
         if experience_id not in self._experiences:
             return None
 
         record = self._experiences[experience_id]
-        record.experience.mark_accessed()
+        record.experience.last_accessed_at = datetime.now(UTC)
+        record.experience.access_count += 1
 
         return record
 

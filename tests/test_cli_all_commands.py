@@ -256,3 +256,61 @@ def test_narrative_validate_rejects_invalid_file(tmp_path: Path) -> None:
 
     r = _run_identity(["validate", str(bad)])
     assert r.returncode != 0
+
+
+# ---------------------------------------------------------------------------
+# cli_maintenance — run, list, enqueue
+# ---------------------------------------------------------------------------
+
+
+def _run_maintenance(args: list[str]) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        [sys.executable, "-m", "atman.cli_maintenance", *args],
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+
+
+def test_maintenance_list_empty_succeeds() -> None:
+    """`atman-maintenance list` succeeds and reports no jobs on a fresh in-memory queue."""
+    r = _run_maintenance(["list"])
+    assert r.returncode == 0, r.stderr
+    # In-memory queue starts empty
+    assert "No jobs found" in r.stdout or "No jobs" in r.stdout
+
+
+def test_maintenance_list_invalid_status_exits_nonzero() -> None:
+    """`atman-maintenance list --status bogus` exits with error."""
+    r = _run_maintenance(["list", "--status", "bogus"])
+    assert r.returncode != 0
+    assert "Unknown status" in r.stdout or "Unknown status" in r.stderr
+
+
+def test_maintenance_enqueue_invalid_uuid_exits_nonzero() -> None:
+    """`atman-maintenance enqueue ... --agent-id not-a-uuid` exits with error."""
+    r = _run_maintenance(["enqueue", "salience_decay", "--agent-id", "not-a-uuid"])
+    assert r.returncode != 0
+    assert "Invalid UUID" in r.stdout or "Invalid UUID" in r.stderr
+
+
+def test_maintenance_enqueue_unknown_job_exits_nonzero() -> None:
+    """`atman-maintenance enqueue unknown_job` exits with error."""
+    r = _run_maintenance(
+        ["enqueue", "unknown_job_name", "--agent-id", "00000000-0000-0000-0000-000000000001"]
+    )
+    assert r.returncode != 0
+    assert "Unknown job" in r.stdout or "Unknown job" in r.stderr
+
+
+def test_maintenance_run_once_succeeds_on_empty_queue() -> None:
+    """`atman-maintenance run --once` succeeds when queue is empty."""
+    r = _run_maintenance(["run", "--once"])
+    assert r.returncode == 0, r.stderr
+
+
+def test_maintenance_run_unknown_job_filter_exits_nonzero() -> None:
+    """`atman-maintenance run --once --job bogus` exits with error."""
+    r = _run_maintenance(["run", "--once", "--job", "bogus_job_type"])
+    assert r.returncode != 0
+    assert "Unknown job" in r.stdout or "Unknown job" in r.stderr
