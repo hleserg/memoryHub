@@ -238,15 +238,12 @@ Connections between two or more parts. These are seams that may break independen
 | `MockEmbeddingAdapter`, `BM25EmbeddingAdapter`, `OllamaEmbeddingAdapter`, `FlagEmbeddingAdapter` | `EmbeddingPort` |
 | `InMemoryUsageLog` | `MemoryUsageLog` |
 | `InMemoryReflectionStore` (`adapters/storage/in_memory_postgres_reflection_store.py`) | `ReflectionStore` (E27) |
-| `InMemoryEntityRegistry` | `EntityRegistry` |
-| `InMemoryEntityStanceStore` | `EntityStanceStore` |
-| `NoOpLinguisticAnalyzer`, `GLiNERPlusMiniLMAdapter` | `LinguisticAnalyzer` |
-| `NoOpReranker` | `MemoryReranker` |
-| `InMemoryMaintenanceQueue`, `PostgresMaintenanceQueue` | `MaintenanceQueue` |
 | `InMemoryEntityRegistry`, `PostgresEntityRegistry` | `EntityRegistry` |
 | `InMemoryEntityStanceStore`, `PostgresEntityStanceStore` | `EntityStanceStore` |
 | `InMemoryMemoryGuardian` | `MemoryGuardian` |
+| `NoOpLinguisticAnalyzer`, `GLiNERPlusMiniLMAdapter` | `LinguisticAnalyzer` |
 | `NoOpReranker`, `BgeReranker` | `MemoryReranker` |
+| `InMemoryMaintenanceQueue`, `PostgresMaintenanceQueue` | `MaintenanceQueue` |
 | `MRebelRelationAdapter` | `EntityRelationExtractor` |
 | `ExperienceViewRepository` (`adapters/reflection_compat/`) | `ExperienceRepository` (Reflection compat bridge) |
 

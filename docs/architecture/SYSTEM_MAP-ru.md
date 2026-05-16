@@ -236,11 +236,13 @@
 | **`InMemoryReflectionStore`** | **`ReflectionStore`** (E27) |
 | `MockEmbeddingAdapter`, `BM25EmbeddingAdapter`, `OllamaEmbeddingAdapter`, `FlagEmbeddingAdapter` | `EmbeddingPort` |
 | `InMemoryUsageLog` | `MemoryUsageLog` |
-| `InMemoryEntityRegistry` | `EntityRegistry` |
-| `InMemoryEntityStanceStore` | `EntityStanceStore` |
+| `InMemoryEntityRegistry`, `PostgresEntityRegistry` | `EntityRegistry` |
+| `InMemoryEntityStanceStore`, `PostgresEntityStanceStore` | `EntityStanceStore` |
+| `InMemoryMemoryGuardian` | `MemoryGuardian` |
 | `NoOpLinguisticAnalyzer`, `GLiNERPlusMiniLMAdapter` | `LinguisticAnalyzer` |
-| `NoOpReranker` | `MemoryReranker` |
-| `InMemoryMaintenanceQueue` | `MaintenanceQueue` |
+| `NoOpReranker`, `BgeReranker` | `MemoryReranker` |
+| `InMemoryMaintenanceQueue`, `PostgresMaintenanceQueue` | `MaintenanceQueue` |
+| `MRebelRelationAdapter` | `EntityRelationExtractor` |
 | `ExperienceViewRepository` (`adapters/reflection_compat/`) | `ExperienceRepository` (compat мост для Reflection) |
 
 ### 2.2a. Agent adapter ↔ сервисы

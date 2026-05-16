@@ -542,21 +542,21 @@ class SessionManager:
 
         # v2: persist Session row so ExperienceViewRepository, decay jobs,
         # and Reflection follow-ups have a canonical session record.
-        try:
-            self._state_store.create_session(
-                Session(
-                    id=context.session_id,
-                    agent_id=agent_id,
-                    started_at=context.started_at,
-                    status="active",
-                    identity_snapshot_id=stored_snapshot.id,
-                )
+        # The base StateStore port's `create_session` is a no-op default that
+        # returns the session unchanged — no exception. Concrete adapters
+        # (InMemoryStateStore, FileStateStore, PostgresStateStore) implement
+        # real persistence and may raise on genuine failures (DB connection
+        # lost, disk full, etc.) — those errors propagate so callers can
+        # decide how to handle them, rather than being silently logged.
+        self._state_store.create_session(
+            Session(
+                id=context.session_id,
+                agent_id=agent_id,
+                started_at=context.started_at,
+                status="active",
+                identity_snapshot_id=stored_snapshot.id,
             )
-        except Exception:
-            # create_session defaults to no-op for stores that don't support
-            # Session persistence (legacy adapters); swallow errors so the
-            # session can still start under those stores.
-            _LOG.debug("create_session no-op or failed for legacy store", exc_info=True)
+        )
 
         journal_lock = self._try_lock_journal(identity.id, context.session_id)
         if journal_lock is not None:
@@ -937,25 +937,25 @@ class SessionManager:
 
             self._save_session_narrative_update(session_result)
 
-            # v2: update Session row with close metadata (best-effort — silently
-            # no-op for legacy stores that don't override update_session).
-            try:
-                existing_session = self._state_store.get_session(session_id)
-                if existing_session is not None:
-                    closed_status: Literal["completed", "interrupted"] = (
-                        "interrupted"
-                        if safe_close_reason in {"interrupted", "forced"}
-                        else "completed"
-                    )
-                    existing_session.status = closed_status
-                    existing_session.ended_at = session_result.finished_at
-                    existing_session.close_reason = safe_close_reason  # type: ignore[assignment]
-                    existing_session.restart_reason = restart_reason or ""
-                    existing_session.user_language = user_language
-                    existing_session.unexamined_fact_refs = list(unexamined_fact_refs)
-                    self._state_store.update_session(existing_session)
-            except Exception:
-                _LOG.debug("update_session no-op or failed for legacy store", exc_info=True)
+            # v2: update Session row with close metadata. The base StateStore
+            # port returns None from get_session and returns the session
+            # unchanged from update_session by default, so legacy adapters
+            # without Session persistence naturally degrade to a no-op
+            # via the `existing_session is None` guard. Real exceptions from
+            # concrete adapters (DB errors, IO errors) propagate so the
+            # caller can react instead of silently losing data.
+            existing_session = self._state_store.get_session(session_id)
+            if existing_session is not None:
+                closed_status: Literal["completed", "interrupted"] = (
+                    "interrupted" if safe_close_reason in {"interrupted", "forced"} else "completed"
+                )
+                existing_session.status = closed_status
+                existing_session.ended_at = session_result.finished_at
+                existing_session.close_reason = safe_close_reason  # type: ignore[assignment]
+                existing_session.restart_reason = restart_reason or ""
+                existing_session.user_language = user_language
+                existing_session.unexamined_fact_refs = list(unexamined_fact_refs)
+                self._state_store.update_session(existing_session)
 
         except Exception:
             # Rollback is_finished flag to allow retry of finish_session()

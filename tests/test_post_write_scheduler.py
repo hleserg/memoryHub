@@ -87,13 +87,38 @@ def test_schedule_at_specific_time() -> None:
     assert q.list_jobs()[0].scheduled_at == when
 
 
-def test_async_schedule_falls_back_to_sync_without_loop() -> None:
-    """`schedule_for_key_moment_async` must work even when called sync (no running loop)."""
+def test_async_schedule_falls_back_to_sync_without_loop(monkeypatch) -> None:
+    """`schedule_for_key_moment_async` must enqueue synchronously when no loop runs.
+
+    The `asyncio.run()` helper installs a loop before calling the coroutine,
+    so calling under asyncio.run() never exercises the fallback. Instead,
+    we drive the coroutine manually via .send(None) while patching
+    asyncio.get_running_loop to raise RuntimeError — exactly the condition
+    the fallback is meant to detect.
+    """
+    from atman.core.services import post_write_scheduler as pws
+
     q = InMemoryMaintenanceQueue()
     scheduler = PostWriteScheduler(q, jobs=(JobName.mrebel_extract,))
     moment = _moment()
-    asyncio.run(scheduler.schedule_for_key_moment_async(moment, uuid4()))
+
+    def _no_loop() -> None:
+        raise RuntimeError("no running event loop")
+
+    monkeypatch.setattr(pws.asyncio, "get_running_loop", _no_loop)
+
+    coro = scheduler.schedule_for_key_moment_async(moment, uuid4())
+    try:
+        coro.send(None)
+    except StopIteration:
+        pass  # Coroutine completed via the sync fallback path.
+    else:
+        # The fallback should have returned synchronously without suspending.
+        coro.close()
+        raise AssertionError("Coroutine suspended; sync fallback did not fire")
+
     assert len(q.list_jobs()) == 1
+    assert scheduler._background_tasks == set()  # No background task spawned
 
 
 @pytest.mark.asyncio
