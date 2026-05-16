@@ -31,6 +31,29 @@ from atman.core.ports.reflection_overload_alert import (
 )
 
 
+# PLAYBOOK-START
+# id: sliding-window-cadence-anomaly-detection
+# category: design-patterns
+# title: Sliding-Window Cadence Anomaly Detection with Failure-Suppressed Alerting
+# status: draft
+#
+# Pattern: maintain configurable sliding-window counters over recent
+# operations, compare counts to per-window thresholds, and emit alerts as
+# advisory signals — not as control-flow exceptions. Alert sink failures
+# are suppressed so the monitor never breaks the producer it observes.
+# An empty window is explicitly excluded from "anomaly" — silence is not
+# overload.
+#
+# Why generalizable: any system needs cheap, in-process detection of
+# "this is happening too often" without standing up a full metrics
+# pipeline. Suppressing sink failures keeps the monitor a pure observer;
+# excluding empty windows prevents a quiet system from being mistaken
+# for a stuck one.
+#
+# Trade-offs: thresholds are static and must be tuned per deployment;
+# windows are coarse (day/hour buckets) so short bursts inside a bucket
+# do not fire until the bucket fills.
+# PLAYBOOK-END
 class ReflectionOverloadMonitor:
     """Inspects ReflectionEventStore for excessive cadence and emits alerts."""
 

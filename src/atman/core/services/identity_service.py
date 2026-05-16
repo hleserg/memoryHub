@@ -384,6 +384,29 @@ class IdentityService:
         SelfChangeTargetKind.IDENTITY_OPEN_QUESTION: "open_questions",
     }
 
+    # PLAYBOOK-START
+    # id: reversible-audit-trail-before-after-snapshots
+    # category: design-patterns
+    # title: Reversible Audit Trail with Before/After Snapshots
+    # status: draft
+    #
+    # Pattern: every autonomous state mutation captures a `before` snapshot
+    # (the prior value) and an `after` snapshot (the new value) into an
+    # append-only audit store. Revert is a separate operation that loads the
+    # recorded `before`, re-applies it to current state, and writes a second
+    # audit entry referencing the original. The store itself is never
+    # mutated; even a revert produces a new record.
+    #
+    # Why generalizable: any system that lets autonomous agents (or
+    # automated workflows) change persistent state needs both observability
+    # and surgical undo. Treating each change as immutable evidence with
+    # paired snapshots gives reviewers a complete diff and gives operators
+    # a deterministic rollback without rebuilding from a full event log.
+    #
+    # Trade-offs: doubles write volume vs. forward-only logs; reverting
+    # state that was further mutated after the original change requires
+    # explicit conflict policy (this implementation refuses on mismatch).
+    # PLAYBOOK-END
     def apply_self_change(
         self,
         agent_id: UUID,
