@@ -187,8 +187,8 @@ def build_deps(
     # state_store that the session will write to.
     passive_memory_injector = None
     if os.getenv("ATMAN_LINGUISTIC_ENABLED", "false").lower() == "true":
-        from atman.config import build_memory_backend as _build_mem
         from atman.config import build_embedding_adapter
+        from atman.config import build_memory_backend as _build_mem
         from atman.core.services.passive_memory_injector import PassiveMemoryInjector
 
         try:

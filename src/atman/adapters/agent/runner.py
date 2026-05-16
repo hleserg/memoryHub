@@ -823,9 +823,7 @@ class AtmanRunner:
                     _candidates = deps.passive_memory_injector.surface_for_context(
                         user_text, working_memory=working_memory
                     )
-                    _rag = build_rag_context(
-                        _candidates, budget=self._config.rag_token_budget
-                    )
+                    _rag = build_rag_context(_candidates, budget=self._config.rag_token_budget)
                     _LOG.debug(
                         "RAG: items=%d tokens=%d session_cache=%s",
                         len(_rag.items),

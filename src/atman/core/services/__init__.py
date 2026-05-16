@@ -26,12 +26,12 @@ from atman.core.services.reflection_input_builder import (
     SessionSummary,
     prepare_reflection_input,
 )
-from atman.core.services.session_cache import SessionCache
 from atman.core.services.reflection_service import (
     DailyReflectionService,
     DeepReflectionService,
     MicroReflectionService,
 )
+from atman.core.services.session_cache import SessionCache
 from atman.core.services.session_manager import SessionManager
 from atman.core.services.session_working_memory import CachedItem, SessionWorkingMemory
 
