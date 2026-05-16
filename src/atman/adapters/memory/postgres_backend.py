@@ -521,3 +521,105 @@ class PostgresFactualMemory(FactualMemory):
 
         conn.commit()
         return rows
+
+    # ------------------------------------------------------------------
+    # Entity-link operations (v2 — agent_N.fact_entities, migration 0007)
+    # ------------------------------------------------------------------
+
+    def _agent_schema(self, agent_id: UUID) -> str | None:
+        """Return ``agent_<serial_id>`` schema name, or None if not registered."""
+        conn = self._require_conn()
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT serial_id FROM public.agents WHERE id = %s",
+                [str(agent_id)],
+            )
+            row = cur.fetchone()
+        if row is None:
+            return None
+        if isinstance(row, dict):
+            serial_id = row.get("serial_id")
+        else:
+            serial_id = row[0]
+        return f"agent_{serial_id}" if serial_id is not None else None
+
+    def add_fact_with_entities(
+        self,
+        record: FactRecord,
+        entities: list[tuple[UUID, str]],
+    ) -> FactRecord:
+        """Insert a fact and its entity links in a single transaction."""
+        stored = self.add_fact(record)
+        if not entities:
+            return stored
+
+        agent_id = stored.agent_id
+        if agent_id is None:
+            return stored
+        schema = self._agent_schema(agent_id)
+        if schema is None:
+            return stored
+
+        conn = self._require_conn()
+        with conn.cursor() as cur:
+            for entity_id, role in entities:
+                cur.execute(
+                    f"INSERT INTO {schema}.fact_entities "  # type: ignore[arg-type]
+                    "(fact_id, entity_id, agent_id, role) "
+                    "VALUES (%s, %s, %s, %s) "
+                    "ON CONFLICT (fact_id, entity_id, role) DO NOTHING",
+                    [str(stored.id), str(entity_id), str(agent_id), role],
+                )
+        conn.commit()
+        return stored
+
+    def find_facts_by_entity(
+        self,
+        entity_id: UUID,
+        roles: list[str] | None = None,
+        *,
+        limit: int = 20,
+    ) -> list[FactRecord]:
+        """Return facts linked to ``entity_id``, optionally filtered by role.
+
+        Requires ``ATMAN_CURRENT_AGENT`` to be set so the per-agent schema
+        can be located; returns ``[]`` otherwise.
+        """
+        agent_id_str = os.environ.get("ATMAN_CURRENT_AGENT")
+        if not agent_id_str:
+            return []
+        schema = self._agent_schema(UUID(agent_id_str))
+        if schema is None:
+            return []
+
+        conn = self._require_conn()
+        self._set_agent_context(conn)
+
+        params: list[Any] = [str(entity_id)]
+        role_clause = ""
+        if roles:
+            role_clause = "AND fe.role = ANY(%s)"
+            params.append(list(roles))
+        params.append(limit)
+
+        with conn.cursor() as cur:
+            fact_ids_sql = (
+                f"SELECT fe.fact_id FROM {schema}.fact_entities fe "
+                f"WHERE fe.entity_id = %s {role_clause} LIMIT %s"
+            )
+            cur.execute(fact_ids_sql, params)  # type: ignore[arg-type]
+            rows = cur.fetchall()
+        fact_ids = [(row["fact_id"] if isinstance(row, dict) else row[0]) for row in rows]
+        if not fact_ids:
+            return []
+
+        with conn.cursor() as cur:
+            facts = self._load_rows(
+                cur,
+                "f.id = ANY(%s)",
+                [fact_ids],
+                "f.created_at DESC",
+                limit,
+            )
+        conn.commit()
+        return facts

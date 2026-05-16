@@ -163,3 +163,36 @@ class FactualMemory(ABC):
             list[FactRecord]: Список фактов, отсортированных по created_at (новые первыми)
         """
         pass
+
+    # ------------------------------------------------------------------
+    # Entity-link operations (v2 — see migration 0007 fact_entities table)
+    # ------------------------------------------------------------------
+
+    def add_fact_with_entities(
+        self,
+        record: FactRecord,
+        entities: list[tuple[UUID, str]],
+    ) -> FactRecord:
+        """Add a fact and link it to a list of (entity_id, role) pairs.
+
+        ``role`` must be one of ``subject | object | context | mentioned`` per
+        the `agent_N.fact_entities` CHECK constraint. The default
+        implementation calls :meth:`add_fact` and ignores the links — adapters
+        backed by a relational store with a ``fact_entities`` table MUST
+        override to actually persist the rows.
+        """
+        return self.add_fact(record)
+
+    def find_facts_by_entity(
+        self,
+        entity_id: UUID,
+        roles: list[str] | None = None,
+        *,
+        limit: int = 20,
+    ) -> list[FactRecord]:
+        """Return facts linked to ``entity_id`` (optionally filtered by role).
+
+        Default returns ``[]`` for adapters without entity-link support;
+        Postgres adapters with the ``fact_entities`` table override.
+        """
+        return []

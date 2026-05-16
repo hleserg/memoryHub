@@ -37,6 +37,7 @@ from atman.core.models import (
     ExperienceRecord,
     KeyMoment,
     KeyMomentInput,
+    Session,
     SessionContext,
     SessionEvent,
     SessionExperience,
@@ -539,6 +540,24 @@ class SessionManager:
                 identity_id=identity.id,
             )
 
+        # v2: persist Session row so ExperienceViewRepository, decay jobs,
+        # and Reflection follow-ups have a canonical session record.
+        try:
+            self._state_store.create_session(
+                Session(
+                    id=context.session_id,
+                    agent_id=agent_id,
+                    started_at=context.started_at,
+                    status="active",
+                    identity_snapshot_id=stored_snapshot.id,
+                )
+            )
+        except Exception:
+            # create_session defaults to no-op for stores that don't support
+            # Session persistence (legacy adapters); swallow errors so the
+            # session can still start under those stores.
+            _LOG.debug("create_session no-op or failed for legacy store", exc_info=True)
+
         journal_lock = self._try_lock_journal(identity.id, context.session_id)
         if journal_lock is not None:
             with self._lock:
@@ -811,6 +830,14 @@ class SessionManager:
 
         # Persist experience, eigenstate, and update narrative
         # If this fails, rollback is_finished flag to allow retry
+        # Variables shared between the new-experience branch and the post-persist
+        # update_session block — always-bound defaults so update_session works
+        # even when the experience already existed (recovery path).
+        safe_close_reason: (
+            Literal["timeout_sleep", "menu_timeout", "restart", "forced", "interrupted"] | None
+        ) = None
+        unexamined_fact_refs: list[UUID] = []
+
         try:
             existing_record = self._state_store.get_experience(experience_id)
             if existing_record is None:
@@ -909,6 +936,26 @@ class SessionManager:
             self._state_store.save_eigenstate(eigenstate)
 
             self._save_session_narrative_update(session_result)
+
+            # v2: update Session row with close metadata (best-effort — silently
+            # no-op for legacy stores that don't override update_session).
+            try:
+                existing_session = self._state_store.get_session(session_id)
+                if existing_session is not None:
+                    closed_status: Literal["completed", "interrupted"] = (
+                        "interrupted"
+                        if safe_close_reason in {"interrupted", "forced"}
+                        else "completed"
+                    )
+                    existing_session.status = closed_status
+                    existing_session.ended_at = session_result.finished_at
+                    existing_session.close_reason = safe_close_reason  # type: ignore[assignment]
+                    existing_session.restart_reason = restart_reason or ""
+                    existing_session.user_language = user_language
+                    existing_session.unexamined_fact_refs = list(unexamined_fact_refs)
+                    self._state_store.update_session(existing_session)
+            except Exception:
+                _LOG.debug("update_session no-op or failed for legacy store", exc_info=True)
 
         except Exception:
             # Rollback is_finished flag to allow retry of finish_session()
