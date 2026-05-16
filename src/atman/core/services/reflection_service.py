@@ -27,6 +27,7 @@ from atman.core.models.reflection import (
     ReflectionEvent,
     ReflectionLevel,
 )
+from atman.core.models.reflection_request import ReflectionRequest, ReflectionRequestLevel
 from atman.core.ports.clock import ClockPort
 from atman.core.ports.reflection import (
     HealthAssessmentStore,
@@ -37,6 +38,7 @@ from atman.core.ports.reflection import (
     ReflectionEventStore,
     ReflectionModel,
 )
+from atman.core.ports.reflection_request_queue import ReflectionRequestQueue
 from atman.core.ports.session_repository import SessionRepository
 from atman.core.reflection_event_audit import NoOpReflectionEventPersistenceObserver
 from atman.core.reflection_run_keys import (
@@ -99,6 +101,35 @@ def _utc_calendar_day_bounds(calendar_anchor: datetime) -> tuple[datetime, datet
     start = datetime.combine(d, time.min, tzinfo=UTC)
     end = datetime.combine(d, time.max, tzinfo=UTC)
     return start, end
+
+
+def _take_pending_requests(
+    queue: ReflectionRequestQueue | None,
+    level: ReflectionRequestLevel,
+) -> list[ReflectionRequest]:
+    """Best-effort drain of pending agent-driven requests. Never raises."""
+    if queue is None:
+        return []
+    try:
+        return queue.take_pending(level=level)
+    except Exception:
+        # Queue failures must not abort the reflection job — the queue is a
+        # signal, not a source of truth.
+        return []
+
+
+def _mark_requests_consumed(
+    queue: ReflectionRequestQueue | None,
+    requests: list[ReflectionRequest],
+    event: ReflectionEvent,
+    consumed_at: datetime,
+) -> None:
+    """Best-effort consume; logs of failure are out of scope here."""
+    if queue is None or not requests:
+        return
+    for req in requests:
+        with contextlib.suppress(Exception):
+            queue.mark_consumed(req.id, consumed_at=consumed_at, reflection_event_id=event.id)
 
 
 def _reflection_identity_anchor_snapshot_id(
@@ -288,6 +319,7 @@ class DailyReflectionService:
         clock: ClockPort | None = None,
         reflection_event_observer: ReflectionEventPersistenceObserver | None = None,
         structured_markers_aggregator: StructuredMarkersAggregator | None = None,
+        reflection_request_queue: ReflectionRequestQueue | None = None,
     ):
         """Initialize daily reflection service."""
         self.session_repo = session_repo
@@ -302,6 +334,7 @@ class DailyReflectionService:
         self._structured_markers_aggregator = (
             structured_markers_aggregator or StructuredMarkersAggregator(pattern_store)
         )
+        self._reflection_request_queue = reflection_request_queue
 
     def reflect(self, date: datetime) -> ReflectionEvent:
         """
@@ -327,25 +360,51 @@ class DailyReflectionService:
             all_moments.extend(moments)
             experiences.append(build_session_experience(s, moments))
 
+        # Drain agent-driven reflection requests at the daily level. Even with
+        # no experiences for the day we still want to acknowledge pending
+        # requests so they don't pile up forever — they get consumed on the
+        # empty event.
+        pending_requests = _take_pending_requests(
+            self._reflection_request_queue, ReflectionRequestLevel.DAILY
+        )
+
         if not experiences:
-            return self._create_empty_event(calendar_anchor)
+            event = self._create_empty_event(calendar_anchor)
+            _mark_requests_consumed(
+                self._reflection_request_queue,
+                pending_requests,
+                event,
+                self._clock.now(),
+            )
+            return event
 
         identity = self.identity_repo.get_current()
         if not identity:
-            return self._create_skipped_daily_no_identity(
+            event = self._create_skipped_daily_no_identity(
                 calendar_anchor, [exp.id for exp in experiences]
             )
+            _mark_requests_consumed(
+                self._reflection_request_queue,
+                pending_requests,
+                event,
+                self._clock.now(),
+            )
+            return event
 
         run_key = daily_reflection_run_key_for_identity(calendar_anchor, identity.id)
         existing = self.event_store.get_by_reflection_run_key(run_key)
         if existing is not None and _daily_run_terminal_success(existing.notes or ""):
+            # Replay path: don't drain again — leave them for the next live run.
             return existing
 
         anchor_snapshot_id = _reflection_identity_anchor_snapshot_id(
             self.identity_repo, identity, run_key
         )
 
-        patterns_detected = self._detect_patterns(experiences, identity, run_key)
+        agent_reasons = [r.reason for r in pending_requests]
+        patterns_detected = self._detect_patterns(
+            experiences, identity, run_key, agent_reasons=agent_reasons
+        )
         reframing_count, reframing_nf, reframing_sr, reframing_dup = self._add_reframing_notes(
             experiences, patterns_detected, run_key
         )
@@ -362,6 +421,13 @@ class DailyReflectionService:
             )
         if reframing_dup:
             notes += f" reframing_duplicate_triggered_by={reframing_dup}"
+        if pending_requests:
+            notes += f" agent_driven_requests={len(pending_requests)}"
+
+        key_insight = f"Daily reflection: {len(patterns_detected)} patterns detected"
+        if agent_reasons:
+            joined = "; ".join(agent_reasons[:3])
+            key_insight = f"{key_insight}. Agent asked to look at: {joined}"
 
         event = ReflectionEvent(
             reflection_level=ReflectionLevel.DAILY,
@@ -371,7 +437,7 @@ class DailyReflectionService:
             reframing_experience_not_found_count=reframing_nf,
             reframing_append_storage_rejected_count=reframing_sr,
             reframing_duplicate_triggered_by_count=reframing_dup,
-            key_insight=f"Daily reflection: {len(patterns_detected)} patterns detected",
+            key_insight=key_insight,
             notes=notes,
             reflection_run_key=run_key,
             identity_snapshot_id=anchor_snapshot_id,
@@ -388,10 +454,22 @@ class DailyReflectionService:
             )
             raise
         got = self.event_store.get_by_reflection_run_key(run_key)
-        return got if got is not None else event
+        persisted = got if got is not None else event
+        _mark_requests_consumed(
+            self._reflection_request_queue,
+            pending_requests,
+            persisted,
+            self._clock.now(),
+        )
+        return persisted
 
     def _detect_patterns(
-        self, experiences: list[SessionExperience], identity: Identity, run_key: str
+        self,
+        experiences: list[SessionExperience],
+        identity: Identity,
+        run_key: str,
+        *,
+        agent_reasons: list[str] | None = None,
     ) -> list[PatternCandidate]:
         """Detect patterns across experiences."""
         if len(experiences) < 2:
@@ -401,6 +479,10 @@ class DailyReflectionService:
             "identity_values": ", ".join(v.name for v in identity.core_values),
             "known_habits": ", ".join(h.statement for h in identity.habits),
         }
+        if agent_reasons:
+            # Pre-pend agent-driven reasons so the LLM sees them as priority
+            # framing for this run.
+            context["agent_requested_focus"] = " | ".join(agent_reasons)
 
         detection = self.reflection_model.detect_pattern(experiences=experiences, context=context)
         pattern_description = detection.description.strip()
@@ -540,6 +622,7 @@ class DeepReflectionService:
         *,
         clock: ClockPort | None = None,
         reflection_event_observer: ReflectionEventPersistenceObserver | None = None,
+        reflection_request_queue: ReflectionRequestQueue | None = None,
     ):
         """Initialize deep reflection service."""
         self.session_repo = session_repo
@@ -553,6 +636,7 @@ class DeepReflectionService:
         self._reflection_event_observer = (
             reflection_event_observer or NoOpReflectionEventPersistenceObserver()
         )
+        self._reflection_request_queue = reflection_request_queue
 
     def reflect(self, since: datetime, until: datetime) -> ReflectionEvent:
         """
@@ -575,18 +659,37 @@ class DeepReflectionService:
                 continue
             experiences.append(build_session_experience(s, moments))
 
+        pending_requests = _take_pending_requests(
+            self._reflection_request_queue, ReflectionRequestLevel.DEEP
+        )
+
         if not experiences:
-            return self._create_empty_event(since_utc, until_utc)
+            event = self._create_empty_event(since_utc, until_utc)
+            _mark_requests_consumed(
+                self._reflection_request_queue,
+                pending_requests,
+                event,
+                self._clock.now(),
+            )
+            return event
 
         identity = self.identity_repo.get_current()
         if not identity:
-            return self._create_skipped_deep_no_identity(
+            event = self._create_skipped_deep_no_identity(
                 since_utc, until_utc, [exp.id for exp in experiences]
             )
+            _mark_requests_consumed(
+                self._reflection_request_queue,
+                pending_requests,
+                event,
+                self._clock.now(),
+            )
+            return event
 
         run_key = deep_reflection_run_key_for_identity(since_utc, until_utc, identity.id)
         existing = self.event_store.get_by_reflection_run_key(run_key)
         if existing is not None and _deep_run_terminal_success(existing.notes or ""):
+            # Replay path — don't drain the queue again.
             return existing
 
         anchor_snapshot_id = _reflection_identity_anchor_snapshot_id(
@@ -595,7 +698,10 @@ class DeepReflectionService:
 
         health_assessment = self._perform_health_assessment(identity, experiences, run_key)
 
-        patterns_detected = self._detect_deep_patterns(experiences, identity, run_key)
+        agent_reasons = [r.reason for r in pending_requests]
+        patterns_detected = self._detect_deep_patterns(
+            experiences, identity, run_key, agent_reasons=agent_reasons
+        )
         reframing_count, reframing_nf, reframing_sr, reframing_dup = self._add_strategic_reframing(
             experiences, patterns_detected, run_key
         )
@@ -616,6 +722,16 @@ class DeepReflectionService:
             )
         if reframing_dup:
             notes += f" reframing_duplicate_triggered_by={reframing_dup}"
+        if pending_requests:
+            notes += f" agent_driven_requests={len(pending_requests)}"
+
+        key_insight = (
+            f"Deep reflection: {len(patterns_detected)} patterns, "
+            f"health score {health_assessment.overall_score:.2f}"
+        )
+        if agent_reasons:
+            joined = "; ".join(agent_reasons[:3])
+            key_insight = f"{key_insight}. Agent asked to look at: {joined}"
 
         event = ReflectionEvent(
             reflection_level=ReflectionLevel.DEEP,
@@ -628,10 +744,7 @@ class DeepReflectionService:
             narrative_changes_proposed=narrative_changes,
             identity_changes_proposed=identity_changes,
             health_assessment_id=health_assessment.id,
-            key_insight=(
-                f"Deep reflection: {len(patterns_detected)} patterns, "
-                f"health score {health_assessment.overall_score:.2f}"
-            ),
+            key_insight=key_insight,
             notes=notes,
             reflection_run_key=run_key,
             identity_snapshot_id=anchor_snapshot_id,
@@ -673,7 +786,14 @@ class DeepReflectionService:
                 self.event_store.save(failed)
             raise
         got = self.event_store.get_by_reflection_run_key(run_key)
-        return got if got is not None else event
+        persisted = got if got is not None else event
+        _mark_requests_consumed(
+            self._reflection_request_queue,
+            pending_requests,
+            persisted,
+            self._clock.now(),
+        )
+        return persisted
 
     def _perform_health_assessment(
         self, identity: Identity, experiences: list[SessionExperience], run_key: str
@@ -705,7 +825,12 @@ class DeepReflectionService:
         )
 
     def _detect_deep_patterns(
-        self, experiences: list[SessionExperience], identity: Identity, run_key: str
+        self,
+        experiences: list[SessionExperience],
+        identity: Identity,
+        run_key: str,
+        *,
+        agent_reasons: list[str] | None = None,
     ) -> list[PatternCandidate]:
         """Detect patterns across extended period."""
         if len(experiences) < 3:
@@ -718,6 +843,8 @@ class DeepReflectionService:
                 "identity_values": ", ".join(v.name for v in identity.core_values),
                 "pattern_type": pattern_type.value,
             }
+            if agent_reasons:
+                context["agent_requested_focus"] = " | ".join(agent_reasons)
 
             detection = self.reflection_model.detect_pattern(
                 experiences=experiences, context=context

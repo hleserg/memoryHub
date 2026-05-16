@@ -8,7 +8,8 @@
 > R14 (удалён `ExperienceViewRepository` compat-адаптер — все три сервиса
 > Micro/Daily/Deep теперь работают через `SessionRepository`),
 > R11.5 (self-apply), R13 (overload monitor),
-> R5 (`StructuredMarkersAggregator` — daily patterns из `structured_markers`).
+> R5 (`StructuredMarkersAggregator` — daily patterns из `structured_markers`),
+> R12 (agent-driven `request_reflection` тул + drain очереди в Daily/Deep).
 >
 > Этот документ — единое место, куда собраны все изменения Reflection Engine,
 > которые понадобятся **после** того как память переедет на новую архитектуру
@@ -334,7 +335,7 @@ Reflection использует отдельную LLM (`gemma3:27b-it-qat` че
 | R9 | `EntityRelationsFormulator` (для deep reflection) | новый компонент | TODO |
 | R10 | Merge handler (для deep reflection) | новый компонент | TODO |
 | R11 | Identity-level выводы из новых сигналов | расширение существующих сервисов | частично (R11.5 self-apply ✅ в #559) |
-| R12 | Тулы `request_reflection` для agent-driven | `adapters/agent/tools/` | TODO |
+| R12 | Тулы `request_reflection` для agent-driven | `adapters/agent/tools.py`; `DailyReflectionService` / `DeepReflectionService` дрейнят очередь | ✅ done |
 | R13 | `reflection_overload` мониторинг | новый компонент | ✅ done (PR #559) |
 | R14 | Удаление `ExperienceViewRepository` compat-адаптера | удалён `src/atman/adapters/reflection_compat/` | ✅ done |
 | R15 | Переименование `reflections.experience_refs` → `session_refs` (если решено) | новая миграция | TODO |
