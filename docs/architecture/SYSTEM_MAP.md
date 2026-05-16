@@ -35,7 +35,8 @@ All paths are absolute relative to the repository root.
 
 | File | Purpose | Contracts |
 |------|---------|-----------|
-| `core/ports/memory_backend.py` | Factual memory interface | `FactualMemory` (ABC) |
+| `core/ports/memory_backend.py` | Factual memory interface; **v2**: `add_fact_with_entities` + `find_facts_by_entity` for entity-link tables | `FactualMemory` (ABC) |
+| `core/ports/entity_relations.py` | Binary relation extraction (mREBEL / rules) | `EntityRelationExtractor` (ABC), `ExtractedRelation` |
 | `core/ports/clock.py` | Domain clock for reproducibility | `ClockPort` (Protocol) |
 | `core/ports/state_store.py` | Storage for experience/identity/narrative/eigenstate/key moments; **v2**: extended with sessions API (`create_session`, `get_session`, `update_session`, `list_recent_sessions`) and standalone KeyMoment API (`store_key_moment` idempotent upsert, `mark_moment_accessed`, `update_moment_structured_markers`, `find_moments_by_entity`) | `StateStore` (with `create_key_moment`, `store_key_moment`, `list_key_moments`, `get_key_moment`, `mark_moment_accessed`, `update_moment_structured_markers`, `find_moments_by_entity`, `create_session`, `get_session`, `update_session`, `list_recent_sessions`), `ExperienceQuery`, `SessionExperienceQuery`, `ValuesTouchedQuery`, `DepthQuery`, `DateRangeQuery`, `FactRefsContainsQuery` |
 | `core/ports/entity_registry.py` | Entity Registry — resolve-or-create pattern with L1/L2/L3 tiers (alias exact → cosine similarity → new entity) | `EntityRegistry` (ABC): `resolve_or_create`, `get_entity`, `find_by_name`, `add_alias`, `merge_entities`, `update_last_seen`, `list_entities`, `flag_disambiguation` |
@@ -59,7 +60,7 @@ All paths are absolute relative to the repository root.
 | `core/services/identity_service.py` | Identity lifecycle: bootstrap, update, snapshot | `IdentityService` |
 | `core/services/narrative_service.py` | Narrative document: create, update, archive, validate | `NarrativeService` |
 | `core/services/narrative_revision.py` | Narrative updates during reflection with concurrency control | `NarrativeRevisionService` |
-| `core/services/session_manager.py` | Session runtime: start, `record_event` (optional async **AffectDetector** hook + **value refusal auto-recording**), `append_key_moment` / `append_key_moment_input`, finish with eigenstate (thread-safe registry, optional `max_active_sessions`, optional `affect_workspace` + `AffectDetectorConfig`, **optional `workspace` for JSONL session journals, inter-process journal locks, and orphan recovery**, **silent refusal detection via `RefusalDetectorConfig`**) | `SessionManager`, `MAX_EIGENSTATE_ITEMS`; session errors live in `core/exceptions.py` |
+| `core/services/session_manager.py` | Session runtime: start, `record_event` (optional async **AffectDetector** hook + **value refusal auto-recording**), `append_key_moment` / `append_key_moment_input`, finish with eigenstate (thread-safe registry, optional `max_active_sessions`, optional `affect_workspace` + `AffectDetectorConfig`, **optional `workspace` for JSONL session journals, inter-process journal locks, and orphan recovery**, **silent refusal detection via `RefusalDetectorConfig`**); **v2**: persists `Session` row via `state_store.create_session` at start and `update_session` at finish (best-effort, debug fallback for legacy stores) | `SessionManager`, `MAX_EIGENSTATE_ITEMS`; session errors live in `core/exceptions.py` |
 | `core/services/reflection_service.py` | Three reflection levels: micro, daily, deep | `MicroReflectionService`, `DailyReflectionService`, `DeepReflectionService` |
 | `core/services/principle_advisor.py` | Distinguish habit vs principle; advise on principle revision | `PrincipleRevisionAdvisor` |
 | `core/services/conflict_detector.py` (E24.5) | Detect contradictions between active facts; produces small cognitive tension signals | `ConflictDetector`, `FactConflict` |
@@ -69,6 +70,7 @@ All paths are absolute relative to the repository root.
 | `core/services/divergence_detector.py` | Rules-based divergence detection between agent thinking and message layers | `DivergenceDetector` |
 | `core/services/salience_decay_service.py` | Exponential salience decay with λ parameterised by `EmotionalDepth`; `InMemorySalienceDecayService` for unit tests | `InMemorySalienceDecayService` |
 | `core/services/maintenance_worker.py` | Claim and dispatch maintenance jobs (salience decay, memory guardian scan) from `MaintenanceQueue` | `MaintenanceWorker` |
+| `core/services/post_write_scheduler.py` | Fire-and-forget enqueue of enrichment jobs (mREBEL, lingvo) keyed by `(job_name, key_moment_id)`; sync + asyncio-task variants | `PostWriteScheduler` |
 | `core/services/session_working_memory.py` (E24.9) | In-session LRU cache of surfaced facts/experiences to avoid duplicate surfacing | `SessionWorkingMemory`, `CachedItem` |
 
 ### 1.4a. Affect detector (`src/atman/affect/`, E21)
@@ -110,11 +112,17 @@ All paths are absolute relative to the repository root.
 | `adapters/storage/in_memory_state_store.py` (`InMemoryStateStore`) | `StateStore` | full in-memory implementation with deep copies; **v2**: sessions dict + standalone key_moments + `store_key_moment` (idempotent upsert), `mark_moment_accessed`, `update_moment_structured_markers`, `create_session`/`get_session`/`update_session`/`list_recent_sessions` |
 | `adapters/storage/file_state_store.py` (`FileStateStore`) | `StateStore` | JSON files (experience + identity + narrative + eigenstate) + `key_moments.jsonl`; **v2**: `list_key_moments(session_id)` filtering support |
 | `adapters/memory/in_memory_entity_registry.py` (`InMemoryEntityRegistry`) | `EntityRegistry` | L1 (alias exact, case-insensitive) + L2 (pure-Python cosine ≥ 0.85) + L3 (create new); thread-safe with Lock; `clear()`/`count()` test helpers |
+| `adapters/memory/postgres_entity_registry.py` (`PostgresEntityRegistry`) | `EntityRegistry` | Same L1/L2/L3 over `agent_N.entities` + `agent_N.entity_aliases`; `halfvec` cosine for L2; psycopg3 guarded import |
 | `adapters/memory/in_memory_entity_stance.py` (`InMemoryEntityStanceStore`) | `EntityStanceStore` | supersession chain; thread-safe |
+| `adapters/memory/postgres_entity_stance.py` (`PostgresEntityStanceStore`) | `EntityStanceStore` | supersession chain in `agent_N.entity_stance`; serial_id resolution per agent; psycopg3 |
+| `adapters/memory/in_memory_memory_guardian.py` (`InMemoryMemoryGuardian`) | `MemoryGuardian` | scan_orphan_entities + scan_merge_candidates + scan_stale_moments + scan_embedding_gaps + finding lifecycle (write/get_unresolved/resolve) |
 | `adapters/memory/noop_reranker.py` (`NoOpReranker`) | `MemoryReranker` | passthrough — returns candidates sorted by existing score; deploy without reranker model |
+| `adapters/memory/bge_reranker.py` (`BgeReranker`) | `MemoryReranker` | `BAAI/bge-reranker-v2-m3` via FlagEmbedding; lazy load; guarded imports; transparent fallback to original score order on inference failure |
 | `adapters/linguistic/noop_adapter.py` (`NoOpLinguisticAnalyzer`) | `LinguisticAnalyzer` | returns empty-but-valid analysis objects; default when `LINGUISTIC_ENABLED=false` |
 | `adapters/linguistic/gliner_minilm_adapter.py` (`GLiNERPlusMiniLMAdapter`) | `LinguisticAnalyzer` | GLiNER (`urchade/gliner_multi-v2.1`) + MiniLM NLI (`MoritzLaurer/multilingual-MiniLMv2-L6-mnli-xnli`); lazy model load; guarded imports; Russian divergence heuristics; requires `pip install -e ".[linguistic]"` |
 | `adapters/maintenance/in_memory_queue.py` (`InMemoryMaintenanceQueue`) | `MaintenanceQueue` | run_key idempotency; atomic `claim_batch`; all status transitions |
+| `adapters/maintenance/postgres_queue.py` (`PostgresMaintenanceQueue`) | `MaintenanceQueue` | SKIP LOCKED `claim_batch` via CTE on `public.maintenance_jobs`; run_key idempotency; psycopg3 |
+| `adapters/linguistic/mrebel_adapter.py` (`MRebelRelationAdapter`) | `EntityRelationExtractor` | `Babelscape/mrebel-large` via transformers `text2text-generation`; lazy load; REBEL triplet parser; guarded imports |
 | `adapters/reflection_compat/experience_view_repository.py` (`ExperienceViewRepository`) | `ExperienceRepository` (Reflection compat) | maps `experience_id ≡ session_id`; builds virtual `SessionExperience` from `Session` + `list[KeyMoment]`; Reflection Engine unchanged via this adapter |
 | `adapters/storage/in_memory_reflection_store.py` | `PatternStore`, `ReflectionEventStore`, `HealthAssessmentStore` | reflection output stores |
 || **`adapters/state/postgres_state_store.py`** (`PostgresStateStore`) | **`StateStore`** | **PostgreSQL implementation** (KeyMoment operations only, psycopg3; other StateStore methods raise `NotImplementedError`) |
@@ -234,7 +242,12 @@ Connections between two or more parts. These are seams that may break independen
 | `InMemoryEntityStanceStore` | `EntityStanceStore` |
 | `NoOpLinguisticAnalyzer`, `GLiNERPlusMiniLMAdapter` | `LinguisticAnalyzer` |
 | `NoOpReranker` | `MemoryReranker` |
-| `InMemoryMaintenanceQueue` | `MaintenanceQueue` |
+| `InMemoryMaintenanceQueue`, `PostgresMaintenanceQueue` | `MaintenanceQueue` |
+| `InMemoryEntityRegistry`, `PostgresEntityRegistry` | `EntityRegistry` |
+| `InMemoryEntityStanceStore`, `PostgresEntityStanceStore` | `EntityStanceStore` |
+| `InMemoryMemoryGuardian` | `MemoryGuardian` |
+| `NoOpReranker`, `BgeReranker` | `MemoryReranker` |
+| `MRebelRelationAdapter` | `EntityRelationExtractor` |
 | `ExperienceViewRepository` (`adapters/reflection_compat/`) | `ExperienceRepository` (Reflection compat bridge) |
 
 ### 2.2a. Agent adapter ↔ services

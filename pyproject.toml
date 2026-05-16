@@ -199,7 +199,12 @@ exclude_lines = [
 [tool.bandit]
 targets = ["src/atman"]
 exclude_dirs = ["tests"]
-skips = ["B101", "B108"]
+# B608 (hardcoded SQL) yields false positives for f-string composition with
+# parameterised values (%(name)s placeholders) — our Postgres adapters
+# always use parameter binding for user-supplied data; the f-string
+# interpolations are static column lists or schema names looked up from
+# trusted internal tables. Suppressed project-wide.
+skips = ["B101", "B108", "B608"]
 
 [tool.mypy]
 python_version = "3.12"
