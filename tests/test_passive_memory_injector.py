@@ -467,7 +467,9 @@ def test_surface_for_context_recalls_semantic_match_without_substring():
     can rank by semantic similarity.
     """
     backend = InMemoryBackend()
-    target = backend.add_fact(FactRecord(content="агент заметил тревогу и подавленность", source="t"))
+    target = backend.add_fact(
+        FactRecord(content="агент заметил тревогу и подавленность", source="t")
+    )
     backend.add_fact(FactRecord(content="разговор о погоде", source="t"))
     backend.add_fact(FactRecord(content="обсуждение технических проблем", source="t"))
 
@@ -499,9 +501,7 @@ def test_surface_for_context_respects_candidate_pool_size():
     for i in range(60):
         backend.add_fact(FactRecord(content=f"noise fact {i}", source="t", salience=0.1))
     # The high-salience target lands in the pool because backend sorts by salience
-    target = backend.add_fact(
-        FactRecord(content="important target fact", source="t", salience=0.9)
-    )
+    target = backend.add_fact(FactRecord(content="important target fact", source="t", salience=0.9))
 
     embed = _StaticEmbedding()
     embed.add("target", [1.0, 0.0, 0.0, 0.0])
@@ -572,7 +572,6 @@ def test_surface_for_context_applies_reranker_in_ambient_mode():
     reranker reorders the top candidates and the final_score reaches the
     SurfacedMemory output."""
     from atman.core.ports.memory_reranker import MemoryReranker
-    from atman.core.ports.memory_reranker import SurfacedMemory as RankedMemory
 
     backend = InMemoryBackend()
     a = backend.add_fact(FactRecord(content="alpha doc body", source="t"))
@@ -619,7 +618,7 @@ def test_surface_for_context_associative_score_is_embedding_based():
     semantically strong direct match in downstream sorts."""
     backend = InMemoryBackend()
     weak_target = backend.add_fact(FactRecord(content="weakly related target", source="t"))
-    seed = backend.add_fact(
+    backend.add_fact(
         FactRecord(
             content="seed body content",
             source="t",
