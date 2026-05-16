@@ -9,7 +9,8 @@
 > Micro/Daily/Deep теперь работают через `SessionRepository`),
 > R11.5 (self-apply), R13 (overload monitor),
 > R5 (`StructuredMarkersAggregator` — daily patterns из `structured_markers`),
-> R12 (agent-driven `request_reflection` тул + drain очереди в Daily/Deep).
+> R12 (agent-driven `request_reflection` тул + drain очереди в Daily/Deep),
+> R6 (`DivergenceAggregator` + `DivergenceEventStore` порт), R8 (`FindingsTriage`).
 >
 > Этот документ — единое место, куда собраны все изменения Reflection Engine,
 > которые понадобятся **после** того как память переедет на новую архитектуру
@@ -329,9 +330,9 @@ Reflection использует отдельную LLM (`gemma3:27b-it-qat` че
 | R4 | Переезд `DeepReflectionService` на `SessionRepository` | `core/services/reflection_service.py` | ✅ done (PR #569) |
 | R-Micro | Переезд `MicroReflectionService` на `SessionRepository` | `core/services/reflection_service.py` | ✅ done |
 | R5 | `StructuredMarkersAggregator` → паттерны из markers | `core/services/structured_markers_aggregator.py` | ✅ done |
-| R6 | `DivergenceAggregator` → паттерны из divergence_events | новый компонент | TODO |
+| R6 | `DivergenceAggregator` → паттерны из divergence_events | `core/services/divergence_aggregator.py` + порт `DivergenceEventStore` + in-memory адаптер | ✅ done |
 | R7 | `EntityStanceFormulator` + промт | `core/services/entity_stance_formulator.py`, `adapters/reflection/prompts.py` | TODO |
-| R8 | `FindingsTriage` | `core/services/findings_triage.py` | TODO |
+| R8 | `FindingsTriage` | `core/services/findings_triage.py` | ✅ done |
 | R9 | `EntityRelationsFormulator` (для deep reflection) | новый компонент | TODO |
 | R10 | Merge handler (для deep reflection) | новый компонент | TODO |
 | R11 | Identity-level выводы из новых сигналов | расширение существующих сервисов | частично (R11.5 self-apply ✅ в #559) |

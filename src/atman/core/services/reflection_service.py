@@ -54,6 +54,8 @@ from atman.core.reflection_run_keys import (
     identity_anchor_snapshot_id_for_run_key,
     reframing_trigger_key,
 )
+from atman.core.services.divergence_aggregator import DivergenceAggregator
+from atman.core.services.findings_triage import FindingsTriage
 from atman.core.services.narrative_revision import NarrativeRevisionService
 from atman.core.services.session_experience_view import build_session_experience
 from atman.core.services.structured_markers_aggregator import StructuredMarkersAggregator
@@ -320,8 +322,18 @@ class DailyReflectionService:
         reflection_event_observer: ReflectionEventPersistenceObserver | None = None,
         structured_markers_aggregator: StructuredMarkersAggregator | None = None,
         reflection_request_queue: ReflectionRequestQueue | None = None,
+        divergence_aggregator: DivergenceAggregator | None = None,
+        findings_triage: FindingsTriage | None = None,
+        agent_id: UUID | None = None,
     ):
-        """Initialize daily reflection service."""
+        """Initialize daily reflection service.
+
+        Optional R6/R8 hooks: ``divergence_aggregator`` summarises
+        ``divergence_events`` (recurring types → behaviour patterns;
+        ``rupture`` severity → key_insight observations); ``findings_triage``
+        resolves level-B ``validation_findings`` by policy. Both require
+        ``agent_id`` to scope the query.
+        """
         self.session_repo = session_repo
         self.identity_repo = identity_repo
         self.pattern_store = pattern_store
@@ -335,6 +347,9 @@ class DailyReflectionService:
             structured_markers_aggregator or StructuredMarkersAggregator(pattern_store)
         )
         self._reflection_request_queue = reflection_request_queue
+        self._divergence_aggregator = divergence_aggregator
+        self._findings_triage = findings_triage
+        self._agent_id = agent_id
 
     def reflect(self, date: datetime) -> ReflectionEvent:
         """
@@ -413,6 +428,13 @@ class DailyReflectionService:
         marker_patterns = self._structured_markers_aggregator.analyze(all_moments, run_key=run_key)
         patterns_detected.extend(marker_patterns)
 
+        # R6: aggregate divergence_events for the day (optional hook).
+        divergence_patterns, rupture_observations = self._aggregate_divergences(start, end, run_key)
+        patterns_detected.extend(divergence_patterns)
+
+        # R8: triage level-B validation_findings (optional hook).
+        triage_outcome = self._triage_findings()
+
         notes = "outcome=daily_ok"
         if reframing_nf or reframing_sr:
             notes += (
@@ -423,11 +445,24 @@ class DailyReflectionService:
             notes += f" reframing_duplicate_triggered_by={reframing_dup}"
         if pending_requests:
             notes += f" agent_driven_requests={len(pending_requests)}"
+        if divergence_patterns:
+            notes += f" divergence_patterns={len(divergence_patterns)}"
+        if rupture_observations:
+            notes += f" divergence_ruptures={len(rupture_observations)}"
+        if triage_outcome is not None:
+            notes += (
+                f" findings_triage_resolved={triage_outcome.resolved_count}"
+                f" findings_triage_attention={triage_outcome.requires_attention_count}"
+            )
 
-        key_insight = f"Daily reflection: {len(patterns_detected)} patterns detected"
+        key_insight_parts = [f"Daily reflection: {len(patterns_detected)} patterns detected"]
         if agent_reasons:
             joined = "; ".join(agent_reasons[:3])
-            key_insight = f"{key_insight}. Agent asked to look at: {joined}"
+            key_insight_parts.append(f"Agent asked to look at: {joined}")
+        if rupture_observations:
+            joined = "; ".join(rupture_observations[:3])
+            key_insight_parts.append(f"Ruptures observed: {joined}")
+        key_insight = ". ".join(key_insight_parts)
 
         event = ReflectionEvent(
             reflection_level=ReflectionLevel.DAILY,
@@ -462,6 +497,22 @@ class DailyReflectionService:
             self._clock.now(),
         )
         return persisted
+
+    def _aggregate_divergences(
+        self, start: datetime, end: datetime, run_key: str
+    ) -> tuple[list[PatternCandidate], list[str]]:
+        """R6 hook. Returns (patterns, rupture_observations); silent if not configured."""
+        if self._divergence_aggregator is None or self._agent_id is None:
+            return ([], [])
+        return self._divergence_aggregator.analyze(
+            agent_id=self._agent_id, start=start, end=end, run_key=run_key
+        )
+
+    def _triage_findings(self):
+        """R8 hook. Returns TriageOutcome or None when no triage is wired."""
+        if self._findings_triage is None or self._agent_id is None:
+            return None
+        return self._findings_triage.run(self._agent_id)
 
     def _detect_patterns(
         self,

@@ -20,6 +20,10 @@ class FindingType(StrEnum):
     stale_moment = "stale_moment"
     quality_metric = "quality_metric"
     embedding_missing = "embedding_missing"
+    # Async pipeline signals surfaced as findings for Reflection triage (R8).
+    pending_structured_markers = "pending_structured_markers"
+    analysis_failed = "analysis_failed"
+    affect_detector_silent = "affect_detector_silent"
     other = "other"
 
 
@@ -27,6 +31,9 @@ class ResolutionStatus(StrEnum):
     fixed = "fixed"
     ignored = "ignored"
     escalated = "escalated"
+    # R8/§10: Reflection cannot self-heal critical pipeline failures; it
+    # records that human/operator attention is needed.
+    requires_attention = "requires_attention"
 
 
 class ValidationFinding(BaseModel):

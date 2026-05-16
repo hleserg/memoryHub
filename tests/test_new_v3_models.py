@@ -546,15 +546,21 @@ def test_finding_type_values():
     assert FindingType.stale_moment == "stale_moment"
     assert FindingType.quality_metric == "quality_metric"
     assert FindingType.embedding_missing == "embedding_missing"
+    # R8 — async pipeline signals surfaced for Reflection triage.
+    assert FindingType.pending_structured_markers == "pending_structured_markers"
+    assert FindingType.analysis_failed == "analysis_failed"
+    assert FindingType.affect_detector_silent == "affect_detector_silent"
     assert FindingType.other == "other"
-    assert len(list(FindingType)) == 6
+    assert len(list(FindingType)) == 9
 
 
 def test_resolution_status_values():
     assert ResolutionStatus.fixed == "fixed"
     assert ResolutionStatus.ignored == "ignored"
     assert ResolutionStatus.escalated == "escalated"
-    assert len(list(ResolutionStatus)) == 3
+    # R8 — outcome for findings Reflection cannot self-heal.
+    assert ResolutionStatus.requires_attention == "requires_attention"
+    assert len(list(ResolutionStatus)) == 4
 
 
 def test_divergence_type_values():
