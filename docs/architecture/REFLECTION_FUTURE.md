@@ -1,17 +1,20 @@
 # Reflection Engine — будущие изменения
 
-> **Статус:** roadmap. Ничего из этого документа не реализовано.
+> **Статус:** частично реализовано. См. таблицу этапов §11 — этап R1
+> (новый порт `SessionRepository` + адаптер) и переписанный
+> `PostgresStateStore` v2 уже в main; остальные этапы R2–R15 — TODO.
 >
 > Этот документ — единое место, куда собраны все изменения Reflection Engine,
 > которые понадобятся **после** того как память переедет на новую архитектуру
 > (Entity Registry, standalone key_moments с `session_id`, `structured_markers`,
 > `entity_stance`, `validation_findings`, `entity_relations`, salience decay).
 >
-> Сейчас (в рамках основной итерации памяти) Reflection-логика **не меняется** —
-> мы держим её рабочей через compat-адаптер `ExperienceViewRepository`, который
-> собирает виртуальный `SessionExperience` из новых `sessions + key_moments`.
-> Этот документ описывает, что нужно будет сделать **после** того как память
-> уляжется и стабилизируется.
+> Сейчас (на момент merge R1) Reflection-логика **ещё не переехала** — три
+> сервиса (Micro/Daily/Deep) всё ещё принимают `ExperienceRepository` и
+> работают через compat-адаптер `ExperienceViewRepository`. Новый порт
+> `SessionRepository` + `StateStoreSessionRepository` адаптер уже доступны
+> и протестированы — следующий PR (R3+R4) переключит сервисы на них и
+> удалит `ExperienceViewRepository` (R14).
 
 ---
 
@@ -315,23 +318,24 @@ Reflection использует отдельную LLM (`gemma3:27b-it-qat` че
 
 После того как основная итерация памяти стабилизирована (этапы 0-17 из основного плана):
 
-| # | Этап | Файлы |
-|---|---|---|
-| R1 | Новый порт `SessionRepository` + Postgres-адаптер | `core/ports/session_repository.py`, `adapters/state/postgres_session_repository.py` |
-| R2 | Миграция `reframing_notes.experience_id → session_id` + DROP старого FK | новая миграция |
-| R3 | Переезд `DailyReflectionService` на `SessionRepository` | `core/services/reflection_service.py` |
-| R4 | Переезд `DeepReflectionService` на `SessionRepository` | там же |
-| R5 | `StructuredMarkersAggregator` → паттерны из markers | новый компонент |
-| R6 | `DivergenceAggregator` → паттерны из divergence_events | новый компонент |
-| R7 | `EntityStanceFormulator` + промт | `core/services/entity_stance_formulator.py`, `adapters/reflection/prompts.py` |
-| R8 | `FindingsTriage` | `core/services/findings_triage.py` |
-| R9 | `EntityRelationsFormulator` (для deep reflection) | новый компонент |
-| R10 | Merge handler (для deep reflection) | новый компонент |
-| R11 | Identity-level выводы из новых сигналов | расширение существующих сервисов |
-| R12 | Тулы `request_reflection` для agent-driven | `adapters/agent/tools/` |
-| R13 | `reflection_overload` мониторинг | новый компонент |
-| R14 | Удаление `ExperienceViewRepository` compat-адаптера | удаление файла |
-| R15 | Переименование `reflections.experience_refs` → `session_refs` (если решено) | новая миграция |
+| # | Этап | Файлы | Статус |
+|---|---|---|---|
+| R1 | Новый порт `SessionRepository` + адаптер над StateStore | `core/ports/session_repository.py`, `adapters/reflection/state_store_session_repository.py` | ✅ done |
+| R1.1 | Переписать `PostgresStateStore` на v2 (per-agent schemas + Session API) | `adapters/state/postgres_state_store.py` | ✅ done |
+| R2 | Миграция `reframing_notes.experience_id → session_id` + DROP старого FK | новая миграция | TODO |
+| R3 | Переезд `DailyReflectionService` на `SessionRepository` | `core/services/reflection_service.py` | TODO |
+| R4 | Переезд `DeepReflectionService` на `SessionRepository` | там же | TODO |
+| R5 | `StructuredMarkersAggregator` → паттерны из markers | новый компонент | TODO |
+| R6 | `DivergenceAggregator` → паттерны из divergence_events | новый компонент | TODO |
+| R7 | `EntityStanceFormulator` + промт | `core/services/entity_stance_formulator.py`, `adapters/reflection/prompts.py` | TODO |
+| R8 | `FindingsTriage` | `core/services/findings_triage.py` | TODO |
+| R9 | `EntityRelationsFormulator` (для deep reflection) | новый компонент | TODO |
+| R10 | Merge handler (для deep reflection) | новый компонент | TODO |
+| R11 | Identity-level выводы из новых сигналов | расширение существующих сервисов | частично (R11.5 self-apply ✅ в #559) |
+| R12 | Тулы `request_reflection` для agent-driven | `adapters/agent/tools/` | TODO |
+| R13 | `reflection_overload` мониторинг | новый компонент | ✅ done (PR #559) |
+| R14 | Удаление `ExperienceViewRepository` compat-адаптера | удаление файла | TODO (после R3+R4) |
+| R15 | Переименование `reflections.experience_refs` → `session_refs` (если решено) | новая миграция | TODO |
 
 Эти этапы можно делать параллельно с поздними этапами основного плана, если основные миграции памяти уже на проде стабилизировались.
 
