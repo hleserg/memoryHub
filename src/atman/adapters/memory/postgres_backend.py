@@ -584,8 +584,10 @@ class PostgresFactualMemory(FactualMemory):
         with conn.cursor() as cur:
             self._insert_fact_rows(cur, record, agent_id)
             for entity_id, role in entities:
+                # `schema` is `agent_<int>` derived from public.agents row;
+                # all user-supplied data bound via %s params.
                 cur.execute(
-                    f"INSERT INTO {schema}.fact_entities "  # type: ignore[arg-type]
+                    f"INSERT INTO {schema}.fact_entities "  # type: ignore[arg-type] # nosec B608
                     "(fact_id, entity_id, agent_id, role) "
                     "VALUES (%s, %s, %s, %s) "
                     "ON CONFLICT (fact_id, entity_id, role) DO NOTHING",
@@ -629,8 +631,11 @@ class PostgresFactualMemory(FactualMemory):
         params.append(limit)
 
         with conn.cursor() as cur:
+            # `schema` is `agent_<int>` from public.agents lookup, `role_clause`
+            # is one of two static strings; entity_id / roles / limit bound
+            # via %s params.
             fact_ids_sql = (
-                f"SELECT fe.fact_id FROM {schema}.fact_entities fe "
+                f"SELECT fe.fact_id FROM {schema}.fact_entities fe "  # nosec B608
                 f"WHERE fe.entity_id = %s {role_clause} LIMIT %s"
             )
             cur.execute(fact_ids_sql, params)  # type: ignore[arg-type]

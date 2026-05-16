@@ -77,6 +77,53 @@ _JOB_COLUMNS = (
     "scheduled_at, started_at, finished_at, error, result"
 )
 
+# Pre-composed SQL templates — built once at module load with the static
+# _JOB_COLUMNS interpolated. All user-supplied data is bound via %(name)s
+# parameters, so these strings are safe to pass to cursor.execute() directly
+# without bandit B608 flagging f-string composition at the call site.
+_SQL_SELECT_BY_RUN_KEY = f"""
+    SELECT {_JOB_COLUMNS}
+    FROM public.maintenance_jobs
+    WHERE run_key = %(run_key)s
+      AND status IN ('pending', 'running')
+    LIMIT 1
+"""  # nosec B608
+
+_SQL_INSERT_JOB = f"""
+    INSERT INTO public.maintenance_jobs
+        (job_name, agent_id, payload, run_key, scheduled_at)
+    VALUES
+        (%(job_name)s, %(agent_id)s, %(payload)s, %(run_key)s,
+         COALESCE(%(scheduled_at)s, NOW()))
+    RETURNING {_JOB_COLUMNS}
+"""  # nosec B608
+
+_SQL_CLAIM_BATCH = f"""
+    WITH next_jobs AS (
+        SELECT id
+        FROM public.maintenance_jobs
+        WHERE status = 'pending'
+          AND (%(job_name)s::text IS NULL OR job_name = %(job_name)s)
+        ORDER BY scheduled_at
+        LIMIT %(batch_size)s
+        FOR UPDATE SKIP LOCKED
+    )
+    UPDATE public.maintenance_jobs
+    SET status = 'running',
+        started_at = NOW()
+    WHERE id IN (SELECT id FROM next_jobs)
+    RETURNING {_JOB_COLUMNS}
+"""  # nosec B608
+
+_SQL_LIST_JOBS = f"""
+    SELECT {_JOB_COLUMNS}
+    FROM public.maintenance_jobs
+    WHERE (%(status)s::text IS NULL OR status = %(status)s)
+      AND (%(agent_id)s::uuid IS NULL OR agent_id = %(agent_id)s)
+    ORDER BY scheduled_at DESC
+    LIMIT %(limit)s
+"""  # nosec B608
+
 
 class PostgresMaintenanceQueue(MaintenanceQueue):
     """
@@ -151,29 +198,13 @@ class PostgresMaintenanceQueue(MaintenanceQueue):
         conn = self._get_conn()
         with conn.transaction(), conn.cursor() as cur:
             if run_key is not None:
-                cur.execute(
-                    f"""
-                    SELECT {_JOB_COLUMNS}
-                    FROM public.maintenance_jobs
-                    WHERE run_key = %(run_key)s
-                      AND status IN ('pending', 'running')
-                    LIMIT 1
-                    """,
-                    {"run_key": run_key},
-                )
+                cur.execute(_SQL_SELECT_BY_RUN_KEY, {"run_key": run_key})
                 existing = cur.fetchone()
                 if existing is not None:
                     return _row_to_job(existing)
 
             cur.execute(
-                f"""
-                INSERT INTO public.maintenance_jobs
-                    (job_name, agent_id, payload, run_key, scheduled_at)
-                VALUES
-                    (%(job_name)s, %(agent_id)s, %(payload)s, %(run_key)s,
-                     COALESCE(%(scheduled_at)s, NOW()))
-                RETURNING {_JOB_COLUMNS}
-                """,
+                _SQL_INSERT_JOB,
                 {
                     "job_name": job_name.value,
                     "agent_id": agent_id,
@@ -205,22 +236,7 @@ class PostgresMaintenanceQueue(MaintenanceQueue):
         conn = self._get_conn()
         with conn.transaction(), conn.cursor() as cur:
             cur.execute(
-                f"""
-                WITH next_jobs AS (
-                    SELECT id
-                    FROM public.maintenance_jobs
-                    WHERE status = 'pending'
-                      AND (%(job_name)s::text IS NULL OR job_name = %(job_name)s)
-                    ORDER BY scheduled_at
-                    LIMIT %(batch_size)s
-                    FOR UPDATE SKIP LOCKED
-                )
-                UPDATE public.maintenance_jobs
-                SET status = 'running',
-                    started_at = NOW()
-                WHERE id IN (SELECT id FROM next_jobs)
-                RETURNING {_JOB_COLUMNS}
-                """,
+                _SQL_CLAIM_BATCH,
                 {
                     "job_name": job_name.value if job_name is not None else None,
                     "batch_size": batch_size,
@@ -296,14 +312,7 @@ class PostgresMaintenanceQueue(MaintenanceQueue):
         conn = self._get_conn()
         with conn.transaction(), conn.cursor() as cur:
             cur.execute(
-                f"""
-                SELECT {_JOB_COLUMNS}
-                FROM public.maintenance_jobs
-                WHERE (%(status)s::text IS NULL OR status = %(status)s)
-                  AND (%(agent_id)s::uuid IS NULL OR agent_id = %(agent_id)s)
-                ORDER BY scheduled_at DESC
-                LIMIT %(limit)s
-                """,
+                _SQL_LIST_JOBS,
                 {
                     "status": status.value if status is not None else None,
                     "agent_id": agent_id,

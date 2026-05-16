@@ -45,6 +45,12 @@ class PostWriteScheduler:
     ) -> None:
         self._queue = queue
         self._jobs = jobs
+        # Strong references for fire-and-forget tasks. asyncio.create_task keeps
+        # only a weak ref to the task; without this set, a task spawned from
+        # schedule_for_key_moment_async could be garbage-collected mid-flight
+        # (see https://docs.python.org/3/library/asyncio-task.html#creating-tasks).
+        # Tasks remove themselves via the discard done-callback below.
+        self._background_tasks: set[asyncio.Task[None]] = set()
 
     def schedule_for_key_moment(
         self,
@@ -98,9 +104,12 @@ class PostWriteScheduler:
         async def _run() -> None:
             self.schedule_for_key_moment(moment, agent_id, scheduled_at=scheduled_at)
 
-        # Keep a strong reference until the task completes — bare create_task
-        # would let the task be garbage-collected mid-flight per asyncio docs.
+        # Keep a strong reference in the instance-level set until the task
+        # completes — a local variable goes out of scope on return, and
+        # asyncio holds only a weak ref to the task.
         task = loop.create_task(_run())
+        self._background_tasks.add(task)
+        task.add_done_callback(self._background_tasks.discard)
         task.add_done_callback(_log_task_exception)
 
 

@@ -303,7 +303,7 @@ class PostgresEntityRegistry(EntityRegistry):
                    e.schema_version, e.metadata
             FROM {schema}.entities e
             WHERE e.agent_id = %(agent_id)s
-              AND e.canonical_name ILIKE %(needle)s
+              AND LOWER(e.canonical_name) = LOWER(%(needle)s)
               {type_filter}
             LIMIT 1
             """
@@ -587,7 +587,7 @@ class PostgresEntityRegistry(EntityRegistry):
             LEFT JOIN {schema}.entity_aliases a ON a.entity_id = e.id
             WHERE e.agent_id = %(agent_id)s
               AND (
-                  e.canonical_name ILIKE %(needle)s
+                  LOWER(e.canonical_name) = LOWER(%(needle)s)
                   OR a.alias_text = %(lowered)s
               )
               {type_filter}
