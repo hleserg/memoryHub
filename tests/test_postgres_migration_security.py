@@ -26,6 +26,8 @@ def test_legacy_reflections_migration_had_rls() -> None:
 def test_subjective_tables_live_in_per_agent_schema() -> None:
     sql = _compact(_migration("0015_move_subjective_tables.sql"))
 
+    assert "GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA" in sql
+    assert "GRANT_AGENT_SCHEMA_APP_PRIVILEGES" in sql
     assert "CREATE TABLE IF NOT EXISTS %I.REFLECTIONS" in sql
     assert "CREATE TABLE IF NOT EXISTS %I.SELF_APPLIED_CHANGES" in sql
     assert "CREATE TABLE IF NOT EXISTS %I.PENDING_HUMAN_REVIEW" in sql

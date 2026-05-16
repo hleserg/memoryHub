@@ -12,6 +12,32 @@
 --
 -- Rollback: restore from backup; forward-only data migration.
 
+-- Grants for atman_app on per-agent schema (tables + BIGSERIAL sequences).
+CREATE OR REPLACE FUNCTION public.grant_agent_schema_app_privileges(schema_name TEXT)
+RETURNS VOID LANGUAGE plpgsql AS $$
+BEGIN
+    EXECUTE format('GRANT USAGE ON SCHEMA %I TO atman_app', schema_name);
+    EXECUTE format(
+        'GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA %I TO atman_app',
+        schema_name
+    );
+    EXECUTE format(
+        'GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA %I TO atman_app',
+        schema_name
+    );
+    EXECUTE format(
+        'ALTER DEFAULT PRIVILEGES IN SCHEMA %I '
+        'GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO atman_app',
+        schema_name
+    );
+    EXECUTE format(
+        'ALTER DEFAULT PRIVILEGES IN SCHEMA %I '
+        'GRANT USAGE, SELECT ON SEQUENCES TO atman_app',
+        schema_name
+    );
+END;
+$$;
+
 -- ── Step 1: per-schema subjective tables ────────────────────────────────────
 
 CREATE OR REPLACE FUNCTION public.extend_agent_schema_0015(schema_name TEXT)
@@ -131,6 +157,8 @@ BEGIN
         CREATE INDEX IF NOT EXISTS pending_human_review_created_by_idx
             ON %I.pending_human_review (created_by);
     $sql$, schema_name, schema_name, schema_name, schema_name, schema_name);
+
+    PERFORM public.grant_agent_schema_app_privileges(schema_name);
 END;
 $$;
 
@@ -449,10 +477,8 @@ BEGIN
     PERFORM public.extend_agent_schema_0015(schema_name);
     PERFORM public.repoint_reflection_entities_fk(schema_name);
 
-    -- Grants
-    EXECUTE format('GRANT USAGE ON SCHEMA %I TO atman_app', schema_name);
-    EXECUTE format('GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA %I TO atman_app', schema_name);
-    EXECUTE format('ALTER DEFAULT PRIVILEGES IN SCHEMA %I GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO atman_app', schema_name);
+  -- Grants (tables + sequences for BIGSERIAL reflections.id)
+    PERFORM public.grant_agent_schema_app_privileges(schema_name);
 END;
 $$;
 

@@ -203,9 +203,14 @@ class ReflectionStore:
         conn.commit()
         return row
 
-    def list_by_session(self, session_id: UUID) -> list[ReflectionEvent]:
+    def list_by_session(
+        self, session_id: UUID, *, agent_id: UUID | None = None
+    ) -> list[ReflectionEvent]:
         conn = self._require_conn()
-        schema = self._resolve_schema_for_session(session_id)
+        if agent_id is not None:
+            schema = self._schema_for_agent(agent_id)
+        else:
+            schema = self._resolve_schema_for_session(session_id)
         if schema is None:
             conn.commit()
             return []
