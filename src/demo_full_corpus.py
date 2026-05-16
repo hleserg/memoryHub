@@ -48,7 +48,6 @@ from atman.core.services.reflection_service import (
 )
 from e2e.full_loop import (
     DeterministicReflectionModel,
-    StateStoreExperienceAdapter,
     StateStoreIdentityAdapter,
     StateStoreNarrativeAdapter,
     create_bootstrap_identity,
@@ -91,7 +90,6 @@ class _RunTotals:
 
 def _reflection_bundle(
     *,
-    experience_repo: StateStoreExperienceAdapter,
     session_repo: StateStoreSessionRepository,
     identity_repo: StateStoreIdentityAdapter,
     narrative_repo: StateStoreNarrativeAdapter,
@@ -109,7 +107,7 @@ def _reflection_bundle(
         clock=clock,
     )
     micro = MicroReflectionService(
-        experience_repo=experience_repo,
+        session_repo=session_repo,
         narrative_revision=narrative_revision,
         event_store=event_store,
         clock=clock,
@@ -195,7 +193,6 @@ def main() -> int:
         assert initial_narrative is not None
         baseline_recent = initial_narrative.recent_layer.content
 
-        experience_repo = StateStoreExperienceAdapter(state_store)
         session_repo = StateStoreSessionRepository(state_store, agent_id=agent_id)
         identity_repo = StateStoreIdentityAdapter(state_store)
         event_store = InMemoryReflectionEventStore()
@@ -211,7 +208,6 @@ def main() -> int:
             session_manager = SessionManager(state_store, clock=fc)
 
             micro, daily, _ = _reflection_bundle(
-                experience_repo=experience_repo,
                 session_repo=session_repo,
                 identity_repo=identity_repo,
                 narrative_repo=narrative_repo,
@@ -271,7 +267,6 @@ def main() -> int:
         until = _utc_day_end(last_day)
         end_clock = FrozenClock(until)
         _m, _d, deep = _reflection_bundle(
-            experience_repo=experience_repo,
             session_repo=session_repo,
             identity_repo=identity_repo,
             narrative_repo=narrative_repo,
@@ -298,7 +293,7 @@ def main() -> int:
         assert final_narrative is not None
         final_recent = final_narrative.recent_layer.content
 
-        all_exps = experience_repo.get_all()
+        all_exps = [r.experience for r in state_store.list_recent_experiences(limit=10_000)]
         reframing_total = sum(len(x.reframing_notes) for x in all_exps)
         patterns_all = pattern_store.get_all()
 

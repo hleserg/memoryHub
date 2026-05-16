@@ -282,7 +282,7 @@ def test_bootstrap_to_deep_reflection_full_lifecycle():
         assert len(experience_service.list_recent(limit=20)) == 5
 
         # Build adapters for reflection ports.
-        exp_repo = _StateStoreExperienceRepo(store)
+        _StateStoreExperienceRepo(store)
         session_repo = StateStoreSessionRepository(store, agent_id=agent_id)
         identity_repo = _InMemoryIdentityRepo(store, identity)
         narrative_repo = _NarrativeRepoOverFileStateStore(store, identity.id)
@@ -300,7 +300,7 @@ def test_bootstrap_to_deep_reflection_full_lifecycle():
 
         # --- C. Micro reflection (§3 C) -------------------------------------
         micro = MicroReflectionService(
-            experience_repo=exp_repo,
+            session_repo=session_repo,
             narrative_revision=narrative_revision,
             event_store=event_store,
         )

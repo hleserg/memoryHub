@@ -78,8 +78,9 @@ class MockExperienceRepo:
         self._sessions: dict[UUID, Session] = {}
         self._moments_by_session: dict[UUID, list[KeyMoment]] = {}
         for exp in experiences:
-            self._sessions[exp.id] = Session(
-                id=exp.id,
+            sid = exp.session_id
+            self._sessions[sid] = Session(
+                id=sid,
                 agent_id=uuid4(),
                 started_at=exp.timestamp,
                 identity_snapshot_id=exp.identity_snapshot_id,
@@ -87,10 +88,10 @@ class MockExperienceRepo:
             depth = (
                 EmotionalDepth.PROFOUND if exp.has_profound_moment else EmotionalDepth.MEANINGFUL
             )
-            self._moments_by_session[exp.id] = [
+            self._moments_by_session[sid] = [
                 KeyMoment(
                     id=km_id,
-                    session_id=exp.id,
+                    session_id=sid,
                     what_happened="synthetic",
                     how_i_felt=FeltSense(
                         emotional_valence=0.0,
@@ -131,8 +132,20 @@ class MockExperienceRepo:
     def add_reframing_note(
         self, experience_id: UUID, note: ReframingNote
     ) -> ReframingNoteAppendResult:
-        """Add reframing note; return explicit append outcome."""
+        """Add reframing note; return explicit append outcome.
+
+        Accept the lookup key as either an experience id (legacy
+        ExperienceRepository contract) or a session id (new
+        SessionRepository contract — synthetic experiences built by
+        ``build_session_experience`` set ``id == session_id``).
+        """
         exp = self.experiences.get(experience_id)
+        if exp is None:
+            # Fall back to looking up by session_id.
+            exp = next(
+                (e for e in self.experiences.values() if e.session_id == experience_id),
+                None,
+            )
         if exp is None:
             return ReframingNoteAppendResult.EXPERIENCE_NOT_FOUND
         if note.triggered_by and any(
@@ -399,7 +412,12 @@ class StructuredOutputReflectionModel(MockReflectionModel):
 
 
 def create_test_experience(session_id: UUID | None = None) -> SessionExperience:
-    """Create a test experience."""
+    """Create a test experience.
+
+    In v3 memory architecture ``experience.id == session.id`` — one virtual
+    experience per session — so the fixture mirrors that to keep the
+    ``SessionRepository``-backed reflection paths consistent.
+    """
     if session_id is None:
         session_id = uuid4()
 
@@ -415,6 +433,7 @@ def create_test_experience(session_id: UUID | None = None) -> SessionExperience:
     )
 
     return SessionExperience(
+        id=session_id,
         session_id=session_id,
         key_moment_ids=[km.id],
         avg_emotional_intensity=km.how_i_felt.emotional_intensity,
@@ -443,7 +462,7 @@ def test_micro_reflection_updates_narrative() -> None:
     )
 
     service = MicroReflectionService(
-        experience_repo=exp_repo,
+        session_repo=exp_repo,
         narrative_revision=narrative_revision,
         event_store=event_store,
     )
@@ -475,7 +494,7 @@ def test_micro_reflection_no_experiences() -> None:
     )
 
     service = MicroReflectionService(
-        experience_repo=exp_repo,
+        session_repo=exp_repo,
         narrative_revision=narrative_revision,
         event_store=event_store,
     )
@@ -509,7 +528,7 @@ def test_micro_reflection_narrative_conflict_persists_failed_event() -> None:
     )
 
     service = MicroReflectionService(
-        experience_repo=exp_repo,
+        session_repo=exp_repo,
         narrative_revision=narrative_revision,
         event_store=event_store,
     )
@@ -540,7 +559,7 @@ def test_micro_reflection_no_narrative() -> None:
     )
 
     service = MicroReflectionService(
-        experience_repo=exp_repo,
+        session_repo=exp_repo,
         narrative_revision=narrative_revision,
         event_store=event_store,
     )
@@ -1108,7 +1127,7 @@ def test_micro_reflection_notifies_observer_when_event_store_fails_after_narrati
     )
 
     service = MicroReflectionService(
-        experience_repo=exp_repo,
+        session_repo=exp_repo,
         narrative_revision=narrative_revision,
         event_store=event_store,
         reflection_event_observer=observer,

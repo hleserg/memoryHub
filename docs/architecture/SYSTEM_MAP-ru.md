@@ -139,7 +139,6 @@
 | `adapters/linguistic/noop_adapter.py` (`NoOpLinguisticAnalyzer`) | `LinguisticAnalyzer` | возвращает пустые, но корректные объекты анализа; default при `LINGUISTIC_ENABLED=false` |
 | `adapters/linguistic/gliner_minilm_adapter.py` (`GLiNERPlusMiniLMAdapter`) | `LinguisticAnalyzer` | GLiNER (`urchade/gliner_multi-v2.1`) + MiniLM NLI; ленивая загрузка; guarded imports; эвристики расхождения для русского языка; требует `pip install -e ".[linguistic]"`; **opt-2**: session-scoped SHA-256 кэш на `analyze_user_message()` — повторные фразы пропускают GLiNER+MiniLM; `clear_session_cache()` вызывается runner'ом при завершении сессии |
 | `adapters/maintenance/in_memory_queue.py` (`InMemoryMaintenanceQueue`) | `MaintenanceQueue` | идемпотентность через run_key; атомарный `claim_batch`; все статусные переходы |
-| `adapters/reflection_compat/experience_view_repository.py` (`ExperienceViewRepository`) | `ExperienceRepository` (compat мост для Reflection) | `experience_id ≡ session_id`; строит виртуальный `SessionExperience` из `Session` + `list[KeyMoment]`; Reflection Engine без изменений (deprecated — удаляется на Этапе 18 после R3+R4) |
 | `adapters/reflection/state_store_session_repository.py` (`StateStoreSessionRepository`) | `SessionRepository` | тонкий адаптер над любым `StateStore` (InMemory / File / Postgres v2); default `agent_id` через конструктор для single-agent + явная трёхаргументная форма для multi-agent; фундамент для R3+R4 (миграция Daily/Deep reflection) |
 | `adapters/storage/in_memory_reflection_store.py` | `PatternStore`, `ReflectionEventStore`, `HealthAssessmentStore` | хранилища выводов рефлексии |
 | `adapters/storage/in_memory_self_applied_changes.py` (R11.5) | `SelfAppliedChangeStore` | append-only аудит; поддерживает revert через snapshot до изменения |
@@ -246,7 +245,7 @@
 | `NarrativeRevisionService` ↔ `SelfAppliedChangeStore` | `core/services/narrative_revision.py` → `core/ports/self_applied_changes.py` | **R11.5** аудит для `apply_self_layer_update` / `revert_self_change` |
 | `resolve_pending_review` ↔ `PendingHumanReviewInbox` | `adapters/agent/tools.py` → `core/ports/pending_human_review.py` | **R11.7** инструмент регистрируется только при наличии inbox в `AtmanDeps`; runner вкладывает нерешённые элементы первым system-сообщением |
 | `request_reflection` ↔ `ReflectionRequestQueue` | `adapters/agent/tools.py` → `core/ports/reflection_request_queue.py` | **R12** инструмент регистрируется только при наличии очереди в `AtmanDeps`; идемпотентность через `agent_driven_run_key` (UTC hour bucket) |
-| `MicroReflectionService` ↔ `ExperienceRepository` + `NarrativeRepository` | `core/services/reflection_service.py` | чтение опыта, апдейт recent-слоя |
+| `MicroReflectionService` ↔ `SessionRepository` + `NarrativeRepository` | `core/services/reflection_service.py` | читает одну сессию + её key moments, синтезирует виртуальный `SessionExperience` через `services/session_experience_view.build_session_experience`, апдейт recent-слоя (R-Micro — мигрирован с `ExperienceRepository`) |
 | `DailyReflectionService` ↔ `SessionRepository` + `PatternStore` + `ReflectionEventStore` | `core/services/reflection_service.py` | детекция паттернов (R3 — мигрирован с `ExperienceRepository`; синтезирует виртуальные `SessionExperience` через `services/session_experience_view.build_session_experience`) |
 | `DeepReflectionService` ↔ `SessionRepository` + `IdentityRepository` + `NarrativeRepository` + `PatternStore` + `HealthAssessmentStore` + `ReflectionEventStore` | `core/services/reflection_service.py` | здоровье + апдейт identity и нарратива (R4 — мигрирован с `ExperienceRepository`; синтезирует виртуальные `SessionExperience` через `services/session_experience_view.build_session_experience`) |
 | `PrincipleRevisionAdvisor` ↔ `PatternCandidate` + `Identity` | `core/services/principle_advisor.py` | анализ паттернов в контексте identity |
@@ -269,7 +268,6 @@
 | `NoOpReranker`, `BgeReranker` | `MemoryReranker` |
 | `InMemoryMaintenanceQueue`, `PostgresMaintenanceQueue` | `MaintenanceQueue` |
 | `MRebelRelationAdapter` | `EntityRelationExtractor` |
-| `ExperienceViewRepository` (`adapters/reflection_compat/`) | `ExperienceRepository` (compat мост для Reflection) |
 | `StateStoreSessionRepository` (`adapters/reflection/`) | `SessionRepository` (R1 — преемник ExperienceRepository) |
 
 ### 2.2a. Agent adapter ↔ сервисы
@@ -316,7 +314,7 @@
 ```text
 конец сессии
   ↓
-MicroReflectionService — читает ExperienceRepository
+MicroReflectionService — читает одну сессию + её key moments через SessionRepository
   ↓ обновляет
 NarrativeRepository (recent-слой) — оптимистическая блокировка
   ↓

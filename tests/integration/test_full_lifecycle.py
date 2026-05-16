@@ -266,7 +266,7 @@ def test_full_lifecycle_invariants():
         assert stored_experience_after.experience.identity_snapshot_id == initial_snapshot_id
 
         # --- Phase 2: Micro reflection updates narrative ---
-        exp_repo = _StateStoreExperienceRepo(store)
+        _StateStoreExperienceRepo(store)
         session_repo = StateStoreSessionRepository(store, agent_id=agent_id)
         identity_repo = _InMemoryIdentityRepo(store, identity)
         narrative_repo = _NarrativeRepoOverFileStateStore(store, identity.id)
@@ -289,7 +289,7 @@ def test_full_lifecycle_invariants():
 
         # Run micro reflection
         micro = MicroReflectionService(
-            experience_repo=exp_repo,
+            session_repo=session_repo,
             narrative_revision=narrative_revision,
             event_store=event_store,
         )

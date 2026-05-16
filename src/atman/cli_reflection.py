@@ -104,8 +104,12 @@ class MockExperienceRepo:
     # ---- SessionRepository surface (R3) ----------------------------------
 
     def _synth(self, exp: SessionExperience) -> tuple[Session, list[KeyMoment]]:
+        # Key the synthetic Session/KeyMoment records by ``exp.session_id`` so
+        # ``get_session(session_id)`` and ``get_key_moments_for_session(session_id)``
+        # find a hit even when ``exp.id != exp.session_id`` (the case for the
+        # legacy fixture data under fixtures/reflection/experiences.json).
         session = Session(
-            id=exp.id,
+            id=exp.session_id,
             agent_id=uuid4(),
             started_at=exp.timestamp,
             identity_snapshot_id=exp.identity_snapshot_id,
@@ -114,7 +118,7 @@ class MockExperienceRepo:
         moments = [
             KeyMoment(
                 id=km_id,
-                session_id=exp.id,
+                session_id=exp.session_id,
                 what_happened="synthetic",
                 how_i_felt=FeltSense(
                     emotional_valence=0.0,
@@ -128,8 +132,17 @@ class MockExperienceRepo:
         ]
         return session, moments
 
+    def _lookup_by_session_id(self, session_id: UUID) -> SessionExperience | None:
+        exp = self.experiences.get(session_id)
+        if exp is not None:
+            return exp
+        return next(
+            (e for e in self.experiences.values() if e.session_id == session_id),
+            None,
+        )
+
     def get_session(self, session_id: UUID) -> Session | None:
-        exp = self.get(session_id)
+        exp = self._lookup_by_session_id(session_id)
         return None if exp is None else self._synth(exp)[0]
 
     def list_recent_sessions(
@@ -154,7 +167,7 @@ class MockExperienceRepo:
         )
 
     def get_key_moments_for_session(self, session_id: UUID) -> list[KeyMoment]:
-        exp = self.get(session_id)
+        exp = self._lookup_by_session_id(session_id)
         return [] if exp is None else self._synth(exp)[1]
 
     def get_key_moments_in_range(self, start: datetime, end: datetime) -> list[KeyMoment]:
@@ -306,7 +319,7 @@ def cmd_reflect_micro(args: list[str]) -> int:
     )
 
     service = MicroReflectionService(
-        experience_repo=experience_repo,
+        session_repo=experience_repo,
         narrative_revision=narrative_revision,
         event_store=event_store,
     )
