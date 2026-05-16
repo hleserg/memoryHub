@@ -323,7 +323,7 @@ BEGIN
             FOR EACH ROW EXECUTE FUNCTION public.prevent_key_moment_modification();
     $sql$,
     schema_name, schema_name,
-    schema_name, schema_name, schema_name, schema_name, schema_name, schema_name, schema_name, schema_name);
+    schema_name, schema_name, schema_name, schema_name, schema_name, schema_name, schema_name, schema_name, schema_name);
 
     -- reframing_notes (experience_id retained as soft reference — no FK — session_id added)
     EXECUTE format($sql$
