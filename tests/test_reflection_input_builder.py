@@ -58,11 +58,7 @@ def test_remaining_are_lowest_salience():
     moments = [_moment(salience=float(i) / 10) for i in range(10)]
     result = prepare_reflection_input(moments, max_moments=7)
     max_remaining = max(m.salience for m in result.remaining_moments)
-    min_selected = min(
-        m.salience
-        for s in result.session_summaries
-        for m in s.top_moments
-    )
+    min_selected = min(m.salience for s in result.session_summaries for m in s.top_moments)
     assert max_remaining <= min_selected
 
 

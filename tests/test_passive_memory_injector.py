@@ -425,7 +425,7 @@ def test_build_rag_context_fits_within_budget():
 
 
 def test_build_rag_context_stops_before_overflow():
-    small = _surfaced(_fact("a" * 4))   # 1 token
+    small = _surfaced(_fact("a" * 4))  # 1 token
     large = _surfaced(_fact("b" * 400))  # 100 tokens
     ctx = build_rag_context([small, large], budget=50)
     assert ctx.items == [small]
