@@ -9,12 +9,14 @@ from __future__ import annotations
 
 import json
 import os
-from datetime import datetime
 from pathlib import Path
 from uuid import UUID
 
 from atman.adapters.agent.config import AgentConfig
 from atman.adapters.agent.deps import AtmanDeps
+from atman.adapters.reflection.state_store_session_repository import (
+    StateStoreSessionRepository,
+)
 from atman.adapters.storage.file_state_store import FileStateStore
 from atman.adapters.storage.in_memory_pending_human_review import InMemoryPendingHumanReviewInbox
 from atman.adapters.storage.in_memory_reflection_request_queue import InMemoryReflectionRequestQueue
@@ -28,7 +30,6 @@ except ImportError:
     _AffectDetectorConfig = None  # type: ignore[assignment,misc]
     _AFFECT_AVAILABLE = False
 from atman.core.models import NarrativeDocument
-from atman.core.models.experience import ReframingNoteAppendResult
 from atman.core.models.reflection import (
     HealthCriterionOutput,
     NarrativeUpdateOutput,
@@ -36,16 +37,13 @@ from atman.core.models.reflection import (
     ReframingNoteOutput,
 )
 from atman.core.narrative_write_audit import NoOpNarrativeWriteAudit
-from atman.core.ports.reflection import ExperienceRepository, NarrativeRepository, ReflectionModel
-from atman.core.ports.state_store import DateRangeQuery, SessionExperienceQuery
+from atman.core.ports.reflection import NarrativeRepository, ReflectionModel
 from atman.core.services.experience_service import ExperienceService
 from atman.core.services.identity_service import IdentityService
 from atman.core.services.narrative_revision import NarrativeRevisionService
 from atman.core.services.narrative_service import NarrativeService
 from atman.core.services.reflection_service import MicroReflectionService
 from atman.core.services.session_manager import SessionManager
-
-_EXPERIENCE_LIMIT = 1000
 
 
 class _MockReflectionModel(ReflectionModel):
@@ -60,65 +58,6 @@ class _MockReflectionModel(ReflectionModel):
 
     def assess_health_criterion(self, identity, experiences, criterion):
         return HealthCriterionOutput(score=0.5, evidence=[], concerns=[])
-
-
-class _ExperienceAdapter(ExperienceRepository):
-    def __init__(self, store: FileStateStore):
-        self._s = store
-
-    def get(self, experience_id):
-        r = self._s.get_experience(experience_id)
-        return r.experience if r else None
-
-    def get_all(self):
-        return [r.experience for r in self._s.list_recent_experiences(limit=_EXPERIENCE_LIMIT)]
-
-    def get_by_session(self, session_id):
-        return [
-            r.experience
-            for r in self._s.search_experiences(
-                SessionExperienceQuery(session_id), limit=_EXPERIENCE_LIMIT
-            )
-        ]
-
-    def get_in_range(self, start: datetime, end: datetime):
-        return [
-            r.experience
-            for r in self._s.search_experiences(DateRangeQuery(start, end), limit=_EXPERIENCE_LIMIT)
-        ]
-
-    def get_recent(self, limit=10):
-        return [r.experience for r in self._s.list_recent_experiences(limit=limit)]
-
-    def update(self, experience):
-        raise NotImplementedError
-
-    def add_reframing_note(self, experience_id, note):
-        # Check for duplicate before calling store
-        if note.triggered_by:
-            record = self._s.get_experience(experience_id)
-            if record is None:
-                return ReframingNoteAppendResult.EXPERIENCE_NOT_FOUND
-            if any(n.triggered_by == note.triggered_by for n in record.experience.reframing_notes):
-                return ReframingNoteAppendResult.DUPLICATE_TRIGGERED_BY
-
-        count_before = 0
-        if note.triggered_by:
-            rec0 = self._s.get_experience(experience_id)
-            if rec0 is None:
-                return ReframingNoteAppendResult.EXPERIENCE_NOT_FOUND
-            count_before = len(rec0.experience.reframing_notes)
-
-        result = self._s.add_reframing_note(experience_id, note)
-        if result is None:
-            return ReframingNoteAppendResult.EXPERIENCE_NOT_FOUND
-
-        # FileStateStore returns the existing record on duplicate triggered_by without
-        # appending; map that to DUPLICATE_TRIGGERED_BY instead of STORED.
-        if note.triggered_by and len(result.experience.reframing_notes) == count_before:
-            return ReframingNoteAppendResult.DUPLICATE_TRIGGERED_BY
-
-        return ReframingNoteAppendResult.STORED
 
 
 class _NarrativeAdapter(NarrativeRepository):
@@ -177,7 +116,7 @@ def build_deps(
         narrative_audit=NoOpNarrativeWriteAudit(),
     )
     micro_reflection = MicroReflectionService(
-        experience_repo=_ExperienceAdapter(state_store),
+        session_repo=StateStoreSessionRepository(state_store, agent_id=agent_id),
         narrative_revision=narrative_revision,
         event_store=InMemoryReflectionEventStore(),
     )

@@ -95,7 +95,7 @@ def _create_deps_with_session(agent_id: UUID) -> tuple[AtmanDeps, UUID]:
         identity_service=identity_service,
         experience_service=experience_service,
         micro_reflection=MicroReflectionService(
-            experience_repo=experience_service,  # type: ignore[arg-type]
+            session_repo=experience_service,  # type: ignore[arg-type]
             narrative_revision=narrative_revision,
             event_store=event_store,
         ),
@@ -165,7 +165,7 @@ class TestRecordKeyMoment:
             identity_service=IdentityService(state_store),
             experience_service=experience_service,
             micro_reflection=MicroReflectionService(
-                experience_repo=experience_service,  # type: ignore[arg-type]
+                session_repo=experience_service,  # type: ignore[arg-type]
                 narrative_revision=narrative_revision,
                 event_store=event_store,
             ),
@@ -333,7 +333,7 @@ class TestRestartSession:
             identity_service=IdentityService(state_store),
             experience_service=experience_service,
             micro_reflection=MicroReflectionService(
-                experience_repo=experience_service,  # type: ignore[arg-type]
+                session_repo=experience_service,  # type: ignore[arg-type]
                 narrative_revision=narrative_revision,
                 event_store=event_store,
             ),
@@ -411,7 +411,7 @@ class TestWaitSession:
             identity_service=IdentityService(state_store),
             experience_service=experience_service,
             micro_reflection=MicroReflectionService(
-                experience_repo=experience_service,  # type: ignore[arg-type]
+                session_repo=experience_service,  # type: ignore[arg-type]
                 narrative_revision=narrative_revision,
                 event_store=event_store,
             ),

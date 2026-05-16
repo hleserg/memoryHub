@@ -306,7 +306,7 @@ def cmd_reflect_micro(args: list[str]) -> int:
     )
 
     service = MicroReflectionService(
-        experience_repo=experience_repo,
+        session_repo=experience_repo,
         narrative_revision=narrative_revision,
         event_store=event_store,
     )

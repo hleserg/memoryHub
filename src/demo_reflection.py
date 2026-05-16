@@ -275,7 +275,7 @@ def demo_micro_reflection(
     )
 
     service = MicroReflectionService(
-        experience_repo=exp_repo,
+        session_repo=exp_repo,
         narrative_revision=narrative_revision,
         event_store=event_store,
     )

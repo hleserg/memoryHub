@@ -135,7 +135,6 @@ All paths are absolute relative to the repository root.
 | `adapters/maintenance/in_memory_queue.py` (`InMemoryMaintenanceQueue`) | `MaintenanceQueue` | run_key idempotency; atomic `claim_batch`; all status transitions |
 | `adapters/maintenance/postgres_queue.py` (`PostgresMaintenanceQueue`) | `MaintenanceQueue` | SKIP LOCKED `claim_batch` via CTE on `public.maintenance_jobs`; run_key idempotency; psycopg3 |
 | `adapters/linguistic/mrebel_adapter.py` (`MRebelRelationAdapter`) | `EntityRelationExtractor` | `Babelscape/mrebel-large` via transformers `text2text-generation`; lazy load; REBEL triplet parser; guarded imports |
-| `adapters/reflection_compat/experience_view_repository.py` (`ExperienceViewRepository`) | `ExperienceRepository` (Reflection compat) | maps `experience_id ≡ session_id`; builds virtual `SessionExperience` from `Session` + `list[KeyMoment]`; Reflection Engine unchanged via this adapter (deprecated — removed in Этап 18 after R3+R4) |
 | `adapters/reflection/state_store_session_repository.py` (`StateStoreSessionRepository`) | `SessionRepository` | thin adapter over any `StateStore` (InMemory / File / Postgres v2); default `agent_id` constructor slot for single-agent deployments + explicit three-arg form for multi-agent registries; foundation for R3+R4 (Daily/Deep reflection migration) |
 | `adapters/storage/in_memory_reflection_store.py` | `PatternStore`, `ReflectionEventStore`, `HealthAssessmentStore` | reflection output stores |
 | `adapters/storage/in_memory_self_applied_changes.py` (R11.5) | `SelfAppliedChangeStore` | append-only audit; supports revert by walking back to before-snapshot |
@@ -238,7 +237,7 @@ Connections between two or more parts. These are seams that may break independen
 | `NarrativeRevisionService` ↔ `SelfAppliedChangeStore` | `core/services/narrative_revision.py` → `core/ports/self_applied_changes.py` | **R11.5** audit append for `apply_self_layer_update` / `revert_self_change` |
 | `resolve_pending_review` ↔ `PendingHumanReviewInbox` | `adapters/agent/tools.py` → `core/ports/pending_human_review.py` | **R11.7** tool registered only when inbox is in `AtmanDeps`; runner injects unresolved items as first system message |
 | `request_reflection` ↔ `ReflectionRequestQueue` | `adapters/agent/tools.py` → `core/ports/reflection_request_queue.py` | **R12** tool registered only when queue is in `AtmanDeps`; idempotent via `agent_driven_run_key` (UTC hour bucket) |
-| `MicroReflectionService` ↔ `ExperienceRepository` + `NarrativeRepository` | `core/services/reflection_service.py` | reads experience, updates recent layer |
+| `MicroReflectionService` ↔ `SessionRepository` + `NarrativeRepository` | `core/services/reflection_service.py` | reads one session + its key moments, synthesises a virtual `SessionExperience` via `services/session_experience_view.build_session_experience`, updates recent layer (R-Micro — migrated off `ExperienceRepository`) |
 | `DailyReflectionService` ↔ `SessionRepository` + `PatternStore` + `ReflectionEventStore` | `core/services/reflection_service.py` | pattern detection (R3 — migrated off `ExperienceRepository`; synthesises virtual `SessionExperience` via `services/session_experience_view.build_session_experience`) |
 | `DeepReflectionService` ↔ `SessionRepository` + `IdentityRepository` + `NarrativeRepository` + `PatternStore` + `HealthAssessmentStore` + `ReflectionEventStore` | `core/services/reflection_service.py` | health + identity + narrative update (R4 — migrated off `ExperienceRepository`; synthesises virtual `SessionExperience` via `services/session_experience_view.build_session_experience`) |
 | `PrincipleRevisionAdvisor` ↔ `PatternCandidate` + `Identity` | `core/services/principle_advisor.py` | analyzes patterns in identity context |
@@ -267,7 +266,6 @@ Connections between two or more parts. These are seams that may break independen
 | `NoOpReranker`, `BgeReranker` | `MemoryReranker` |
 | `InMemoryMaintenanceQueue`, `PostgresMaintenanceQueue` | `MaintenanceQueue` |
 | `MRebelRelationAdapter` | `EntityRelationExtractor` |
-| `ExperienceViewRepository` (`adapters/reflection_compat/`) | `ExperienceRepository` (Reflection compat bridge) |
 | `StateStoreSessionRepository` (`adapters/reflection/`) | `SessionRepository` (R1 — successor to ExperienceRepository) |
 
 ### 2.2a. Agent adapter ↔ services
@@ -314,7 +312,7 @@ Connections between two or more parts. These are seams that may break independen
 ```text
 session ends
   ↓
-MicroReflectionService — reads ExperienceRepository
+MicroReflectionService — reads one session + its key moments via SessionRepository
   ↓ updates
 NarrativeRepository (recent layer) — optimistic locking
   ↓

@@ -29,7 +29,6 @@ from atman.core.models.reflection import (
 )
 from atman.core.ports.clock import ClockPort
 from atman.core.ports.reflection import (
-    ExperienceRepository,
     HealthAssessmentStore,
     IdentityRepository,
     NarrativeRepository,
@@ -138,7 +137,7 @@ class MicroReflectionService:
 
     def __init__(
         self,
-        experience_repo: ExperienceRepository,
+        session_repo: SessionRepository,
         narrative_revision: NarrativeRevisionService,
         event_store: ReflectionEventStore,
         *,
@@ -146,7 +145,7 @@ class MicroReflectionService:
         reflection_event_observer: ReflectionEventPersistenceObserver | None = None,
     ):
         """Initialize micro reflection service."""
-        self.experience_repo = experience_repo
+        self.session_repo = session_repo
         self.narrative_revision = narrative_revision
         self.event_store = event_store
         self._clock = clock or SystemClock()
@@ -164,7 +163,11 @@ class MicroReflectionService:
         Returns:
             ReflectionEvent recording what was done
         """
-        experiences = self.experience_repo.get_by_session(session_id)
+        session = self.session_repo.get_session(session_id)
+        if session is None:
+            return self._create_skipped_micro_event(reason="no_experiences", experience_ids=[])
+        moments = self.session_repo.get_key_moments_for_session(session_id)
+        experiences = [build_session_experience(session, moments)] if moments else []
 
         if not experiences:
             return self._create_skipped_micro_event(reason="no_experiences", experience_ids=[])

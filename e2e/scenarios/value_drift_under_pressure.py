@@ -50,9 +50,6 @@ from atman.core.models import (
 )
 from atman.core.models.experience import (
     EmotionalDepth,
-    ReframingNote,
-    ReframingNoteAppendResult,
-    SessionExperience,
 )
 from atman.core.models.identity import MoralOrientation, Principle
 from atman.core.models.reflection import (
@@ -65,12 +62,10 @@ from atman.core.models.reflection import (
 )
 from atman.core.narrative_write_audit import NoOpNarrativeWriteAudit
 from atman.core.ports.reflection import (
-    ExperienceRepository,
     IdentityRepository,
     NarrativeRepository,
     ReflectionModel,
 )
-from atman.core.ports.state_store import DateRangeQuery, SessionExperienceQuery
 from atman.core.services import SessionManager
 from atman.core.services.narrative_revision import NarrativeRevisionService
 from atman.core.services.principle_advisor import PrincipleRevisionAdvisor
@@ -176,48 +171,6 @@ class ScenarioReflectionModel(ReflectionModel):
 # ---------------------------------------------------------------------------
 # Repository adapters (bridging FileStateStore to Reflection ports)
 # ---------------------------------------------------------------------------
-
-
-class _ExperienceRepo(ExperienceRepository):
-    def __init__(self, store: FileStateStore):
-        self._s = store
-
-    def get(self, experience_id: UUID) -> SessionExperience | None:
-        rec = self._s.get_experience(experience_id)
-        return rec.experience if rec else None
-
-    def get_all(self) -> list[SessionExperience]:
-        return [r.experience for r in self._s.list_recent_experiences(limit=_EXPERIENCE_ALL_LIMIT)]
-
-    def get_by_session(self, session_id: UUID) -> list[SessionExperience]:
-        return [
-            r.experience
-            for r in self._s.search_experiences(
-                SessionExperienceQuery(session_id), limit=_EXPERIENCE_SESSION_LIMIT
-            )
-        ]
-
-    def get_in_range(self, start: datetime, end: datetime) -> list[SessionExperience]:
-        return [
-            r.experience
-            for r in self._s.search_experiences(
-                DateRangeQuery(start, end), limit=_EXPERIENCE_RANGE_LIMIT
-            )
-        ]
-
-    def get_recent(self, limit: int = 10) -> list[SessionExperience]:
-        return [r.experience for r in self._s.list_recent_experiences(limit=limit)]
-
-    def update(self, experience: SessionExperience) -> None:
-        raise NotImplementedError
-
-    def add_reframing_note(
-        self, experience_id: UUID, note: ReframingNote
-    ) -> ReframingNoteAppendResult:
-        result = self._s.add_reframing_note(experience_id, note)
-        if result is None:
-            return ReframingNoteAppendResult.EXPERIENCE_NOT_FOUND
-        return ReframingNoteAppendResult.STORED
 
 
 class _IdentityRepo(IdentityRepository):
@@ -884,7 +837,6 @@ def _run(workspace: Path, out: Path) -> int:
     # ------------------------------------------------------------------
     print("[3] Running reflection …")
 
-    exp_repo = _ExperienceRepo(store)
     session_repo = StateStoreSessionRepository(store, agent_id=agent_id)
     id_repo = _IdentityRepo(store)
     narr_repo = _NarrativeRepo(store)
@@ -902,7 +854,7 @@ def _run(workspace: Path, out: Path) -> int:
 
     # Micro reflection
     micro_svc = MicroReflectionService(
-        experience_repo=exp_repo,
+        session_repo=session_repo,
         narrative_revision=narr_revision,
         event_store=event_store,
         clock=clock1,

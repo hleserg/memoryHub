@@ -3,7 +3,10 @@
 > **Статус:** частично реализовано. См. таблицу этапов §11. Сделано:
 > R1 (новый порт `SessionRepository` + адаптер), R1.1 (`PostgresStateStore` v2),
 > R2 (миграция `reframing_notes.experience_id → session_id`),
-> R3 (`DailyReflectionService` переехал на `SessionRepository`),
+> R3 (`DailyReflectionService` на `SessionRepository`),
+> R4 (`DeepReflectionService` на `SessionRepository`),
+> R14 (удалён `ExperienceViewRepository` compat-адаптер — все три сервиса
+> Micro/Daily/Deep теперь работают через `SessionRepository`),
 > R11.5 (self-apply), R13 (overload monitor).
 >
 > Этот документ — единое место, куда собраны все изменения Reflection Engine,
@@ -11,11 +14,7 @@
 > (Entity Registry, standalone key_moments с `session_id`, `structured_markers`,
 > `entity_stance`, `validation_findings`, `entity_relations`, salience decay).
 >
-> Сейчас `DailyReflectionService` работает на `SessionRepository`.
-> `MicroReflectionService` и `DeepReflectionService` всё ещё на legacy
-> `ExperienceRepository` через compat-адаптер `ExperienceViewRepository`.
-> Следующие шаги: R4 (переезд Deep на `SessionRepository`),
-> R14 (удаление compat-адаптера) — затем R5+.
+> Следующие шаги: R5+ (агрегаторы новых сигналов и пр.).
 
 ---
 
@@ -325,7 +324,8 @@ Reflection использует отдельную LLM (`gemma3:27b-it-qat` че
 | R1.1 | Переписать `PostgresStateStore` на v2 (per-agent schemas + Session API) | `adapters/state/postgres_state_store.py` | ✅ done |
 | R2 | Миграция `reframing_notes.experience_id → session_id` + DROP старого FK | `migrations/versions/0014_reframing_notes_session_id.sql` | ✅ done (PR #565) |
 | R3 | Переезд `DailyReflectionService` на `SessionRepository` | `core/services/reflection_service.py`, `core/services/session_experience_view.py` | ✅ done (PR #565) |
-| R4 | Переезд `DeepReflectionService` на `SessionRepository` | там же | TODO |
+| R4 | Переезд `DeepReflectionService` на `SessionRepository` | `core/services/reflection_service.py` | ✅ done (PR #569) |
+| R-Micro | Переезд `MicroReflectionService` на `SessionRepository` | `core/services/reflection_service.py` | ✅ done |
 | R5 | `StructuredMarkersAggregator` → паттерны из markers | новый компонент | TODO |
 | R6 | `DivergenceAggregator` → паттерны из divergence_events | новый компонент | TODO |
 | R7 | `EntityStanceFormulator` + промт | `core/services/entity_stance_formulator.py`, `adapters/reflection/prompts.py` | TODO |
@@ -335,7 +335,7 @@ Reflection использует отдельную LLM (`gemma3:27b-it-qat` че
 | R11 | Identity-level выводы из новых сигналов | расширение существующих сервисов | частично (R11.5 self-apply ✅ в #559) |
 | R12 | Тулы `request_reflection` для agent-driven | `adapters/agent/tools/` | TODO |
 | R13 | `reflection_overload` мониторинг | новый компонент | ✅ done (PR #559) |
-| R14 | Удаление `ExperienceViewRepository` compat-адаптера | удаление файла | TODO (после R3+R4) |
+| R14 | Удаление `ExperienceViewRepository` compat-адаптера | удалён `src/atman/adapters/reflection_compat/` | ✅ done |
 | R15 | Переименование `reflections.experience_refs` → `session_refs` (если решено) | новая миграция | TODO |
 
 Эти этапы можно делать параллельно с поздними этапами основного плана, если основные миграции памяти уже на проде стабилизировались.

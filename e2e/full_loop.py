@@ -57,7 +57,6 @@ from atman.core.models import (
     SessionEvent,
     SessionResult,
 )
-from atman.core.models.experience import ReframingNote, ReframingNoteAppendResult, SessionExperience
 from atman.core.models.reflection import (
     HealthCriterionOutput,
     NarrativeUpdateOutput,
@@ -66,12 +65,10 @@ from atman.core.models.reflection import (
 )
 from atman.core.narrative_write_audit import NoOpNarrativeWriteAudit
 from atman.core.ports.reflection import (
-    ExperienceRepository,
     IdentityRepository,
     NarrativeRepository,
     ReflectionModel,
 )
-from atman.core.ports.state_store import DateRangeQuery, SessionExperienceQuery
 from atman.core.services import SessionManager
 from atman.core.services.narrative_revision import NarrativeRevisionService
 from atman.core.services.reflection_service import (
@@ -218,63 +215,6 @@ class DeterministicReflectionModel(ReflectionModel):
             evidence=[f"Criterion {criterion.value} assessed"],
             concerns=["No major concerns"],
         )
-
-
-class StateStoreExperienceAdapter(ExperienceRepository):
-    """
-    Adapter: StateStore → ExperienceRepository port.
-
-    Bridges FileStateStore to Reflection Engine's ExperienceRepository protocol.
-    This is a minimal implementation for E2E testing; production would require
-    more sophisticated error handling and pagination.
-
-    SEAMS:
-    - update() not implemented (FileStateStore doesn't support direct updates)
-    - Uses hardcoded limits for search operations
-    """
-
-    def __init__(self, state_store: FileStateStore):
-        self._state_store = state_store
-
-    def get(self, experience_id: UUID) -> SessionExperience | None:
-        record = self._state_store.get_experience(experience_id)
-        return record.experience if record else None
-
-    def get_all(self) -> list[SessionExperience]:
-        records = self._state_store.list_recent_experiences(limit=_EXPERIENCE_ALL_LIMIT)
-        return [r.experience for r in records]
-
-    def get_by_session(self, session_id: UUID) -> list[SessionExperience]:
-        records = self._state_store.search_experiences(
-            SessionExperienceQuery(session_id), limit=_EXPERIENCE_SESSION_LIMIT
-        )
-        return [r.experience for r in records]
-
-    def get_in_range(self, start: datetime, end: datetime) -> list[SessionExperience]:
-        records = self._state_store.search_experiences(
-            DateRangeQuery(start, end), limit=_EXPERIENCE_RANGE_LIMIT
-        )
-        return [r.experience for r in records]
-
-    def get_recent(self, limit: int = 10) -> list[SessionExperience]:
-        records = self._state_store.list_recent_experiences(limit=limit)
-        return [r.experience for r in records]
-
-    def update(self, experience: SessionExperience) -> None:
-        raise NotImplementedError(
-            "StateStoreExperienceAdapter.update() not implemented; "
-            "FileStateStore doesn't support direct experience updates. "
-            "Use add_reframing_note() for modifications."
-        )
-
-    def add_reframing_note(
-        self, experience_id: UUID, note: ReframingNote
-    ) -> ReframingNoteAppendResult:
-        result = self._state_store.add_reframing_note(experience_id, note)
-        if result is None:
-            return ReframingNoteAppendResult.EXPERIENCE_NOT_FOUND
-        # SEAM: FileStateStore doesn't yet return enum; we assume success
-        return ReframingNoteAppendResult.STORED
 
 
 class StateStoreIdentityAdapter(IdentityRepository):
@@ -567,7 +507,6 @@ def _run_e2e_loop(workspace_path: Path) -> int:
     # 6. Run MicroReflectionService after each session
     print()
     print("[6] Micro Reflection: After-session checkpoint")
-    experience_repo = StateStoreExperienceAdapter(state_store)
     identity_repo = StateStoreIdentityAdapter(state_store)
     narrative_repo = StateStoreNarrativeAdapter(state_store)
     event_store = InMemoryReflectionEventStore()
@@ -582,8 +521,10 @@ def _run_e2e_loop(workspace_path: Path) -> int:
         clock=clock,
     )
 
+    session_repo = StateStoreSessionRepository(state_store, agent_id=agent_id)
+
     micro_service = MicroReflectionService(
-        experience_repo=experience_repo,
+        session_repo=session_repo,
         narrative_revision=narrative_revision,
         event_store=event_store,
         clock=clock,
@@ -599,7 +540,6 @@ def _run_e2e_loop(workspace_path: Path) -> int:
     print("[7] Daily Reflection: Pattern detection for day")
     pattern_store = InMemoryPatternStore()
 
-    session_repo = StateStoreSessionRepository(state_store, agent_id=agent_id)
     daily_service = DailyReflectionService(
         session_repo=session_repo,
         identity_repo=identity_repo,
