@@ -125,7 +125,7 @@ class AgentConfig(BaseModel):
         gt=0,
         description=(
             "Max tokens for RAG memory context injected per request. "
-            "Uses len//4 heuristic. Prevents cost explosion as memory accumulates."
+            "Uses UTF-8 byte-length / 3 heuristic. Prevents cost explosion as memory accumulates."
         ),
     )
     enable_prompt_caching: bool = Field(
