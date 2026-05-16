@@ -209,6 +209,7 @@ class TestProcessSessionSkills:
         manager.process_session_skills(self.agent_id, self.session_id)
 
         updated = store.get_skill_by_id(skill.id)
+        assert updated is not None
         assert updated.success_count == 1
         assert updated.failure_count == 0
 
@@ -222,6 +223,7 @@ class TestProcessSessionSkills:
         manager.process_session_skills(self.agent_id, self.session_id)
 
         updated = store.get_skill_by_id(skill.id)
+        assert updated is not None
         assert updated.failure_count == 1
         assert updated.revision_needed is True
 
@@ -235,6 +237,7 @@ class TestProcessSessionSkills:
         manager.process_session_skills(self.agent_id, self.session_id)
 
         updated = store.get_skill_by_id(skill.id)
+        assert updated is not None
         assert updated.success_count == 0
         assert updated.failure_count == 0
         assert updated.revision_needed is False
@@ -261,6 +264,7 @@ class TestProcessSessionSkills:
         manager.process_session_skills(self.agent_id, self.session_id)
 
         updated = store.get_skill_by_id(skill.id)
+        assert updated is not None
         assert updated.success_count == 1
 
     def test_auto_pin_after_threshold(self, tmp_path):
@@ -284,6 +288,7 @@ class TestProcessSessionSkills:
             manager.process_session_skills(self.agent_id, sid)
 
         updated = store.get_skill_by_id(skill.id)
+        assert updated is not None
         assert updated.auto_pinned is True
 
     def test_no_invocations_is_noop(self, tmp_path):

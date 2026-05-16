@@ -50,7 +50,7 @@ def _make_skill(**kwargs) -> Skill:
         updated_at=now,
     )
     defaults.update(kwargs)
-    return Skill(**defaults)
+    return Skill(**defaults)  # type: ignore[arg-type]
 
 
 class TestSkillModel:

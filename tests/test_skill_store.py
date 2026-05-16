@@ -110,6 +110,7 @@ class TestInMemorySkillStore:
         self.store.save_skill(skill)
         self.store.update_skill_status(skill.id, SkillStatus.disabled)
         updated = self.store.get_skill_by_id(skill.id)
+        assert updated is not None
         assert updated.status == SkillStatus.disabled
 
     def test_update_pinning(self):
@@ -117,6 +118,7 @@ class TestInMemorySkillStore:
         self.store.save_skill(skill)
         self.store.update_pinning(skill.id, user_pinned=True)
         updated = self.store.get_skill_by_id(skill.id)
+        assert updated is not None
         assert updated.user_pinned is True
 
     def test_update_stats_success(self):
@@ -124,6 +126,7 @@ class TestInMemorySkillStore:
         self.store.save_skill(skill)
         self.store.update_stats(skill.id, success_delta=1)
         updated = self.store.get_skill_by_id(skill.id)
+        assert updated is not None
         assert updated.success_count == 1
 
     def test_update_stats_failure(self):
@@ -131,6 +134,7 @@ class TestInMemorySkillStore:
         self.store.save_skill(skill)
         self.store.update_stats(skill.id, failure_delta=2)
         updated = self.store.get_skill_by_id(skill.id)
+        assert updated is not None
         assert updated.failure_count == 2
 
     def test_bump_sessions_since_use(self):
@@ -139,6 +143,7 @@ class TestInMemorySkillStore:
         # exclude nothing → should bump
         self.store.bump_sessions_since_use(self.agent_id, exclude_skill_ids=set())
         updated = self.store.get_skill_by_id(pinned.id)
+        assert updated is not None
         assert updated.sessions_since_use == 1
 
     def test_bump_sessions_since_use_excludes(self):
@@ -147,6 +152,7 @@ class TestInMemorySkillStore:
         # exclude this skill → sessions_since_use stays 0
         self.store.bump_sessions_since_use(self.agent_id, exclude_skill_ids={pinned.id})
         updated = self.store.get_skill_by_id(pinned.id)
+        assert updated is not None
         assert updated.sessions_since_use == 0
 
     def test_set_revision_needed(self):
@@ -154,6 +160,7 @@ class TestInMemorySkillStore:
         self.store.save_skill(skill)
         self.store.set_revision_needed(skill.id, priority_bump=3)
         updated = self.store.get_skill_by_id(skill.id)
+        assert updated is not None
         assert updated.revision_needed is True
         assert updated.revision_priority == 3
 
@@ -164,6 +171,7 @@ class TestInMemorySkillStore:
         inv_id = self.store.create_invocation(skill.id, self.agent_id, session_id)
         # invocations_count should be incremented on skill
         updated_skill = self.store.get_skill_by_id(skill.id)
+        assert updated_skill is not None
         assert updated_skill.invocations_count == 1
         assert updated_skill.sessions_since_use == 0
         assert updated_skill.last_used_at is not None
