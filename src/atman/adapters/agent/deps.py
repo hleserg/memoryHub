@@ -25,6 +25,7 @@ if TYPE_CHECKING:
     from atman.core.ports.state_store import StateStore
     from atman.core.services.experience_service import ExperienceService
     from atman.core.services.identity_service import IdentityService
+    from atman.core.services.passive_memory_injector import PassiveMemoryInjector
     from atman.core.services.reflection_service import MicroReflectionService
     from atman.core.services.session_manager import SessionManager
 
@@ -82,6 +83,10 @@ class AtmanDeps:
     """Optional queue for agent-initiated reflection requests. When provided,
     the runner exposes the `request_reflection` tool."""
 
+    passive_memory_injector: PassiveMemoryInjector | None = None
+    """Optional RAG pipeline. When present, surfaces relevant facts and key moments
+    before each agent.run() call and respects the configured rag_token_budget."""
+
     @classmethod
     def from_config(
         cls,
@@ -96,6 +101,7 @@ class AtmanDeps:
         session_id: UUID | None = None,
         pending_review_inbox: PendingHumanReviewInbox | None = None,
         reflection_request_queue: ReflectionRequestQueue | None = None,
+        passive_memory_injector: PassiveMemoryInjector | None = None,
     ) -> AtmanDeps:
         """
         Build :class:`AtmanDeps` from a validated :class:`AgentConfig`.
@@ -120,4 +126,5 @@ class AtmanDeps:
             model_config=config.model,
             pending_review_inbox=pending_review_inbox,
             reflection_request_queue=reflection_request_queue,
+            passive_memory_injector=passive_memory_injector,
         )

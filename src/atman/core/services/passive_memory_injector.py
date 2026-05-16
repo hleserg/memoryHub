@@ -9,7 +9,7 @@ When LinguisticAnalyzer + MemoryReranker are provided (LINGUISTIC_ENABLED=True),
 uses ambient-anchor mode: parallel queries per entity/anchor type, then reranking.
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from uuid import UUID
 
 from atman.core.models import FactRecord, KeyMoment, SessionExperience
@@ -26,6 +26,52 @@ class SurfacedMemory:
     item: FactRecord | SessionExperience | KeyMoment
     source: str  # "similarity" or "associative" or "dense" or "ambient_rerank"
     score: float  # relevance score
+
+
+@dataclass
+class RagContext:
+    """Result of token-budget-capped RAG selection."""
+
+    items: list[SurfacedMemory] = field(default_factory=list)
+    tokens_used: int = 0
+
+
+def estimate_tokens(text: str) -> int:
+    """Fast token count heuristic (no tokenizer needed): 4 chars ≈ 1 token."""
+    return len(text) // 4
+
+
+def _surfaced_text(mem: SurfacedMemory) -> str:
+    """Return the primary text of a surfaced memory item for token estimation."""
+    item = mem.item
+    if isinstance(item, FactRecord):
+        return item.content
+    if isinstance(item, KeyMoment):
+        return f"{item.what_happened} {item.why_it_matters}"
+    if isinstance(item, SessionExperience):
+        return getattr(item, "agent_recap", "") or ""
+    return ""
+
+
+def build_rag_context(
+    candidates: list[SurfacedMemory],
+    budget: int = 2000,
+) -> RagContext:
+    """
+    Select candidates within a token budget, highest-scored first.
+
+    Candidates are assumed to be pre-sorted by descending score.
+    Stops as soon as adding the next candidate would exceed the budget.
+    """
+    result: list[SurfacedMemory] = []
+    spent = 0
+    for candidate in candidates:
+        t = estimate_tokens(_surfaced_text(candidate))
+        if spent + t > budget:
+            break
+        result.append(candidate)
+        spent += t
+    return RagContext(items=result, tokens_used=spent)
 
 
 class PassiveMemoryInjector:

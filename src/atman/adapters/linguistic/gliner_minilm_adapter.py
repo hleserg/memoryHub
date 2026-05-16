@@ -91,6 +91,9 @@ class GLiNERPlusMiniLMAdapter(LinguisticAnalyzer):
 
         self._gliner: Any = None
         self._classifier: Any = None
+        # Per-session cache: SHA-256(text) → UserMessageAnalysis.
+        # Cleared on session end by the runner via clear_session_cache().
+        self._session_cache: dict[str, UserMessageAnalysis] = {}
 
     # ------------------------------------------------------------------
     # Lazy model loaders
@@ -258,18 +261,34 @@ class GLiNERPlusMiniLMAdapter(LinguisticAnalyzer):
     # LinguisticAnalyzer interface
     # ------------------------------------------------------------------
 
+    def clear_session_cache(self) -> None:
+        """Drop all cached analyses. Call at session end to free memory."""
+        self._session_cache.clear()
+
     @override
     def analyze_user_message(self, text: str) -> UserMessageAnalysis:
-        """Extract entities and ambient anchors from a raw user message."""
+        """Extract entities and ambient anchors from a raw user message.
+
+        Results are cached per session by SHA-256(text) so repeated mentions
+        of the same phrase skip GLiNER + MiniLM inference entirely.
+        """
+        import hashlib
+
+        key = hashlib.sha256(text.encode()).hexdigest()
+        cached = self._session_cache.get(key)
+        if cached is not None:
+            return cached
         entities = self._run_ner(text)
         anchors = self._extract_anchors(entities, text)
         language = self._detect_language(text)
-        return UserMessageAnalysis(
+        result = UserMessageAnalysis(
             text=text,
             entities=entities,
             anchors=anchors,
             detected_language=language,
         )
+        self._session_cache[key] = result
+        return result
 
     @override
     def analyze_agent_message(

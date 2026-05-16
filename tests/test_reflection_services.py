@@ -39,6 +39,7 @@ from atman.core.models.reflection import (
     ReflectionLevel,
     ReframingNoteOutput,
 )
+from atman.core.models.session import Session
 from atman.core.narrative_write_audit import NoOpNarrativeWriteAudit
 from atman.core.reflection_event_audit import NoOpReflectionEventPersistenceObserver
 from atman.core.reflection_run_keys import (
@@ -57,11 +58,50 @@ from atman.core.services.reflection_service import (
 
 
 class MockExperienceRepo:
-    """Mock experience repository."""
+    """
+    Mock experience repository.
+
+    Implements both the legacy :class:`ExperienceRepository` surface (still
+    used by Micro and Deep reflection in these tests) AND the new
+    :class:`SessionRepository` surface (used by Daily reflection after R3),
+    so the same fixture can drive either port without test duplication.
+
+    For SessionRepository methods a synthetic ``Session`` per experience is
+    derived from the fixture's ``timestamp`` and ``identity_snapshot_id``,
+    and one ``KeyMoment`` per ``key_moment_id`` is generated with safe
+    defaults.
+    """
 
     def __init__(self, experiences: list[SessionExperience]):
         """Initialize with experiences."""
         self.experiences = {exp.id: exp for exp in experiences}
+        self._sessions: dict[UUID, Session] = {}
+        self._moments_by_session: dict[UUID, list[KeyMoment]] = {}
+        for exp in experiences:
+            self._sessions[exp.id] = Session(
+                id=exp.id,
+                agent_id=uuid4(),
+                started_at=exp.timestamp,
+                identity_snapshot_id=exp.identity_snapshot_id,
+            )
+            depth = (
+                EmotionalDepth.PROFOUND if exp.has_profound_moment else EmotionalDepth.MEANINGFUL
+            )
+            self._moments_by_session[exp.id] = [
+                KeyMoment(
+                    id=km_id,
+                    session_id=exp.id,
+                    what_happened="synthetic",
+                    how_i_felt=FeltSense(
+                        emotional_valence=0.0,
+                        emotional_intensity=exp.avg_emotional_intensity,
+                        depth=depth,
+                    ),
+                    why_it_matters="synthetic test moment",
+                    values_touched=[],
+                )
+                for km_id in exp.key_moment_ids
+            ]
 
     def get(self, experience_id: UUID) -> SessionExperience | None:
         """Get experience by ID."""
@@ -101,6 +141,41 @@ class MockExperienceRepo:
             return ReframingNoteAppendResult.DUPLICATE_TRIGGERED_BY
         exp.add_reframing_note(note)
         return ReframingNoteAppendResult.STORED
+
+    # --- SessionRepository surface ----------------------------------------
+
+    def get_session(self, session_id: UUID) -> Session | None:
+        return self._sessions.get(session_id)
+
+    def list_recent_sessions(
+        self, agent_id: UUID | None = None, *, limit: int = 10
+    ) -> list[Session]:
+        return sorted(self._sessions.values(), key=lambda s: s.started_at, reverse=True)[:limit]
+
+    def get_sessions_in_range(
+        self,
+        agent_id_or_start: UUID | datetime,
+        start_or_end: datetime,
+        end: datetime | None = None,
+    ) -> list[Session]:
+        if isinstance(agent_id_or_start, datetime):
+            start, end_dt = agent_id_or_start, start_or_end
+        else:
+            start, end_dt = start_or_end, end
+        assert end_dt is not None
+        return sorted(
+            [s for s in self._sessions.values() if start <= s.started_at <= end_dt],
+            key=lambda s: s.started_at,
+        )
+
+    def get_key_moments_for_session(self, session_id: UUID) -> list[KeyMoment]:
+        return list(self._moments_by_session.get(session_id, []))
+
+    def get_key_moments_in_range(self, start: datetime, end: datetime) -> list[KeyMoment]:
+        out: list[KeyMoment] = []
+        for s in self.get_sessions_in_range(start, end):
+            out.extend(self._moments_by_session.get(s.id, []))
+        return out
 
 
 class MockIdentityRepo:
@@ -493,7 +568,7 @@ def test_daily_reflection_detects_patterns() -> None:
     event_store = InMemoryReflectionEventStore()
 
     service = DailyReflectionService(
-        experience_repo=exp_repo,
+        session_repo=exp_repo,
         identity_repo=identity_repo,
         pattern_store=pattern_store,
         reflection_model=reflection_model,
@@ -521,7 +596,7 @@ def test_daily_reflection_adds_reframing_notes() -> None:
     event_store = InMemoryReflectionEventStore()
 
     service = DailyReflectionService(
-        experience_repo=exp_repo,
+        session_repo=exp_repo,
         identity_repo=identity_repo,
         pattern_store=pattern_store,
         reflection_model=reflection_model,
@@ -549,7 +624,7 @@ def test_daily_reflection_reframing_count_skips_failed_persist() -> None:
     event_store = InMemoryReflectionEventStore()
 
     service = DailyReflectionService(
-        experience_repo=exp_repo,
+        session_repo=exp_repo,
         identity_repo=identity_repo,
         pattern_store=pattern_store,
         reflection_model=reflection_model,
@@ -578,7 +653,7 @@ def test_daily_reflection_skips_short_structured_pattern_output() -> None:
     reflection_model = StructuredOutputReflectionModel(pattern_description="123456789")
 
     service = DailyReflectionService(
-        experience_repo=exp_repo,
+        session_repo=exp_repo,
         identity_repo=identity_repo,
         pattern_store=pattern_store,
         reflection_model=reflection_model,
@@ -608,7 +683,7 @@ def test_daily_reflection_persists_minimum_length_structured_pattern_output() ->
     )
 
     service = DailyReflectionService(
-        experience_repo=exp_repo,
+        session_repo=exp_repo,
         identity_repo=identity_repo,
         pattern_store=pattern_store,
         reflection_model=reflection_model,
@@ -650,7 +725,7 @@ def test_daily_reflection_reframing_boundary_uses_stripped_length(
     )
 
     service = DailyReflectionService(
-        experience_repo=exp_repo,
+        session_repo=exp_repo,
         identity_repo=identity_repo,
         pattern_store=pattern_store,
         reflection_model=reflection_model,
@@ -686,7 +761,7 @@ def test_deep_reflection_performs_health_assessment() -> None:
     event_store = InMemoryReflectionEventStore()
 
     service = DeepReflectionService(
-        experience_repo=exp_repo,
+        session_repo=exp_repo,
         identity_repo=identity_repo,
         narrative_repo=narrative_repo,
         pattern_store=pattern_store,
@@ -733,7 +808,7 @@ def test_deep_reflection_proposes_changes() -> None:
     event_store = InMemoryReflectionEventStore()
 
     service = DeepReflectionService(
-        experience_repo=exp_repo,
+        session_repo=exp_repo,
         identity_repo=identity_repo,
         narrative_repo=narrative_repo,
         pattern_store=pattern_store,
@@ -779,7 +854,7 @@ def test_deep_reflection_promotes_structured_pattern_implications() -> None:
         reframing_text="Strategic reframing note",
     )
     service = DeepReflectionService(
-        experience_repo=exp_repo,
+        session_repo=exp_repo,
         identity_repo=identity_repo,
         narrative_repo=narrative_repo,
         pattern_store=pattern_store,
@@ -821,7 +896,7 @@ def test_deep_reflection_fixture_json_adds_reframing() -> None:
     event_store = InMemoryReflectionEventStore()
 
     service = DeepReflectionService(
-        experience_repo=exp_repo,
+        session_repo=exp_repo,
         identity_repo=identity_repo,
         narrative_repo=narrative_repo,
         pattern_store=pattern_store,
@@ -853,7 +928,7 @@ def test_daily_reflection_skipped_no_identity_preserves_experience_ids() -> None
     event_store = InMemoryReflectionEventStore()
 
     service = DailyReflectionService(
-        experience_repo=exp_repo,
+        session_repo=exp_repo,
         identity_repo=identity_repo,
         pattern_store=pattern_store,
         reflection_model=reflection_model,
@@ -891,7 +966,7 @@ def test_deep_reflection_skipped_no_identity_preserves_experience_ids() -> None:
     event_store = InMemoryReflectionEventStore()
 
     service = DeepReflectionService(
-        experience_repo=exp_repo,
+        session_repo=exp_repo,
         identity_repo=identity_repo,
         narrative_repo=narrative_repo,
         pattern_store=pattern_store,
@@ -935,7 +1010,7 @@ def test_deep_reflection_persist_failure_links_health_assessment() -> None:
     observer = _CapturingReflectionEventObserver()
 
     service = DeepReflectionService(
-        experience_repo=exp_repo,
+        session_repo=exp_repo,
         identity_repo=identity_repo,
         narrative_repo=narrative_repo,
         pattern_store=pattern_store,
@@ -1064,7 +1139,7 @@ def test_daily_reflection_second_run_same_window_is_idempotent() -> None:
     event_store = InMemoryReflectionEventStore()
 
     service = DailyReflectionService(
-        experience_repo=exp_repo,
+        session_repo=exp_repo,
         identity_repo=identity_repo,
         pattern_store=pattern_store,
         reflection_model=reflection_model,
@@ -1110,7 +1185,7 @@ def test_daily_reflect_naive_anchor_compatible_with_utc_experience_timestamps() 
     event_store = InMemoryReflectionEventStore()
 
     service = DailyReflectionService(
-        experience_repo=exp_repo,
+        session_repo=exp_repo,
         identity_repo=identity_repo,
         pattern_store=pattern_store,
         reflection_model=reflection_model,
@@ -1141,7 +1216,7 @@ def test_daily_reflect_utc_calendar_day_from_timezone_aware_anchor() -> None:
     event_store = InMemoryReflectionEventStore()
 
     service = DailyReflectionService(
-        experience_repo=exp_repo,
+        session_repo=exp_repo,
         identity_repo=identity_repo,
         pattern_store=pattern_store,
         reflection_model=reflection_model,
@@ -1165,7 +1240,7 @@ def test_daily_empty_day_is_idempotent() -> None:
     event_store = InMemoryReflectionEventStore()
 
     service = DailyReflectionService(
-        experience_repo=exp_repo,
+        session_repo=exp_repo,
         identity_repo=identity_repo,
         pattern_store=pattern_store,
         reflection_model=reflection_model,
@@ -1203,7 +1278,7 @@ def test_deep_empty_period_is_idempotent() -> None:
     event_store = InMemoryReflectionEventStore()
 
     service = DeepReflectionService(
-        experience_repo=exp_repo,
+        session_repo=exp_repo,
         identity_repo=identity_repo,
         narrative_repo=narrative_repo,
         pattern_store=pattern_store,
@@ -1238,7 +1313,7 @@ def test_daily_reflection_retry_after_event_save_failure_counts_duplicate_refram
     observer = _CapturingReflectionEventObserver()
 
     service = DailyReflectionService(
-        experience_repo=exp_repo,
+        session_repo=exp_repo,
         identity_repo=identity_repo,
         pattern_store=pattern_store,
         reflection_model=reflection_model,
@@ -1275,7 +1350,7 @@ def test_daily_reflection_event_save_failure_notifies_observer_after_side_effect
     observer = _CapturingReflectionEventObserver()
 
     service = DailyReflectionService(
-        experience_repo=exp_repo,
+        session_repo=exp_repo,
         identity_repo=identity_repo,
         pattern_store=pattern_store,
         reflection_model=reflection_model,
@@ -1317,7 +1392,7 @@ def test_deep_reflection_retry_after_event_save_failure_counts_duplicate_reframi
     observer = _CapturingReflectionEventObserver()
 
     service = DeepReflectionService(
-        experience_repo=exp_repo,
+        session_repo=exp_repo,
         identity_repo=identity_repo,
         narrative_repo=narrative_repo,
         pattern_store=pattern_store,
@@ -1354,7 +1429,7 @@ def test_daily_reflection_empty_day_is_idempotent() -> None:
     event_store = InMemoryReflectionEventStore()
 
     service = DailyReflectionService(
-        experience_repo=exp_repo,
+        session_repo=exp_repo,
         identity_repo=identity_repo,
         pattern_store=pattern_store,
         reflection_model=reflection_model,
@@ -1384,7 +1459,7 @@ def test_daily_reflection_no_identity_is_idempotent() -> None:
     event_store = InMemoryReflectionEventStore()
 
     service = DailyReflectionService(
-        experience_repo=exp_repo,
+        session_repo=exp_repo,
         identity_repo=identity_repo,
         pattern_store=pattern_store,
         reflection_model=reflection_model,
@@ -1420,7 +1495,7 @@ def test_deep_reflection_empty_window_is_idempotent() -> None:
     event_store = InMemoryReflectionEventStore()
 
     service = DeepReflectionService(
-        experience_repo=exp_repo,
+        session_repo=exp_repo,
         identity_repo=identity_repo,
         narrative_repo=narrative_repo,
         pattern_store=pattern_store,
@@ -1463,7 +1538,7 @@ def test_deep_reflection_no_identity_is_idempotent() -> None:
     event_store = InMemoryReflectionEventStore()
 
     service = DeepReflectionService(
-        experience_repo=exp_repo,
+        session_repo=exp_repo,
         identity_repo=identity_repo,
         narrative_repo=narrative_repo,
         pattern_store=pattern_store,
@@ -1504,7 +1579,7 @@ def test_deep_reflection_second_successful_run_is_idempotent() -> None:
     event_store = InMemoryReflectionEventStore()
 
     service = DeepReflectionService(
-        experience_repo=exp_repo,
+        session_repo=exp_repo,
         identity_repo=identity_repo,
         narrative_repo=narrative_repo,
         pattern_store=pattern_store,
@@ -1568,7 +1643,7 @@ def test_deep_reflection_repeated_run_does_not_duplicate_snapshot() -> None:
     event_store = InMemoryReflectionEventStore()
 
     service = DeepReflectionService(
-        experience_repo=exp_repo,
+        session_repo=exp_repo,
         identity_repo=identity_repo,
         narrative_repo=narrative_repo,
         pattern_store=pattern_store,
@@ -1609,7 +1684,7 @@ def test_daily_reflection_repeated_run_does_not_duplicate_snapshot() -> None:
     event_store = InMemoryReflectionEventStore()
 
     service = DailyReflectionService(
-        experience_repo=exp_repo,
+        session_repo=exp_repo,
         identity_repo=identity_repo,
         pattern_store=pattern_store,
         reflection_model=MockReflectionModel(),

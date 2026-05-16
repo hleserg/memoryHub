@@ -80,7 +80,7 @@ class SessionRepository(Protocol):
         ...
 
     def add_reframing_note(
-        self, session_id: UUID, note: ReframingNote
+        self, session_id: UUID, note: ReframingNote, /
     ) -> ReframingNoteAppendResult:
         """Append a reframing note to the session.
 

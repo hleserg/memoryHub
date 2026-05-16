@@ -12,7 +12,13 @@ from atman.adapters.storage.in_memory_state_store import InMemoryStateStore
 from atman.core.models import KeyMoment, SessionExperience
 from atman.core.models.experience import EmotionalDepth, ExperienceRecord, FeltSense
 from atman.core.models.fact import FactRecord, FactStatus, Relation
-from atman.core.services.passive_memory_injector import PassiveMemoryInjector
+from atman.core.services.passive_memory_injector import (
+    PassiveMemoryInjector,
+    SurfacedMemory,
+    _surfaced_text,
+    build_rag_context,
+    estimate_tokens,
+)
 from atman.core.services.session_working_memory import SessionWorkingMemory
 
 
@@ -335,3 +341,98 @@ def test_surface_for_context_uses_lookback_window_in_state_store():
 
     records = store.list_recent_experiences(limit=2)
     assert [r.experience.id for r in records] == [newer.id, older.id]
+
+
+# ---------------------------------------------------------------------------
+# Tests for build_rag_context, estimate_tokens, _surfaced_text
+# ---------------------------------------------------------------------------
+
+
+def _fact(content: str = "hello world") -> FactRecord:
+    return FactRecord(content=content, source="test", status=FactStatus.ACTIVE)
+
+
+def _key_moment(what: str = "something", why: str = "matters") -> KeyMoment:
+    return KeyMoment(
+        what_happened=what,
+        when=datetime.now(UTC),
+        how_i_felt=FeltSense(
+            emotional_valence=0.0,
+            emotional_intensity=0.5,
+            depth=EmotionalDepth.MEANINGFUL,
+        ),
+        why_it_matters=why,
+    )
+
+
+def _surfaced(item, score: float = 1.0, source: str = "similarity") -> SurfacedMemory:
+    return SurfacedMemory(item=item, source=source, score=score)
+
+
+def test_estimate_tokens_basic():
+    assert estimate_tokens("abcd") == 1
+    assert estimate_tokens("") == 0
+    assert estimate_tokens("a" * 400) == 100
+
+
+def test_surfaced_text_fact():
+    f = _fact("Paris is the capital of France")
+    assert _surfaced_text(_surfaced(f)) == "Paris is the capital of France"
+
+
+def test_surfaced_text_key_moment():
+    km = _key_moment(what="I helped someone", why="it felt meaningful")
+    text = _surfaced_text(_surfaced(km))
+    assert "I helped someone" in text
+    assert "it felt meaningful" in text
+
+
+def test_surfaced_text_session_experience_uses_agent_recap():
+    exp = SessionExperience(
+        session_id=uuid4(),
+        key_moment_ids=[uuid4()],
+        avg_emotional_intensity=0.5,
+        has_profound_moment=False,
+        agent_recap="A productive session",
+    )
+    mem = _surfaced(exp)
+    assert _surfaced_text(mem) == "A productive session"
+
+
+def test_surfaced_text_session_experience_none_recap():
+    exp = SessionExperience(
+        session_id=uuid4(),
+        key_moment_ids=[uuid4()],
+        avg_emotional_intensity=0.5,
+        has_profound_moment=False,
+        agent_recap=None,
+    )
+    assert _surfaced_text(_surfaced(exp)) == ""
+
+
+def test_build_rag_context_empty():
+    ctx = build_rag_context([], budget=1000)
+    assert ctx.items == []
+    assert ctx.tokens_used == 0
+
+
+def test_build_rag_context_fits_within_budget():
+    # Each fact is 4 chars = 1 token; budget is 3 tokens
+    items = [_surfaced(_fact("abcd")) for _ in range(5)]
+    ctx = build_rag_context(items, budget=3)
+    assert len(ctx.items) == 3
+    assert ctx.tokens_used == 3
+
+
+def test_build_rag_context_stops_before_overflow():
+    small = _surfaced(_fact("a" * 4))  # 1 token
+    large = _surfaced(_fact("b" * 400))  # 100 tokens
+    ctx = build_rag_context([small, large], budget=50)
+    assert ctx.items == [small]
+    assert ctx.tokens_used == 1
+
+
+def test_build_rag_context_all_fit():
+    items = [_surfaced(_fact("abcd")) for _ in range(3)]
+    ctx = build_rag_context(items, budget=10)
+    assert len(ctx.items) == 3

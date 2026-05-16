@@ -2,7 +2,7 @@
 Port interface for reflection persistence (PostgreSQL reflections table).
 
 This port defines the contract for storing and retrieving reflections
-from the `public.reflections` table. It is separate from ReflectionEventStore
+from per-agent `agent_{N}.reflections` tables. It is separate from ReflectionEventStore
 (which stores in-memory reflection events).
 
 The ReflectionStore is used by:

@@ -120,3 +120,27 @@ class AgentConfig(BaseModel):
             "'user_message': as a user-side turn (fallback for restricted host systems)."
         ),
     )
+    rag_token_budget: int = Field(
+        default=2000,
+        gt=0,
+        description=(
+            "Max tokens for RAG memory context injected per request. "
+            "Uses len//4 heuristic. Prevents cost explosion as memory accumulates."
+        ),
+    )
+    enable_prompt_caching: bool = Field(
+        default=False,
+        description=(
+            "Split memory context into stable prefix (identity, stances) and dynamic suffix (RAG). "
+            "Stable prefix is injected once at session start. "
+            "For Anthropic Claude: enables cache_control caching of the stable block."
+        ),
+    )
+    max_moments_per_reflection: int = Field(
+        default=30,
+        gt=0,
+        description=(
+            "Hard limit on KeyMoments fed into a single reflection pass. "
+            "Excess moments (lowest salience) are skipped to the next cycle."
+        ),
+    )

@@ -38,6 +38,7 @@ from atman.core.ports.reflection import (
     ReflectionEventStore,
     ReflectionModel,
 )
+from atman.core.ports.session_repository import SessionRepository
 from atman.core.reflection_event_audit import NoOpReflectionEventPersistenceObserver
 from atman.core.reflection_run_keys import (
     daily_pattern_detection_key,
@@ -53,6 +54,7 @@ from atman.core.reflection_run_keys import (
     reframing_trigger_key,
 )
 from atman.core.services.narrative_revision import NarrativeRevisionService
+from atman.core.services.session_experience_view import build_session_experience
 
 
 # PLAYBOOK-START
@@ -256,7 +258,7 @@ class DailyReflectionService:
 
     def __init__(
         self,
-        experience_repo: ExperienceRepository,
+        session_repo: SessionRepository,
         identity_repo: IdentityRepository,
         pattern_store: PatternStore,
         reflection_model: ReflectionModel,
@@ -266,7 +268,7 @@ class DailyReflectionService:
         reflection_event_observer: ReflectionEventPersistenceObserver | None = None,
     ):
         """Initialize daily reflection service."""
-        self.experience_repo = experience_repo
+        self.session_repo = session_repo
         self.identity_repo = identity_repo
         self.pattern_store = pattern_store
         self.reflection_model = reflection_model
@@ -290,7 +292,13 @@ class DailyReflectionService:
         calendar_anchor = ensure_utc(date)
         start, end = _utc_calendar_day_bounds(calendar_anchor)
 
-        experiences = self.experience_repo.get_in_range(start, end)
+        sessions = self.session_repo.get_sessions_in_range(start, end)
+        experiences: list[SessionExperience] = []
+        for s in sessions:
+            moments = self.session_repo.get_key_moments_for_session(s.id)
+            if not moments:
+                continue
+            experiences.append(build_session_experience(s, moments))
 
         if not experiences:
             return self._create_empty_event(calendar_anchor)
@@ -412,7 +420,7 @@ class DailyReflectionService:
                     reflection_type=reframing_out.reflection_type,
                     triggered_by=reframing_trigger_key(run_key, exp.id),
                 )
-                outcome = self.experience_repo.add_reframing_note(exp.id, note)
+                outcome = self.session_repo.add_reframing_note(exp.id, note)
                 if outcome == ReframingNoteAppendResult.STORED:
                     count += 1
                 elif outcome == ReframingNoteAppendResult.EXPERIENCE_NOT_FOUND:
@@ -491,7 +499,7 @@ class DeepReflectionService:
 
     def __init__(
         self,
-        experience_repo: ExperienceRepository,
+        session_repo: SessionRepository,
         identity_repo: IdentityRepository,
         narrative_repo: NarrativeRepository,
         pattern_store: PatternStore,
@@ -503,7 +511,7 @@ class DeepReflectionService:
         reflection_event_observer: ReflectionEventPersistenceObserver | None = None,
     ):
         """Initialize deep reflection service."""
-        self.experience_repo = experience_repo
+        self.session_repo = session_repo
         self.identity_repo = identity_repo
         self.narrative_repo = narrative_repo
         self.pattern_store = pattern_store
@@ -528,7 +536,13 @@ class DeepReflectionService:
         """
         since_utc = ensure_utc(since)
         until_utc = ensure_utc(until)
-        experiences = self.experience_repo.get_in_range(since_utc, until_utc)
+        sessions = self.session_repo.get_sessions_in_range(since_utc, until_utc)
+        experiences: list[SessionExperience] = []
+        for s in sessions:
+            moments = self.session_repo.get_key_moments_for_session(s.id)
+            if not moments:
+                continue
+            experiences.append(build_session_experience(s, moments))
 
         if not experiences:
             return self._create_empty_event(since_utc, until_utc)
@@ -724,7 +738,7 @@ class DeepReflectionService:
                     reflection_type=reframing_out.reflection_type,
                     triggered_by=reframing_trigger_key(run_key, exp.id),
                 )
-                outcome = self.experience_repo.add_reframing_note(exp.id, note)
+                outcome = self.session_repo.add_reframing_note(exp.id, note)
                 if outcome == ReframingNoteAppendResult.STORED:
                     count += 1
                 elif outcome == ReframingNoteAppendResult.EXPERIENCE_NOT_FOUND:

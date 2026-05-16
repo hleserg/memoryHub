@@ -1,4 +1,4 @@
--- Migration 0007: Pending human review inbox for reflection's "I'm not sure" items.
+-- Migration 0013: Pending human review inbox for reflection's "I'm not sure" items.
 --
 -- Reflection (Daily/Deep) writes items here when it is not confident enough to
 -- apply an identity/narrative change on its own. The agent runner picks up
@@ -8,7 +8,7 @@
 -- This is additive and idempotent.
 --
 -- Usage:
---   psql -d atman -f migrations/versions/0007_pending_human_review.sql
+--   psql -d atman -f migrations/versions/0013_pending_human_review.sql
 --
 -- Rollback:
 --   DROP TABLE IF EXISTS public.pending_human_review CASCADE;

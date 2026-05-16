@@ -1,4 +1,4 @@
--- Migration 0006: Audit table for self-applied identity/narrative changes.
+-- Migration 0012: Audit table for self-applied identity/narrative changes.
 --
 -- Reflection (Daily and Deep) may apply identity or narrative revisions
 -- on its own through `IdentityService.apply_self_change` /
@@ -12,7 +12,7 @@
 -- This is additive and idempotent.
 --
 -- Usage:
---   psql -d atman -f migrations/versions/0006_self_applied_changes.sql
+--   psql -d atman -f migrations/versions/0012_self_applied_changes.sql
 --
 -- Rollback:
 --   DROP TABLE IF EXISTS public.self_applied_changes CASCADE;

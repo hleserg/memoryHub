@@ -19,6 +19,9 @@ from uuid import UUID, uuid4
 import pytest
 
 from atman.adapters.reflection.mock_reflection_model import MockReflectionModel
+from atman.adapters.reflection.state_store_session_repository import (
+    StateStoreSessionRepository,
+)
 from atman.adapters.storage import FileStateStore
 from atman.adapters.storage.in_memory_reflection_store import (
     InMemoryHealthAssessmentStore,
@@ -29,6 +32,7 @@ from atman.core.models import (
     EmotionalDepth,
     FeltSense,
     KeyMoment,
+    Session,
     SessionExperience,
 )
 from atman.core.models.experience import (
@@ -181,8 +185,9 @@ def _build_session_experience(
     intensity: float,
     depth: EmotionalDepth,
     value_label: str,
-) -> SessionExperience:
+) -> tuple[SessionExperience, KeyMoment]:
     km = KeyMoment(
+        session_id=session_id,
         what_happened=f"E2E test event for {value_label}",
         how_i_felt=FeltSense(
             emotional_valence=valence,
@@ -191,14 +196,16 @@ def _build_session_experience(
         ),
         why_it_matters=f"Tests integration around {value_label}",
         values_touched=[value_label, "competence"],
+        when=when,
     )
-    return SessionExperience(
+    exp = SessionExperience(
         session_id=session_id,
         timestamp=when,
         key_moment_ids=[km.id],
         avg_emotional_intensity=km.how_i_felt.emotional_intensity,
         has_profound_moment=km.how_i_felt.depth == EmotionalDepth.PROFOUND,
     )
+    return exp, km
 
 
 @pytest.mark.slow
@@ -224,7 +231,9 @@ def test_bootstrap_to_deep_reflection_full_lifecycle():
         identity = identity_service.bootstrap_identity(agent_id)
         assert identity.self_description != ""
         assert len(identity.open_questions) >= 1
-        assert len(identity_service.list_snapshots(agent_id)) == 1
+        snapshots = identity_service.list_snapshots(agent_id)
+        assert len(snapshots) == 1
+        initial_snapshot_id = snapshots[0].id
 
         # --- G (skeleton): create initial narrative -------------------------
         narrative_service = NarrativeService(store)
@@ -232,9 +241,9 @@ def test_bootstrap_to_deep_reflection_full_lifecycle():
 
         # --- B. Record 5 experiences (§3 B) ---------------------------------
         experience_service = ExperienceService(store)
-        session_id = uuid4()
         today = datetime.now(UTC).replace(hour=12, minute=0, second=0, microsecond=0)
         experiences = []
+        session_ids: list[UUID] = []
         labels_depths = [
             ("honesty", EmotionalDepth.MEANINGFUL, 0.4, 0.6),
             ("competence", EmotionalDepth.PROFOUND, 0.2, 0.8),
@@ -242,10 +251,16 @@ def test_bootstrap_to_deep_reflection_full_lifecycle():
             ("honesty", EmotionalDepth.MEANINGFUL, -0.2, 0.5),
             ("competence", EmotionalDepth.PROFOUND, 0.5, 0.9),
         ]
+        # In v3 memory architecture each experience is its own session: persist
+        # one Session + one KeyMoment per labelled event so the R3
+        # SessionRepository-backed daily reflection sees 5 distinct sessions.
         for i, (label, depth, valence, intensity) in enumerate(labels_depths):
-            exp = _build_session_experience(
-                session_id=session_id,
-                when=today + timedelta(minutes=i * 5),
+            sid = uuid4()
+            session_ids.append(sid)
+            when = today + timedelta(minutes=i * 5)
+            exp, km = _build_session_experience(
+                session_id=sid,
+                when=when,
                 valence=valence,
                 intensity=intensity,
                 depth=depth,
@@ -253,11 +268,22 @@ def test_bootstrap_to_deep_reflection_full_lifecycle():
             )
             experiences.append(exp)
             experience_service.create_experience(exp)
+            store.create_session(
+                Session(
+                    id=sid,
+                    agent_id=agent_id,
+                    started_at=when,
+                    identity_snapshot_id=initial_snapshot_id,
+                    status="active",
+                )
+            )
+            store.store_key_moments(sid, [km])
 
         assert len(experience_service.list_recent(limit=20)) == 5
 
         # Build adapters for reflection ports.
         exp_repo = _StateStoreExperienceRepo(store)
+        session_repo = StateStoreSessionRepository(store, agent_id=agent_id)
         identity_repo = _InMemoryIdentityRepo(store, identity)
         narrative_repo = _NarrativeRepoOverFileStateStore(store, identity.id)
 
@@ -278,9 +304,10 @@ def test_bootstrap_to_deep_reflection_full_lifecycle():
             narrative_revision=narrative_revision,
             event_store=event_store,
         )
-        micro_event = micro.reflect(session_id)
+        micro_events = [micro.reflect(sid) for sid in session_ids]
+        micro_event = micro_events[-1]
         assert micro_event.reflection_level == ReflectionLevel.MICRO
-        assert len(micro_event.experiences_analyzed) == 5
+        assert sum(len(e.experiences_analyzed) for e in micro_events) == 5
 
         narrative_after_micro = store.load_narrative(identity.id)
         assert narrative_after_micro is not None
@@ -291,7 +318,7 @@ def test_bootstrap_to_deep_reflection_full_lifecycle():
 
         # --- D. Daily reflection (§3 D) -------------------------------------
         daily = DailyReflectionService(
-            experience_repo=exp_repo,
+            session_repo=session_repo,
             identity_repo=identity_repo,
             pattern_store=pattern_store,
             reflection_model=reflection_model,
@@ -307,7 +334,7 @@ def test_bootstrap_to_deep_reflection_full_lifecycle():
         until = today + timedelta(hours=12)
 
         deep = DeepReflectionService(
-            experience_repo=exp_repo,
+            session_repo=session_repo,
             identity_repo=identity_repo,
             narrative_repo=narrative_repo,
             pattern_store=pattern_store,

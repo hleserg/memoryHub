@@ -504,7 +504,7 @@ class ReflectionRecord(BaseModel):
     """
     PostgreSQL persistence model for reflections table.
 
-    Maps to public.reflections schema. This is the canonical persistent format
+    Maps to agent_{N}.reflections schema. This is the canonical persistent format
     for reflections (micro/daily/deep) stored in PostgreSQL.
 
     Schema corresponds to:

@@ -582,6 +582,7 @@ class SessionManager:
             emotional_baseline=identity.emotional_baseline,
             last_eigenstate=last_eigenstate,
             recent_reflections_summary="",  # Placeholder for future
+            started_at=self._clock.now(),
         )
 
         with self._lock:

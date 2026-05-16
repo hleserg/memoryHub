@@ -17,12 +17,12 @@ needing to invent an ``ExperienceRecord`` shell.
 from __future__ import annotations
 
 from datetime import datetime
-from typing import overload
 from uuid import UUID
 
 from atman.core.models.experience import KeyMoment, ReframingNote, ReframingNoteAppendResult
 from atman.core.models.session import Session
 from atman.core.ports.state_store import StateStore
+from atman.core.services.session_manager import deterministic_session_experience_id
 
 
 class StateStoreSessionRepository:
@@ -68,29 +68,15 @@ class StateStoreSessionRepository:
     def get_session(self, session_id: UUID) -> Session | None:
         return self._store.get_session(session_id)
 
-    @overload
-    def list_recent_sessions(self, agent_id: UUID, *, limit: int = 10) -> list[Session]: ...
-
-    @overload
-    def list_recent_sessions(self, *, limit: int = 10) -> list[Session]: ...
-
     def list_recent_sessions(
         self, agent_id: UUID | None = None, *, limit: int = 10
     ) -> list[Session]:
         return self._store.list_recent_sessions(self._resolve_agent_id(agent_id), limit=limit)
 
-    @overload
-    def get_sessions_in_range(
-        self, agent_id: UUID, start: datetime, end: datetime
-    ) -> list[Session]: ...
-
-    @overload
-    def get_sessions_in_range(self, agent_id: datetime, start: datetime) -> list[Session]: ...
-
     def get_sessions_in_range(
         self,
-        agent_id: UUID | datetime,
-        start: datetime,
+        agent_id_or_start: UUID | datetime,
+        start_or_end: datetime,
         end: datetime | None = None,
     ) -> list[Session]:
         """Filter sessions whose ``started_at`` falls in ``[start, end]``.
@@ -99,13 +85,13 @@ class StateStoreSessionRepository:
           - ``(agent_id, start, end)`` — explicit agent UUID
           - ``(start, end)`` — first arg is range start; uses default ``agent_id``
         """
-        if isinstance(agent_id, datetime):
+        if isinstance(agent_id_or_start, datetime):
             resolved_agent = self._resolve_agent_id(None)
-            range_start = agent_id
-            range_end = start
+            range_start = agent_id_or_start
+            range_end = start_or_end
         else:
-            resolved_agent = self._resolve_agent_id(agent_id)
-            range_start = start
+            resolved_agent = self._resolve_agent_id(agent_id_or_start)
+            range_start = start_or_end
             range_end = end
             if range_end is None:  # pragma: no cover — defensive
                 raise ValueError("get_sessions_in_range: end must be provided")
@@ -145,14 +131,25 @@ class StateStoreSessionRepository:
         silently skip the append on collision; others append blindly), so
         post-hoc length comparison would misclassify the outcome.
         """
-        existing = self._store.get_experience(session_id)
+        # In v2 storage, ExperienceRecord rows are keyed by a deterministic
+        # uuid5 derived from session_id (see
+        # ``deterministic_session_experience_id``) — not the session_id itself.
+        # Translate at the boundary so production paths that go through real
+        # StateStore implementations (FileStateStore, InMemoryStateStore,
+        # PostgresStateStore) actually find the row. Test fixtures that store
+        # experiences keyed by session_id directly fall back below.
+        experience_id = deterministic_session_experience_id(session_id)
+        existing = self._store.get_experience(experience_id)
         if existing is None:
-            return ReframingNoteAppendResult.EXPERIENCE_NOT_FOUND
+            existing = self._store.get_experience(session_id)
+            if existing is None:
+                return ReframingNoteAppendResult.EXPERIENCE_NOT_FOUND
+            experience_id = session_id
         if note.triggered_by and any(
             n.triggered_by == note.triggered_by for n in existing.experience.reframing_notes
         ):
             return ReframingNoteAppendResult.DUPLICATE_TRIGGERED_BY
-        result = self._store.add_reframing_note(session_id, note)
+        result = self._store.add_reframing_note(experience_id, note)
         if result is None:
             return ReframingNoteAppendResult.EXPERIENCE_NOT_FOUND
         return ReframingNoteAppendResult.STORED

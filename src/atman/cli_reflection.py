@@ -27,9 +27,17 @@ from atman.adapters.storage.in_memory_reflection_store import (
     InMemoryReflectionEventStore,
 )
 from atman.core.exceptions import NarrativePersistenceConflictError
-from atman.core.models.experience import ReframingNote, ReframingNoteAppendResult, SessionExperience
+from atman.core.models.experience import (
+    EmotionalDepth,
+    FeltSense,
+    KeyMoment,
+    ReframingNote,
+    ReframingNoteAppendResult,
+    SessionExperience,
+)
 from atman.core.models.identity import Identity, IdentitySnapshot
 from atman.core.models.narrative import LayerType, NarrativeDocument, NarrativeLayer
+from atman.core.models.session import Session
 from atman.core.narrative_write_audit import NoOpNarrativeWriteAudit
 from atman.core.services.narrative_revision import NarrativeRevisionService
 from atman.core.services.reflection_service import (
@@ -92,6 +100,68 @@ class MockExperienceRepo:
             return ReframingNoteAppendResult.DUPLICATE_TRIGGERED_BY
         exp.add_reframing_note(note)
         return ReframingNoteAppendResult.STORED
+
+    # ---- SessionRepository surface (R3) ----------------------------------
+
+    def _synth(self, exp: SessionExperience) -> tuple[Session, list[KeyMoment]]:
+        session = Session(
+            id=exp.id,
+            agent_id=uuid4(),
+            started_at=exp.timestamp,
+            identity_snapshot_id=exp.identity_snapshot_id,
+        )
+        depth = EmotionalDepth.PROFOUND if exp.has_profound_moment else EmotionalDepth.MEANINGFUL
+        moments = [
+            KeyMoment(
+                id=km_id,
+                session_id=exp.id,
+                what_happened="synthetic",
+                how_i_felt=FeltSense(
+                    emotional_valence=0.0,
+                    emotional_intensity=exp.avg_emotional_intensity,
+                    depth=depth,
+                ),
+                why_it_matters="synthetic CLI moment",
+                values_touched=[],
+            )
+            for km_id in exp.key_moment_ids
+        ]
+        return session, moments
+
+    def get_session(self, session_id: UUID) -> Session | None:
+        exp = self.get(session_id)
+        return None if exp is None else self._synth(exp)[0]
+
+    def list_recent_sessions(
+        self, agent_id: UUID | None = None, *, limit: int = 10
+    ) -> list[Session]:
+        return [self._synth(e)[0] for e in self.get_recent(limit)]
+
+    def get_sessions_in_range(
+        self,
+        agent_id_or_start,
+        start_or_end,
+        end=None,
+    ) -> list[Session]:
+        if isinstance(agent_id_or_start, datetime):
+            start, end_dt = agent_id_or_start, start_or_end
+        else:
+            start, end_dt = start_or_end, end
+        assert end_dt is not None
+        return sorted(
+            (self._synth(e)[0] for e in self.get_in_range(start, end_dt)),
+            key=lambda s: s.started_at,
+        )
+
+    def get_key_moments_for_session(self, session_id: UUID) -> list[KeyMoment]:
+        exp = self.get(session_id)
+        return [] if exp is None else self._synth(exp)[1]
+
+    def get_key_moments_in_range(self, start: datetime, end: datetime) -> list[KeyMoment]:
+        out: list[KeyMoment] = []
+        for e in self.get_in_range(start, end):
+            out.extend(self._synth(e)[1])
+        return out
 
 
 class MockIdentityRepo:
@@ -275,7 +345,7 @@ def cmd_reflect_daily(args: list[str]) -> int:
     event_store = InMemoryReflectionEventStore()
 
     service = DailyReflectionService(
-        experience_repo=experience_repo,
+        session_repo=experience_repo,
         identity_repo=identity_repo,
         pattern_store=pattern_store,
         reflection_model=reflection_model,
@@ -321,7 +391,7 @@ def cmd_reflect_deep(args: list[str]) -> int:
     event_store = InMemoryReflectionEventStore()
 
     service = DeepReflectionService(
-        experience_repo=experience_repo,
+        session_repo=experience_repo,
         identity_repo=identity_repo,
         narrative_repo=narrative_repo,
         pattern_store=pattern_store,

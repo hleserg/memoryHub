@@ -33,6 +33,9 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from uuid import UUID, uuid4
 
+from atman.adapters.reflection.state_store_session_repository import (
+    StateStoreSessionRepository,
+)
 from atman.adapters.storage.file_state_store import FileStateStore
 from atman.adapters.storage.in_memory_reflection_store import (
     InMemoryHealthAssessmentStore,
@@ -596,8 +599,9 @@ def _run_e2e_loop(workspace_path: Path) -> int:
     print("[7] Daily Reflection: Pattern detection for day")
     pattern_store = InMemoryPatternStore()
 
+    session_repo = StateStoreSessionRepository(state_store, agent_id=agent_id)
     daily_service = DailyReflectionService(
-        experience_repo=experience_repo,
+        session_repo=session_repo,
         identity_repo=identity_repo,
         pattern_store=pattern_store,
         reflection_model=reflection_model,
@@ -637,7 +641,7 @@ def _run_e2e_loop(workspace_path: Path) -> int:
     health_store = InMemoryHealthAssessmentStore()
 
     deep_service = DeepReflectionService(
-        experience_repo=experience_repo,
+        session_repo=session_repo,
         identity_repo=identity_repo,
         narrative_repo=narrative_repo,
         pattern_store=pattern_store,

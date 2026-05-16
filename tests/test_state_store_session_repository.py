@@ -217,3 +217,30 @@ def test_add_reframing_note_duplicate_trigger_file_store_returns_duplicate(
     record = store.get_experience(sid)
     assert record is not None
     assert len(record.experience.reframing_notes) == 1
+
+
+def test_add_reframing_note_finds_experience_keyed_by_deterministic_uuid() -> None:
+    """Regression: in production, experience records are keyed by
+    ``deterministic_session_experience_id(session_id)`` (a uuid5), not by
+    session_id. The adapter must derive the experience_id at the boundary
+    or every reframing note silently returns EXPERIENCE_NOT_FOUND."""
+    from atman.core.services.session_manager import deterministic_session_experience_id
+
+    store = InMemoryStateStore()
+    session_id = uuid4()
+    experience_id = deterministic_session_experience_id(session_id)
+    m = _make_moment(session_id)
+    exp = SessionExperience(
+        id=experience_id,
+        session_id=session_id,
+        timestamp=datetime.now(UTC),
+        key_moment_ids=[m.id],
+    )
+    store.create_experience(ExperienceRecord(experience=exp))
+
+    repo = StateStoreSessionRepository(store)
+    note = ReframingNote(reflection="r", reflection_type="growth", triggered_by="t1")
+    assert repo.add_reframing_note(session_id, note) is ReframingNoteAppendResult.STORED
+    record = store.get_experience(experience_id)
+    assert record is not None
+    assert len(record.experience.reframing_notes) == 1

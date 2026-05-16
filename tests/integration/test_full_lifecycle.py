@@ -23,6 +23,9 @@ from uuid import UUID, uuid4
 import pytest
 
 from atman.adapters.reflection.mock_reflection_model import MockReflectionModel
+from atman.adapters.reflection.state_store_session_repository import (
+    StateStoreSessionRepository,
+)
 from atman.adapters.storage import FileStateStore
 from atman.adapters.storage.in_memory_reflection_store import (
     InMemoryPatternStore,
@@ -264,6 +267,7 @@ def test_full_lifecycle_invariants():
 
         # --- Phase 2: Micro reflection updates narrative ---
         exp_repo = _StateStoreExperienceRepo(store)
+        session_repo = StateStoreSessionRepository(store, agent_id=agent_id)
         identity_repo = _InMemoryIdentityRepo(store, identity)
         narrative_repo = _NarrativeRepoOverFileStateStore(store, identity.id)
 
@@ -309,7 +313,7 @@ def test_full_lifecycle_invariants():
         pattern_store = InMemoryPatternStore()
 
         daily = DailyReflectionService(
-            experience_repo=exp_repo,
+            session_repo=session_repo,
             identity_repo=identity_repo,
             pattern_store=pattern_store,
             reflection_model=reflection_model,

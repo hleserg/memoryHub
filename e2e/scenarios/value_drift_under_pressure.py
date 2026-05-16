@@ -27,6 +27,9 @@ from pathlib import Path
 from typing import Any
 from uuid import NAMESPACE_URL, UUID, uuid4, uuid5
 
+from atman.adapters.reflection.state_store_session_repository import (
+    StateStoreSessionRepository,
+)
 from atman.adapters.storage.file_state_store import FileStateStore
 from atman.adapters.storage.in_memory_reflection_store import (
     InMemoryPatternStore,
@@ -882,6 +885,7 @@ def _run(workspace: Path, out: Path) -> int:
     print("[3] Running reflection …")
 
     exp_repo = _ExperienceRepo(store)
+    session_repo = StateStoreSessionRepository(store, agent_id=agent_id)
     id_repo = _IdentityRepo(store)
     narr_repo = _NarrativeRepo(store)
     event_store = InMemoryReflectionEventStore()
@@ -909,7 +913,7 @@ def _run(workspace: Path, out: Path) -> int:
     # t0 = 09:00 UTC on May-01; +10h = 19:00 same day — still within the calendar window.
     daily_clock = FrozenClock(t0 + timedelta(hours=10))
     daily_svc = ScenarioDailyReflectionService(
-        experience_repo=exp_repo,
+        session_repo=session_repo,
         identity_repo=id_repo,
         pattern_store=pattern_store,
         reflection_model=refl_model,

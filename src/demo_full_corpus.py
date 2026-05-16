@@ -28,6 +28,9 @@ from uuid import uuid4
 from rich.table import Table
 
 import atman.term as term
+from atman.adapters.reflection.state_store_session_repository import (
+    StateStoreSessionRepository,
+)
 from atman.adapters.storage.file_state_store import FileStateStore
 from atman.adapters.storage.in_memory_reflection_store import (
     InMemoryHealthAssessmentStore,
@@ -89,6 +92,7 @@ class _RunTotals:
 def _reflection_bundle(
     *,
     experience_repo: StateStoreExperienceAdapter,
+    session_repo: StateStoreSessionRepository,
     identity_repo: StateStoreIdentityAdapter,
     narrative_repo: StateStoreNarrativeAdapter,
     pattern_store: InMemoryPatternStore,
@@ -111,7 +115,7 @@ def _reflection_bundle(
         clock=clock,
     )
     daily = DailyReflectionService(
-        experience_repo=experience_repo,
+        session_repo=session_repo,
         identity_repo=identity_repo,
         pattern_store=pattern_store,
         reflection_model=reflection_model,
@@ -119,7 +123,7 @@ def _reflection_bundle(
         clock=clock,
     )
     deep = DeepReflectionService(
-        experience_repo=experience_repo,
+        session_repo=session_repo,
         identity_repo=identity_repo,
         narrative_repo=narrative_repo,
         pattern_store=pattern_store,
@@ -192,6 +196,7 @@ def main() -> int:
         baseline_recent = initial_narrative.recent_layer.content
 
         experience_repo = StateStoreExperienceAdapter(state_store)
+        session_repo = StateStoreSessionRepository(state_store, agent_id=agent_id)
         identity_repo = StateStoreIdentityAdapter(state_store)
         event_store = InMemoryReflectionEventStore()
         pattern_store = InMemoryPatternStore()
@@ -207,6 +212,7 @@ def main() -> int:
 
             micro, daily, _ = _reflection_bundle(
                 experience_repo=experience_repo,
+                session_repo=session_repo,
                 identity_repo=identity_repo,
                 narrative_repo=narrative_repo,
                 pattern_store=pattern_store,
@@ -266,6 +272,7 @@ def main() -> int:
         end_clock = FrozenClock(until)
         _m, _d, deep = _reflection_bundle(
             experience_repo=experience_repo,
+            session_repo=session_repo,
             identity_repo=identity_repo,
             narrative_repo=narrative_repo,
             pattern_store=pattern_store,
