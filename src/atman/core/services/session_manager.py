@@ -830,24 +830,49 @@ class SessionManager:
 
         # Persist experience, eigenstate, and update narrative
         # If this fails, rollback is_finished flag to allow retry
-        # Variables shared between the new-experience branch and the post-persist
-        # update_session block — always-bound defaults so update_session works
-        # even when the experience already existed (recovery path).
+
+        # Compute close_reason cast and unexamined fact refs UNCONDITIONALLY
+        # so the post-persist update_session block (which runs on BOTH the
+        # new-experience and recovery paths) sees the caller-supplied values.
+        # Otherwise a retry after a crash would silently rewrite the Session
+        # row with status='completed' and close_reason=NULL.
+        _allowed_close_reasons = (
+            "timeout_sleep",
+            "menu_timeout",
+            "restart",
+            "forced",
+            "interrupted",
+        )
         safe_close_reason: (
             Literal["timeout_sleep", "menu_timeout", "restart", "forced", "interrupted"] | None
-        ) = None
-        unexamined_fact_refs: list[UUID] = []
+        ) = (
+            cast(
+                Literal[
+                    "timeout_sleep",
+                    "menu_timeout",
+                    "restart",
+                    "forced",
+                    "interrupted",
+                ],
+                close_reason,
+            )
+            if close_reason in _allowed_close_reasons
+            else None
+        )
+        # Compute unexamined facts (read but not colored by any key moment).
+        # Identical to the inner-branch computation; precomputed here so the
+        # recovery path also gets correct unexamined_fact_refs.
+        _colored_fact_ids: set[UUID] = set()
+        for _moment in session_result.key_moments:
+            _colored_fact_ids.update(_moment.fact_refs)
+        unexamined_fact_refs: list[UUID] = list(session_result._facts_read - _colored_fact_ids)
 
         try:
             existing_record = self._state_store.get_experience(experience_id)
             if existing_record is None:
-                # Compute colored_fact_ids (facts referenced in key moments)
-                colored_fact_ids: set[UUID] = set()
-                for moment in session_result.key_moments:
-                    colored_fact_ids.update(moment.fact_refs)
-
-                # Compute unexamined facts (read but not colored)
-                unexamined_fact_refs = list(session_result._facts_read - colored_fact_ids)
+                # Reuse the pre-computed values from above so the new-experience
+                # path stays consistent with the recovery path's update_session.
+                colored_fact_ids = _colored_fact_ids
 
                 # Aggregate all fact_refs (union of colored and unexamined)
                 fact_refs_set: set[UUID] = set()
@@ -878,31 +903,6 @@ class SessionManager:
                         m.how_i_felt.depth == EmotionalDepth.PROFOUND
                         for m in session_result.key_moments
                     )
-
-                _allowed_close_reasons = (
-                    "timeout_sleep",
-                    "menu_timeout",
-                    "restart",
-                    "forced",
-                    "interrupted",
-                )
-                safe_close_reason: (
-                    Literal["timeout_sleep", "menu_timeout", "restart", "forced", "interrupted"]
-                    | None
-                ) = (
-                    cast(
-                        Literal[
-                            "timeout_sleep",
-                            "menu_timeout",
-                            "restart",
-                            "forced",
-                            "interrupted",
-                        ],
-                        close_reason,
-                    )
-                    if close_reason in _allowed_close_reasons
-                    else None
-                )
 
                 experience = SessionExperience(
                     id=experience_id,

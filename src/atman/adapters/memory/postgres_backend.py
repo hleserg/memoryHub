@@ -618,6 +618,10 @@ class PostgresFactualMemory(FactualMemory):
             return []
         schema = self._agent_schema(UUID(agent_id_str))
         if schema is None:
+            # _agent_schema() already ran a SELECT on public.agents which
+            # opens an implicit transaction; commit to release the snapshot
+            # so the connection isn't left idle-in-transaction.
+            self._require_conn().commit()
             return []
 
         conn = self._require_conn()
@@ -642,6 +646,7 @@ class PostgresFactualMemory(FactualMemory):
             rows = cur.fetchall()
         fact_ids = [(row["fact_id"] if isinstance(row, dict) else row[0]) for row in rows]
         if not fact_ids:
+            conn.commit()
             return []
 
         with conn.cursor() as cur:
