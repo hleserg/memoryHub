@@ -823,16 +823,15 @@ class AtmanRunner:
 
                 # Surface relevant memories via RAG when PassiveMemoryInjector is wired.
                 # build_rag_context caps the result to rag_token_budget tokens.
-                if deps.passive_memory_injector is not None:
+                _pmi = deps.passive_memory_injector
+                if _pmi is not None:
                     from atman.core.services.passive_memory_injector import _surfaced_text
 
                     # Reset to base so the previous turn's RAG doesn't persist when
                     # the current turn finds zero relevant memories.
                     deps = replace(deps, injected_context=_base_injected_context)
 
-                    _candidates = deps.passive_memory_injector.surface_for_context(
-                        user_text, working_memory=working_memory
-                    )
+                    _candidates = _pmi.surface_for_context(user_text, working_memory=working_memory)
                     _rag = build_rag_context(_candidates, budget=self._config.rag_token_budget)
                     _LOG.debug(
                         "RAG: items=%d tokens=%d session_cache=%s",
