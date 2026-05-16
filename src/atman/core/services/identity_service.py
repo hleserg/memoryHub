@@ -403,9 +403,10 @@ class IdentityService:
     # paired snapshots gives reviewers a complete diff and gives operators
     # a deterministic rollback without rebuilding from a full event log.
     #
-    # Trade-offs: doubles write volume vs. forward-only logs; reverting
-    # state that was further mutated after the original change requires
-    # explicit conflict policy (this implementation refuses on mismatch).
+    # Trade-offs: doubles write volume vs. forward-only logs. Revert in
+    # this prototype restores the recorded `before` snapshot wholesale, so
+    # any intermediate mutation to the same field is silently overwritten;
+    # production use needs an explicit conflict policy.
     # PLAYBOOK-END
     def apply_self_change(
         self,
