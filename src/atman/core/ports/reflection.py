@@ -15,10 +15,17 @@ from datetime import datetime
 from typing import Protocol, runtime_checkable
 from uuid import UUID
 
-from atman.core.models.experience import ReframingNote, ReframingNoteAppendResult, SessionExperience
+from atman.core.models.entity import Entity
+from atman.core.models.experience import (
+    KeyMoment,
+    ReframingNote,
+    ReframingNoteAppendResult,
+    SessionExperience,
+)
 from atman.core.models.identity import Identity, IdentitySnapshot
 from atman.core.models.narrative import NarrativeDocument
 from atman.core.models.reflection import (
+    EntityRelationFormulationOutput,
     HealthAssessment,
     HealthCriterionOutput,
     JahodaCriterion,
@@ -433,3 +440,21 @@ class ReflectionModel(ABC):
             Structured score, evidence, and concerns.
         """
         ...
+
+    # R9 — EntityRelationsFormulator (REFLECTION_FUTURE.md §5.3). Non-abstract
+    # default so existing subclasses don't break; service treats an empty
+    # ``relation_type`` as "no relation worth recording".
+    def formulate_entity_relation(
+        self,
+        entity_a: Entity,
+        entity_b: Entity,
+        shared_moments: list[KeyMoment],
+    ) -> EntityRelationFormulationOutput:
+        """
+        Interpret a sequence of KeyMoments where ``entity_a`` and ``entity_b``
+        co-occur and decide whether there is a meaningful typed relation.
+
+        Implementations should not invent relations: when the evidence is
+        thin or contradictory, return an empty ``relation_type``.
+        """
+        return EntityRelationFormulationOutput()

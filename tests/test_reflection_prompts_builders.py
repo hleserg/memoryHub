@@ -6,11 +6,14 @@ from datetime import UTC, datetime
 from uuid import uuid4
 
 from atman.adapters.reflection.prompts import (
+    SYSTEM_PROMPT_ENTITY_RELATION,
+    build_entity_relation_messages,
     build_health_messages,
     build_narrative_messages,
     build_pattern_messages,
     build_reframing_messages,
 )
+from atman.core.models.entity import Entity, EntityType
 from atman.core.models.experience import (
     EmotionalDepth,
     FeltSense,
@@ -111,3 +114,29 @@ def test_build_health_messages_identity_fields_and_experiences() -> None:
     assert "truth" in body
     assert "Be direct" in body
     assert "Session " in body
+
+
+# ---------------------------------------------------------------------------
+# R9 — entity relation formulation prompt
+# ---------------------------------------------------------------------------
+
+
+def test_build_entity_relation_messages_includes_both_entities_and_moments() -> None:
+    a = Entity(agent_id=uuid4(), canonical_name="Alice", entity_type=EntityType.person)
+    b = Entity(agent_id=uuid4(), canonical_name="Acme Corp", entity_type=EntityType.organization)
+    moments = [_km(["honesty"]), _km(["care"])]
+    msgs = build_entity_relation_messages(a, b, moments)
+    assert msgs[0]["role"] == "system"
+    # Anti-hallucination guard in the system prompt.
+    assert "thin or contradictory" in msgs[0]["content"]
+    user = msgs[1]["content"]
+    assert "Alice" in user
+    assert "Acme Corp" in user
+    assert "person" in user
+    assert "organization" in user
+    assert "Shared moments (2)" in user
+
+
+def test_system_prompt_entity_relation_constant_exposed() -> None:
+    assert "{schema}" in SYSTEM_PROMPT_ENTITY_RELATION
+    assert "snake_case" in SYSTEM_PROMPT_ENTITY_RELATION

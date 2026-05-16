@@ -220,6 +220,40 @@ class NarrativeUpdateOutput(BaseModel):
         return v
 
 
+class EntityRelationFormulationOutput(BaseModel):
+    """
+    Structured result from
+    :meth:`~atman.core.ports.reflection.ReflectionModel.formulate_entity_relation`.
+
+    R9 (REFLECTION_FUTURE.md §5.3): the LLM reads moments where two entities
+    co-occur and decides whether there is a meaningful typed relation between
+    them. Empty ``relation_type`` means "no relation worth recording" — the
+    service skips persistence.
+    """
+
+    relation_type: str = Field(
+        default="",
+        description="Canonical relation label (free-form); whitespace-only means skip",
+    )
+    confidence: float = Field(
+        default=0.0,
+        ge=0.0,
+        le=1.0,
+        description="LLM-self-reported confidence; service may apply min threshold",
+    )
+    since: str | None = Field(
+        default=None,
+        description="Optional ISO date (YYYY-MM-DD) when the relation appears to start",
+    )
+
+    @field_validator("relation_type", mode="before")
+    @classmethod
+    def strip_relation(cls, v: Any) -> Any:
+        if isinstance(v, str):
+            return v.strip()
+        return v
+
+
 class HealthCriterionOutput(BaseModel):
     """
     Structured result from :meth:`~atman.core.ports.reflection.ReflectionModel.assess_health_criterion`.
