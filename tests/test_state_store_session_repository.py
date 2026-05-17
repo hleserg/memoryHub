@@ -117,25 +117,34 @@ def test_get_sessions_in_range_three_arg_explicit_agent_id() -> None:
     assert {s.id for s in only_a} == {s_a.id}
 
 
-def test_get_sessions_in_range_handles_naive_started_at_without_typeerror() -> None:
-    """HLE-59 regression (Devin #594): a Session with a naive ``started_at``
-    must not raise ``TypeError`` against UTC-aware range bounds — the new
-    native ``list_sessions_in_range`` path normalises via ``ensure_utc``
-    before comparison.
+def test_get_sessions_in_range_normalizes_legacy_naive_session_timestamps() -> None:
+    """HLE-59 regression (Devin #594): legacy rows with naive ``started_at``
+    must coexist with current UTC-aware rows in the range filter — without
+    ``ensure_utc`` normalisation the comparison raises ``TypeError``.
+
+    Note: the saturation-warning regression test that lived on main was
+    removed when ``list_sessions_in_range`` graduated from a client-side
+    capped filter to a native port method (HLE-59) — the cap and its
+    warning no longer exist on the read path.
     """
     store = InMemoryStateStore()
     agent = uuid4()
-    now = datetime.now(UTC)
-    # Naive timestamp — what legacy JSON rows or test fixtures produce.
-    naive_in = Session(
+    start = datetime(2026, 5, 1, 0, 0, 0, tzinfo=UTC)
+    end = datetime(2026, 5, 2, 0, 0, 0, tzinfo=UTC)
+    legacy_naive = Session(agent_id=agent, started_at=datetime(2026, 5, 1, 12, 0, 0))
+    current_aware = Session(
         agent_id=agent,
-        started_at=(now - timedelta(days=2)).replace(tzinfo=None),
+        started_at=datetime(2026, 5, 1, 18, 0, 0, tzinfo=UTC),
     )
-    store.create_session(naive_in)
+    outside = Session(agent_id=agent, started_at=datetime(2026, 5, 3, 12, 0, 0))
+    store.create_session(legacy_naive)
+    store.create_session(current_aware)
+    store.create_session(outside)
 
     repo = StateStoreSessionRepository(store, agent_id=agent)
-    result = repo.get_sessions_in_range(now - timedelta(days=5), now)
-    assert {s.id for s in result} == {naive_in.id}
+    result = repo.get_sessions_in_range(start, end)
+
+    assert {s.id for s in result} == {legacy_naive.id, current_aware.id}
 
 
 def test_get_key_moments_for_session() -> None:
@@ -163,6 +172,30 @@ def test_get_key_moments_in_range_filters_by_when() -> None:
     repo = StateStoreSessionRepository(store)
     result = repo.get_key_moments_in_range(now - timedelta(days=5), now)
     assert {m.id for m in result} == {m_in.id}
+
+
+def test_get_key_moments_in_range_normalizes_legacy_naive_when() -> None:
+    store = InMemoryStateStore()
+    sid = uuid4()
+    start = datetime(2026, 5, 1, 0, 0, 0, tzinfo=UTC)
+    end = datetime(2026, 5, 2, 0, 0, 0, tzinfo=UTC)
+    legacy_naive = _make_moment(
+        sid,
+        what="legacy naive",
+        when=datetime(2026, 5, 1, 12, 0, 0),
+    )
+    outside = _make_moment(
+        sid,
+        what="outside",
+        when=datetime(2026, 5, 3, 12, 0, 0),
+    )
+    store.store_key_moment(legacy_naive)
+    store.store_key_moment(outside)
+
+    repo = StateStoreSessionRepository(store)
+    result = repo.get_key_moments_in_range(start, end)
+
+    assert {m.id for m in result} == {legacy_naive.id}
 
 
 def test_add_reframing_note_returns_experience_not_found_for_unknown_session() -> None:

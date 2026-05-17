@@ -19,7 +19,15 @@ from uuid import UUID, uuid4
 
 from atman.config import SkillsSettings
 from atman.skills.manifest import SkillManifest, write_skill_md
-from atman.skills.models import Skill, SkillKind, SkillOrigin, SkillStatus, SkillSuggestion
+from atman.skills.models import (
+    DailySkillSummary,
+    DeepSkillSummary,
+    Skill,
+    SkillKind,
+    SkillOrigin,
+    SkillStatus,
+    SkillSuggestion,
+)
 from atman.skills.projection import ProjectionAdapter
 from atman.skills.retriever import SkillRetriever
 from atman.skills.store import SkillStore
@@ -29,6 +37,13 @@ _log = logging.getLogger(__name__)
 
 def _now() -> datetime:
     return datetime.now(UTC)
+
+
+def _dominant(counts: dict[str, int]) -> str | None:
+    """Return the most-frequent key in ``counts`` (None on empty input)."""
+    if not counts:
+        return None
+    return max(counts.items(), key=lambda kv: kv[1])[0]
 
 
 class SkillManager:
@@ -252,6 +267,101 @@ class SkillManager:
         _log.info("Captured skill '%s' for agent %s (draft)", name, agent_id)
         return skill
 
+    # ── Session-end marker (HLE-35) ───────────────────────────────────────────
+
+    SKILLS_MARKER_SCHEMA_VERSION = 1
+
+    def write_session_skills_marker(
+        self,
+        workspace: Path,
+        session_id: UUID,
+        agent_id: UUID,
+    ) -> Path | None:
+        """Write ``atman_session_skills_<timestamp>.json`` for the session.
+
+        The file lists each skill used during the session with invocation
+        counts and the dominant preliminary status — readable for later
+        dashboards / analytics. Returns the written path or ``None`` when
+        there is nothing to write (no invocations).
+
+        The marker is written **before** ``process_session_skills`` would
+        normally run, so it captures the raw outcomes the runner observed,
+        not the post-reflection ``final_status``.
+        """
+        try:
+            invocations = self._store.get_unprocessed_invocations(agent_id, session_id)
+        except Exception as exc:
+            _log.warning("write_session_skills_marker: store lookup failed: %s", exc)
+            return None
+
+        if not invocations:
+            return None
+
+        # Aggregate per skill_id: dominant preliminary status (most common).
+        per_skill: dict[UUID, dict] = {}
+        for inv in invocations:
+            entry = per_skill.setdefault(
+                inv.skill_id,
+                {
+                    "skill_id": str(inv.skill_id),
+                    "skill_name": None,
+                    "invocations": 0,
+                    "preliminary_status_counts": {},
+                    "agent_marker_counts": {},
+                },
+            )
+            entry["invocations"] += 1
+            if inv.preliminary_status:
+                counts = entry["preliminary_status_counts"]
+                counts[inv.preliminary_status] = counts.get(inv.preliminary_status, 0) + 1
+            if inv.agent_marker:
+                counts = entry["agent_marker_counts"]
+                counts[inv.agent_marker] = counts.get(inv.agent_marker, 0) + 1
+
+        # Resolve skill names (best-effort: the row may have been deleted).
+        for skill_id, entry in per_skill.items():
+            try:
+                skill = self._store.get_skill_by_id(skill_id)
+            except Exception:
+                skill = None
+            entry["skill_name"] = skill.name if skill is not None else None
+            # Reduce counts dicts to a single dominant value for compact output.
+            entry["preliminary_status"] = _dominant(entry.pop("preliminary_status_counts"))
+            entry["agent_marker"] = _dominant(entry.pop("agent_marker_counts"))
+
+        now = _now()
+        timestamp = now.strftime("%Y%m%dT%H%M%SZ")
+        marker_path = workspace / f"atman_session_skills_{timestamp}.json"
+        payload = {
+            "schema_version": self.SKILLS_MARKER_SCHEMA_VERSION,
+            "session_id": str(session_id),
+            "agent_id": str(agent_id),
+            "timestamp": now.isoformat(),
+            "total_invocations": sum(int(e["invocations"]) for e in per_skill.values()),
+            "skills_used": sorted(
+                per_skill.values(),
+                key=lambda e: int(e["invocations"]),
+                reverse=True,
+            ),
+        }
+        try:
+            workspace.mkdir(parents=True, exist_ok=True)
+            marker_path.write_text(
+                json.dumps(payload, ensure_ascii=False, indent=2),
+                encoding="utf-8",
+            )
+        except OSError as exc:
+            _log.warning("write_session_skills_marker: failed to write %s: %s", marker_path, exc)
+            return None
+
+        _log.debug(
+            "Skills marker written: session=%s skills=%d path=%s",
+            session_id,
+            len(per_skill),
+            marker_path,
+        )
+        return marker_path
+
     # ── Micro-reflection hook ─────────────────────────────────────────────────
 
     def process_session_skills(self, agent_id: UUID, session_id: UUID) -> None:
@@ -279,7 +389,10 @@ class SkillManager:
                 self._store.set_revision_needed(inv.skill_id)
             # 'unclear' — no stat change, no revision flag
 
-        # Bump sessions_since_use for pinned skills that were NOT used this session
+        # Bump sessions_since_use for every active skill NOT used this
+        # session — including auto-downgraded ones — so deep-reflection
+        # archive thresholds remain reachable. The store implementation
+        # filters to status='active' and excludes ``used_skill_ids``.
         self._store.bump_sessions_since_use(agent_id, exclude_skill_ids=used_skill_ids)
 
         # Recalculate auto-pin / auto-downgrade
@@ -323,6 +436,85 @@ class SkillManager:
             return "didnt_help"
 
         return "unclear"
+
+    # ── Daily / Deep reflection hooks (HLE-36) ────────────────────────────────
+
+    def process_daily_skills(self, agent_id: UUID) -> DailySkillSummary:
+        """Daily-reflection hook.
+
+        Bumps ``revision_priority`` for revision-needed skills that have
+        stayed idle longer than ``daily_revision_idle_bump_sessions``, then
+        returns a summary listing skills the operator should look at this
+        run. ``high_priority_revisions`` lifts anything with priority ≥ 3.
+        """
+        try:
+            pending = self._store.list_by_revision_needed(agent_id)
+        except Exception as exc:
+            _log.warning("process_daily_skills: store lookup failed: %s", exc)
+            return DailySkillSummary()
+
+        if not pending:
+            return DailySkillSummary()
+
+        idle_threshold = self._config.daily_revision_idle_bump_sessions
+        bumped = 0
+        high_priority: list[str] = []
+        for skill in pending:
+            # Track the priority value AFTER any bump this run so a skill that
+            # crosses the threshold this cycle is surfaced immediately rather
+            # than waiting for the next daily run (the local `skill` object is
+            # a stale snapshot — ``set_revision_needed`` only writes to the
+            # store).
+            effective_priority = skill.revision_priority
+            if skill.sessions_since_use >= idle_threshold:
+                try:
+                    self._store.set_revision_needed(skill.id, priority_bump=1)
+                    bumped += 1
+                    effective_priority += 1
+                except Exception as exc:
+                    _log.warning(
+                        "process_daily_skills: priority bump failed for %s: %s",
+                        skill.name,
+                        exc,
+                    )
+            # Threshold for "operator must look at this" is intentionally
+            # equal to a sustained-failure signal: priority defaults to 0,
+            # a single failed cycle adds 1, repeated failures bring it to 3+.
+            if effective_priority >= 3:
+                high_priority.append(skill.name)
+
+        return DailySkillSummary(
+            revision_needed_count=len(pending),
+            revision_priority_bumped=bumped,
+            high_priority_revisions=high_priority,
+        )
+
+    def process_deep_skills(self, agent_id: UUID) -> DeepSkillSummary:
+        """Deep-reflection hook — classify without mutating skill rows."""
+        try:
+            active = self._store.list_by_status(agent_id, SkillStatus.active)
+        except Exception as exc:
+            _log.warning("process_deep_skills: store lookup failed: %s", exc)
+            return DeepSkillSummary()
+
+        archive_threshold = self._config.deep_archive_sessions
+        failure_threshold = self._config.deep_failure_rate_threshold
+        min_invocations = self._config.deep_min_invocations_for_failure_rate
+
+        archive_candidates: list[str] = []
+        problematic: list[str] = []
+        for skill in active:
+            if not skill.user_pinned and skill.sessions_since_use >= archive_threshold:
+                archive_candidates.append(skill.name)
+            if skill.invocations_count >= min_invocations:
+                failure_rate = skill.failure_count / skill.invocations_count
+                if failure_rate > failure_threshold:
+                    problematic.append(skill.name)
+
+        return DeepSkillSummary(
+            archive_candidates=archive_candidates,
+            problematic_skills=problematic,
+        )
 
     def _recalculate_pinning(self, agent_id: UUID, used_skill_ids: set[UUID]) -> None:
         """Apply auto-pin and auto-downgrade rules for active skills."""

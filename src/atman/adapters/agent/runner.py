@@ -1048,6 +1048,12 @@ class AtmanRunner:
                 # hooks scheduled by the final ``record_event``.
                 with contextlib.suppress(Exception):
                     await session_manager.drain_pending_affect_tasks(session_id)
+                # Defer any unhandled finish_session exception until after the
+                # session-end skills marker has been attempted. The invocation
+                # data the marker summarises is already durable in the store
+                # before finish_session runs, so a finalize failure (DB error,
+                # unexpected ValueError, etc.) shouldn't cost us the marker.
+                deferred_finish_exc: BaseException | None = None
                 try:
                     # Pass close_reason if session was interrupted
                     finish_kwargs = {
@@ -1065,11 +1071,37 @@ class AtmanRunner:
                 except ValueError as exc:
                     if "Cannot finish session without key moments" in str(exc):
                         close_reason = "interrupted" if interrupted else None
-                        _force_finish(session_manager, session_id, close_reason)
+                        try:
+                            _force_finish(session_manager, session_id, close_reason)
+                        except BaseException as force_exc:
+                            deferred_finish_exc = force_exc
                     else:
-                        raise
+                        deferred_finish_exc = exc
                 except (SessionAlreadyFinishedError, SessionNotFoundError):
                     pass
+                except BaseException as exc:
+                    # Any other failure (DB error, RuntimeError, …) — defer so
+                    # the marker still runs, then re-raise after.
+                    deferred_finish_exc = exc
+
+                # HLE-35: dump per-session skill activity to a JSON marker
+                # next to the workspace. Best-effort — never re-raise; this
+                # block runs regardless of finish_session outcome because the
+                # invocation data is already in the store.
+                if deps.skill_manager is not None:
+                    try:
+                        deps.skill_manager.write_session_skills_marker(
+                            self._workspace, session_id, self._agent_id
+                        )
+                    except Exception:
+                        _LOG.debug(
+                            "write_session_skills_marker failed for session %s",
+                            session_id,
+                            exc_info=True,
+                        )
+
+                if deferred_finish_exc is not None:
+                    raise deferred_finish_exc
 
     async def _handle_menu_mode(
         self,

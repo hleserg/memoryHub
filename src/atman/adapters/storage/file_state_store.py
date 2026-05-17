@@ -12,6 +12,7 @@ from typing import Any
 from uuid import UUID
 
 from atman.adapters.storage._atomic_write import write_atomically
+from atman.core.clock_impl import ensure_utc
 from atman.core.models import (
     Eigenstate,
     ExperienceRecord,
@@ -613,7 +614,10 @@ class FileStateStore(StateStore):
                 continue
             if s.agent_id == agent_id:
                 sessions.append(s)
-        sessions.sort(key=lambda s: s.started_at, reverse=True)
+        # Normalise legacy naive timestamps so the sort doesn't raise
+        # ``TypeError`` (mirrors the comparison normalisation in
+        # ``list_sessions_in_range``).
+        sessions.sort(key=lambda s: ensure_utc(s.started_at), reverse=True)
         return sessions
 
     def list_recent_sessions(self, agent_id: UUID, *, limit: int = 10) -> list[Session]:
@@ -637,8 +641,6 @@ class FileStateStore(StateStore):
         via :func:`ensure_utc` so the inclusive range check doesn't raise
         ``TypeError`` against UTC-aware bounds.
         """
-        from atman.core.clock_impl import ensure_utc
-
         return [
             s
             for s in self._iter_sessions_for_agent(agent_id)

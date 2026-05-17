@@ -10,7 +10,7 @@ from __future__ import annotations
 from pathlib import Path
 from uuid import UUID
 
-from atman.skills.models import Skill, SkillSuggestion
+from atman.skills.models import DailySkillSummary, DeepSkillSummary, Skill, SkillSuggestion
 
 
 class SkillsDisabledError(RuntimeError):
@@ -73,3 +73,18 @@ class NoopSkillManager:
     def process_session_skills(self, agent_id: UUID, session_id: UUID) -> None:
         # Silent no-op: micro reflection always calls this; when disabled, nothing happens.
         return
+
+    def write_session_skills_marker(
+        self,
+        workspace: Path,
+        session_id: UUID,
+        agent_id: UUID,
+    ) -> Path | None:
+        # No invocations to summarise when the loop is disabled.
+        return None
+
+    def process_daily_skills(self, agent_id: UUID) -> DailySkillSummary:
+        return DailySkillSummary()
+
+    def process_deep_skills(self, agent_id: UUID) -> DeepSkillSummary:
+        return DeepSkillSummary()

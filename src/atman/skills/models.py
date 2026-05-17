@@ -99,3 +99,35 @@ class SkillSuggestion:
     confidence: float  # 0..1
     reason: str  # human-readable explanation of why this skill was suggested
     strength: SuggestionStrength
+
+
+# ── Reflection hook summaries (HLE-36) ────────────────────────────────────
+
+
+@dataclass(frozen=True)
+class DailySkillSummary:
+    """Result of :meth:`SkillManagerPort.process_daily_skills`.
+
+    ``high_priority_revisions`` are the skill names whose ``revision_priority``
+    is already above the alert threshold and warrant operator attention in
+    the daily summary. ``revision_priority_bumped`` counts how many skills
+    received an idle-driven priority increment during this run.
+    """
+
+    revision_needed_count: int = 0
+    revision_priority_bumped: int = 0
+    high_priority_revisions: list[str] = field(default_factory=list)
+
+
+@dataclass(frozen=True)
+class DeepSkillSummary:
+    """Result of :meth:`SkillManagerPort.process_deep_skills`.
+
+    ``archive_candidates`` — names of long-idle, non-user-pinned skills
+    suitable for archiving. ``problematic_skills`` — names of frequently-
+    invoked skills with high failure rates. Both are inputs to the deep-
+    reflection health assessment; this hook never modifies skills directly.
+    """
+
+    archive_candidates: list[str] = field(default_factory=list)
+    problematic_skills: list[str] = field(default_factory=list)
