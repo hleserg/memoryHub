@@ -1,23 +1,25 @@
-"""Default and test clock implementations."""
+"""Core clock utilities.
+
+`SystemClock` is the default `ClockPort` implementation. It lives in core
+because it is a zero-dependency wrapper over stdlib `datetime.now(UTC)` —
+no external service, no I/O, no need to inject through an adapter. Tests
+and demos that want a deterministic clock import `FrozenClock` from
+`atman.adapters.clock`, which is the actual "test-fixture" adapter.
+
+`ensure_utc` is a pure timezone-normalisation helper used throughout the
+reflection / session code; it has no time-source dependency.
+"""
 
 from datetime import UTC, datetime
 
+__all__ = ["SystemClock", "ensure_utc"]
+
 
 class SystemClock:
-    """Wall-clock implementation (UTC)."""
+    """Default wall-clock implementation of `ClockPort` (UTC)."""
 
     def now(self) -> datetime:
         return datetime.now(UTC)
-
-
-class FrozenClock:
-    """Fixed instant for deterministic tests."""
-
-    def __init__(self, frozen: datetime) -> None:
-        self._frozen = frozen if frozen.tzinfo is not None else frozen.replace(tzinfo=UTC)
-
-    def now(self) -> datetime:
-        return self._frozen
 
 
 def ensure_utc(dt: datetime) -> datetime:

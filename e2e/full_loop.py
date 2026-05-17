@@ -33,6 +33,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from uuid import UUID, uuid4
 
+from atman.adapters.clock import FrozenClock
 from atman.adapters.reflection.state_store_session_repository import (
     StateStoreSessionRepository,
 )
@@ -42,7 +43,7 @@ from atman.adapters.storage.in_memory_reflection_store import (
     InMemoryPatternStore,
     InMemoryReflectionEventStore,
 )
-from atman.core.clock_impl import FrozenClock, SystemClock
+from atman.core.clock_impl import SystemClock
 from atman.core.models import (
     CoreValue,
     Goal,
@@ -173,8 +174,11 @@ class DeterministicReflectionModel(ReflectionModel):
         self,
         experiences: list,
         context: dict,
+        *,
+        key_moments_by_session=None,
     ) -> PatternDetectionOutput:
         _ = context
+        _ = key_moments_by_session
         if len(experiences) < 2:
             return PatternDetectionOutput()
         return PatternDetectionOutput(
@@ -188,7 +192,10 @@ class DeterministicReflectionModel(ReflectionModel):
         self,
         experience,
         context: dict,
+        *,
+        key_moments_by_session=None,
     ) -> ReframingNoteOutput:
+        _ = key_moments_by_session
         return ReframingNoteOutput(
             reflection=f"Reframing: deeper perspective on experience {experience.id}",
             reflection_type="e2e",
@@ -199,7 +206,10 @@ class DeterministicReflectionModel(ReflectionModel):
         current_narrative,
         recent_experiences: list,
         reflection_level,
+        *,
+        key_moments_by_session=None,
     ) -> NarrativeUpdateOutput:
+        _ = key_moments_by_session
         return NarrativeUpdateOutput(
             body=f"Narrative update proposal at {reflection_level.value} level"
         )
@@ -209,7 +219,10 @@ class DeterministicReflectionModel(ReflectionModel):
         identity,
         experiences: list,
         criterion,
+        *,
+        key_moments_by_session=None,
     ) -> HealthCriterionOutput:
+        _ = key_moments_by_session
         return HealthCriterionOutput(
             score=0.7,
             evidence=[f"Criterion {criterion.value} assessed"],

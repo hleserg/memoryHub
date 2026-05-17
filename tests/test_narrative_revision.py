@@ -363,7 +363,7 @@ def test_update_core_layer_rejects_review_without_approval() -> None:
 
 
 def test_update_thread_uses_injected_clock() -> None:
-    from atman.core.clock_impl import FrozenClock
+    from atman.adapters.clock import FrozenClock
 
     fixed = datetime(2026, 3, 1, 12, 0, 0, tzinfo=UTC)
     doc = _minimal_narrative()

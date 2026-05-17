@@ -23,10 +23,12 @@ from atman.adapters.storage.in_memory_reflection_request_queue import InMemoryRe
 from atman.adapters.storage.in_memory_reflection_store import InMemoryReflectionEventStore
 
 try:
+    from atman.affect.detector import AffectDetector as _AffectDetector
     from atman.affect.detector import AffectDetectorConfig as _AffectDetectorConfig
 
     _AFFECT_AVAILABLE = True
 except ImportError:
+    _AffectDetector = None  # type: ignore[assignment,misc]
     _AffectDetectorConfig = None  # type: ignore[assignment,misc]
     _AFFECT_AVAILABLE = False
 from atman.core.models import NarrativeDocument
@@ -47,16 +49,25 @@ from atman.core.services.session_manager import SessionManager
 
 
 class _MockReflectionModel(ReflectionModel):
-    def detect_pattern(self, experiences, context):
+    def detect_pattern(self, experiences, context, *, key_moments_by_session=None):
         return PatternDetectionOutput()
 
-    def generate_reframing_note(self, experience, context):
+    def generate_reframing_note(self, experience, context, *, key_moments_by_session=None):
         return ReframingNoteOutput(reflection="", reflection_type="insight")
 
-    def propose_narrative_update(self, current_narrative, recent_experiences, reflection_level):
+    def propose_narrative_update(
+        self,
+        current_narrative,
+        recent_experiences,
+        reflection_level,
+        *,
+        key_moments_by_session=None,
+    ):
         return NarrativeUpdateOutput(body="")
 
-    def assess_health_criterion(self, identity, experiences, criterion):
+    def assess_health_criterion(
+        self, identity, experiences, criterion, *, key_moments_by_session=None
+    ):
         return HealthCriterionOutput(score=0.5, evidence=[], concerns=[])
 
 
@@ -101,14 +112,6 @@ def build_deps(
     if state_store.load_narrative(identity.id) is None:
         narrative_service.create_narrative(identity)
 
-    affect_kwargs: dict = {}
-    if _AFFECT_AVAILABLE:
-        assert _AffectDetectorConfig is not None
-        affect_kwargs = {
-            "affect_workspace": workspace,
-            "affect_config": _AffectDetectorConfig(),
-        }
-
     # Maintenance queue + post-write scheduler (HLE-27): enqueue mREBEL +
     # lingvo enrichment jobs after every KeyMoment write.
     #
@@ -125,12 +128,22 @@ def build_deps(
     maintenance_queue = InMemoryMaintenanceQueue()
     post_write_scheduler = PostWriteScheduler(maintenance_queue)
 
+    # HLE-52: build the affect adapter here (composition root) and inject via
+    # AffectPort so SessionManager never imports the concrete implementation.
     session_manager = SessionManager(
         state_store,
-        **affect_kwargs,
         workspace=workspace,
         post_write_scheduler=post_write_scheduler,
     )
+    if _AFFECT_AVAILABLE:
+        assert _AffectDetector is not None and _AffectDetectorConfig is not None
+        session_manager.attach_affect(
+            _AffectDetector(
+                _AffectDetectorConfig(),
+                workspace=workspace,
+                append_moment=session_manager.append_key_moment,
+            )
+        )
 
     narrative_revision = NarrativeRevisionService(
         narrative_repo=_NarrativeAdapter(state_store),

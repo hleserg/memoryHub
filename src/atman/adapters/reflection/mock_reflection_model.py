@@ -29,7 +29,9 @@ Useful for testing reflection logic without external dependencies.
 # Mitigate by running a small set of real-API smoke tests separately.
 # PLAYBOOK-END
 
-from atman.core.models.experience import SessionExperience
+from uuid import UUID
+
+from atman.core.models.experience import KeyMoment, SessionExperience
 from atman.core.models.identity import Identity
 from atman.core.models.narrative import NarrativeDocument
 from atman.core.models.reflection import (
@@ -66,12 +68,17 @@ class MockReflectionModel(ReflectionModel):
         self,
         experience: SessionExperience,
         context: dict[str, str],
+        *,
+        key_moments_by_session: dict[UUID, list[KeyMoment]] | None = None,
     ) -> ReframingNoteOutput:
         """
         Generate a mock reframing note.
 
-        Uses template-based generation with context.
+        Uses template-based generation with context. ``key_moments_by_session``
+        is accepted for HLE-46 port-shape compatibility; the deterministic
+        mock does not consume KeyMoment content.
         """
+        del key_moments_by_session
         patterns = context.get("patterns", "")
 
         if patterns:
@@ -88,12 +95,16 @@ class MockReflectionModel(ReflectionModel):
         self,
         experiences: list[SessionExperience],
         context: dict[str, str],
+        *,
+        key_moments_by_session: dict[UUID, list[KeyMoment]] | None = None,
     ) -> PatternDetectionOutput:
         """
         Generate a mock pattern description.
 
-        Analyzes experiences to find simple patterns.
+        Analyzes experiences to find simple patterns. ``key_moments_by_session``
+        is accepted for HLE-46 port-shape compatibility; ignored here.
         """
+        del key_moments_by_session
         if len(experiences) < 2:
             return PatternDetectionOutput()
 
@@ -133,12 +144,16 @@ class MockReflectionModel(ReflectionModel):
         current_narrative: NarrativeDocument,
         recent_experiences: list[SessionExperience],
         reflection_level: ReflectionLevel,
+        *,
+        key_moments_by_session: dict[UUID, list[KeyMoment]] | None = None,
     ) -> NarrativeUpdateOutput:
         """
         Generate a mock narrative update proposal.
 
-        Creates a simple summary based on experiences.
+        Creates a simple summary based on experiences. ``key_moments_by_session``
+        is accepted for HLE-46 port-shape compatibility; ignored here.
         """
+        del key_moments_by_session
         if not recent_experiences:
             return NarrativeUpdateOutput(body="No new experiences to incorporate.")
 
@@ -177,12 +192,17 @@ class MockReflectionModel(ReflectionModel):
         identity: Identity,
         experiences: list[SessionExperience],
         criterion: JahodaCriterion,
+        *,
+        key_moments_by_session: dict[UUID, list[KeyMoment]] | None = None,
     ) -> HealthCriterionOutput:
         """
         Generate a mock health criterion assessment.
 
         Returns score, evidence, concerns based on simple heuristics.
+        ``key_moments_by_session`` is accepted for HLE-46 port-shape
+        compatibility; ignored here.
         """
+        del key_moments_by_session
         if criterion == JahodaCriterion.POSITIVE_SELF_ATTITUDE:
             if identity.self_description:
                 return HealthCriterionOutput(

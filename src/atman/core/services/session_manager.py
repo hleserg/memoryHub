@@ -45,11 +45,16 @@ from atman.core.models import (
     SessionExperience,
     SessionResult,
 )
+from atman.core.ports.affect import AffectPort
 from atman.core.ports.clock import ClockPort
 from atman.core.ports.state_store import StateStore
 
 if TYPE_CHECKING:
-    from atman.affect.detector import AffectDetector, AffectDetectorConfig
+    # Legacy kwargs (affect_workspace + affect_config) still construct an
+    # AffectDetector internally for backwards compatibility; the new
+    # canonical wiring is to pass an already-built ``AffectPort`` via the
+    # ``affect`` kwarg from the composition root.
+    from atman.affect.detector import AffectDetectorConfig
     from atman.core.services.post_write_scheduler import PostWriteScheduler
 
 # Cap for eigenstate list fields; order is insertion-derived until salience ranking exists.
@@ -101,6 +106,7 @@ class SessionManager:
         state_store: StateStore,
         max_active_sessions: int | None = None,
         clock: ClockPort | None = None,
+        affect: AffectPort | None = None,
         affect_workspace: Path | None = None,
         affect_config: AffectDetectorConfig | None = None,
         workspace: Path | None = None,
@@ -113,8 +119,14 @@ class SessionManager:
             state_store: Storage for identity, narrative, experience, eigenstate
             max_active_sessions: If set, ``start_session`` raises when this many sessions are active.
             clock: Clock for reproducible timestamps (defaults to SystemClock)
-            affect_workspace: Optional workspace directory for affect baseline JSONL
-            affect_config: Optional :class:`AffectDetectorConfig` (requires ``affect_workspace``)
+            affect: Optional :class:`AffectPort` implementation. When set, takes
+                precedence over the legacy ``affect_workspace`` / ``affect_config``
+                kwargs and avoids constructing AffectDetector from Core.
+            affect_workspace: Legacy — optional workspace directory for affect
+                baseline JSONL. Kept for back-compat; new callers should pass
+                a pre-built ``affect`` instead.
+            affect_config: Legacy — optional :class:`AffectDetectorConfig`
+                (requires ``affect_workspace``). Same back-compat note as above.
             workspace: Optional workspace directory for session journals
             post_write_scheduler: Optional :class:`PostWriteScheduler` — when
                 provided, every persisted ``KeyMoment`` enqueues the configured
@@ -130,20 +142,34 @@ class SessionManager:
         self._lock = threading.Lock()
         self._workspace = workspace
         self._post_write_scheduler = post_write_scheduler
-        self._affect_detector: AffectDetector | None = None
-        if affect_workspace is not None and affect_config is not None:
+
+        self._affect: AffectPort | None = affect
+        if self._affect is None and affect_workspace is not None and affect_config is not None:
+            # Legacy path: build the detector here so existing callers keep
+            # working. Lazy import keeps Core free of a static dependency on
+            # the concrete adapter.
             from atman.affect.detector import AffectDetector
 
-            self._affect_detector = AffectDetector(
+            self._affect = AffectDetector(
                 affect_config,
                 workspace=affect_workspace,
                 append_moment=self.append_key_moment,
             )
 
     @property
-    def affect_detector(self) -> AffectDetector | None:
+    def affect_detector(self) -> AffectPort | None:
         """Optional behavioural detector wired to :meth:`append_key_moment`."""
-        return self._affect_detector
+        return self._affect
+
+    def attach_affect(self, affect: AffectPort) -> None:
+        """Wire an :class:`AffectPort` after construction.
+
+        Useful when the affect implementation needs a reference to
+        :meth:`append_key_moment` (it does, via its ``append_moment``
+        callback) and would otherwise create a circular constructor
+        dependency. Idempotent: a second call replaces the previous port.
+        """
+        self._affect = affect
 
     def _journal_path(self, agent_id: UUID, session_id: UUID) -> Path | None:
         """Return journal path for a session, or None if workspace not configured."""
@@ -347,9 +373,15 @@ class SessionManager:
             return False
 
         narrative = self._state_store.load_narrative(agent_id)
-        return narrative is not None and _session_finish_marker(session_id) in (
-            narrative.recent_layer.content
-        )
+        if narrative is None:
+            return False
+        if session_id in narrative.finished_session_ids:
+            return True
+        # Legacy fallback: narratives written before the dedicated tracking
+        # field carried a hidden marker inside recent_layer.content. Reflection
+        # passes overwrite recent_layer, so this signal is unreliable — kept
+        # only to recognise pre-migration data.
+        return _session_finish_marker(session_id) in narrative.recent_layer.content
 
     def _recover_finish_artifacts_from_existing_experience(
         self,
@@ -690,7 +722,7 @@ class SessionManager:
         thread (blocking until scoring finishes) — avoid configuring affect for
         latency-sensitive synchronous ``record_event`` callers without an event loop.
         """
-        det = self._affect_detector
+        det = self._affect
         if det is None:
             return
         text = event.description
@@ -1144,7 +1176,7 @@ class SessionManager:
         if session_result.identity_id is None:
             return
         identity_id = session_result.identity_id
-        marker = _session_finish_marker(session_result.session_id)
+        session_id = session_result.session_id
         last_err: BaseException | None = None
         for _ in range(_NARRATIVE_SAVE_RETRIES):
             narrative = self._state_store.load_narrative(identity_id)
@@ -1154,15 +1186,21 @@ class SessionManager:
                     "session experience/eigenstate saved but narrative not updated. "
                     "This breaks the session lifecycle contract."
                 )
-            if marker in narrative.recent_layer.content:
+            if session_id in narrative.finished_session_ids:
                 return
-            update_text = f"{self._build_narrative_update(session_result)}\n{marker}"
+            # Legacy compatibility: pre-HLE-50 finishes embedded the marker in
+            # recent_layer prose. If we see it, treat the session as finished
+            # without re-appending the summary.
+            if _session_finish_marker(session_id) in narrative.recent_layer.content:
+                return
+            update_text = self._build_narrative_update(session_result)
             existing_content = narrative.recent_layer.content.strip()
             next_content = (
                 f"{existing_content}\n\n{update_text}" if existing_content else update_text
             )
             expected_at = narrative.updated_at
             narrative.update_recent_layer(next_content)
+            narrative.mark_session_finished(session_id)
             try:
                 self._state_store.save_narrative(
                     narrative,

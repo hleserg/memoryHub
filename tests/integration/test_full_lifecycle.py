@@ -22,6 +22,7 @@ from uuid import UUID, uuid4
 
 import pytest
 
+from atman.adapters.clock import FrozenClock
 from atman.adapters.reflection.mock_reflection_model import MockReflectionModel
 from atman.adapters.reflection.state_store_session_repository import (
     StateStoreSessionRepository,
@@ -31,7 +32,6 @@ from atman.adapters.storage.in_memory_reflection_store import (
     InMemoryPatternStore,
     InMemoryReflectionEventStore,
 )
-from atman.core.clock_impl import FrozenClock
 from atman.core.models import (
     EmotionalDepth,
     KeyMomentInput,

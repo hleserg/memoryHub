@@ -7,6 +7,7 @@ Connection details from OpenAILLMConfig.
 
 import json
 from typing import TypeVar
+from uuid import UUID
 
 import httpx
 import pydantic
@@ -20,7 +21,7 @@ from atman.adapters.reflection.prompts import (
     build_reframing_messages,
 )
 from atman.config import OpenAILLMConfig
-from atman.core.models.experience import SessionExperience
+from atman.core.models.experience import KeyMoment, SessionExperience
 from atman.core.models.identity import Identity
 from atman.core.models.narrative import NarrativeDocument
 from atman.core.models.reflection import (
@@ -129,18 +130,26 @@ class OpenAIReflectionModel(ReflectionModel):
         self,
         experience: SessionExperience,
         context: dict[str, str],
+        *,
+        key_moments_by_session: dict[UUID, list[KeyMoment]] | None = None,
     ) -> ReframingNoteOutput:
         """Generate a reframing note for an experience via OpenAI-compatible API."""
-        messages = build_reframing_messages(experience, context)
+        messages = build_reframing_messages(
+            experience, context, key_moments_by_session=key_moments_by_session
+        )
         return self._call_with_retry(messages, ReframingNoteOutput)
 
     def detect_pattern(
         self,
         experiences: list[SessionExperience],
         context: dict[str, str],
+        *,
+        key_moments_by_session: dict[UUID, list[KeyMoment]] | None = None,
     ) -> PatternDetectionOutput:
         """Detect and describe a pattern across experiences via OpenAI-compatible API."""
-        messages = build_pattern_messages(experiences, context)
+        messages = build_pattern_messages(
+            experiences, context, key_moments_by_session=key_moments_by_session
+        )
         return self._call_with_retry(messages, PatternDetectionOutput)
 
     def propose_narrative_update(
@@ -148,12 +157,15 @@ class OpenAIReflectionModel(ReflectionModel):
         current_narrative: NarrativeDocument,
         recent_experiences: list[SessionExperience],
         reflection_level: ReflectionLevel,
+        *,
+        key_moments_by_session: dict[UUID, list[KeyMoment]] | None = None,
     ) -> NarrativeUpdateOutput:
         """Propose an update to the narrative via OpenAI-compatible API."""
         messages = build_narrative_messages(
             current_narrative,
             recent_experiences,
             reflection_level,
+            key_moments_by_session=key_moments_by_session,
         )
         return self._call_with_retry(messages, NarrativeUpdateOutput)
 
@@ -162,7 +174,11 @@ class OpenAIReflectionModel(ReflectionModel):
         identity: Identity,
         experiences: list[SessionExperience],
         criterion: JahodaCriterion,
+        *,
+        key_moments_by_session: dict[UUID, list[KeyMoment]] | None = None,
     ) -> HealthCriterionOutput:
         """Assess one Jahoda health criterion via OpenAI-compatible API."""
-        messages = build_health_messages(identity, experiences, criterion)
+        messages = build_health_messages(
+            identity, experiences, criterion, key_moments_by_session=key_moments_by_session
+        )
         return self._call_with_retry(messages, HealthCriterionOutput)

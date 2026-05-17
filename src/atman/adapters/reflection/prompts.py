@@ -8,6 +8,7 @@ expected output model so the LLM knows the exact structure to produce.
 
 import json
 from typing import TypedDict
+from uuid import UUID
 
 import pydantic
 
@@ -51,8 +52,54 @@ def _schema_block(model: type[pydantic.BaseModel]) -> str:
     return json.dumps(model.model_json_schema(), indent=2)
 
 
-def _experience_summary(exp: SessionExperience) -> str:
-    """Compact textual summary of a single experience for prompt inclusion."""
+# HLE-46: cap moment content fed into reflection prompts so a few large
+# sessions can't blow up the LLM context window. Three moments × 200 chars of
+# free-text per session keeps each session block well under ~1 KB while still
+# giving the model the actual story (not just counters).
+_MAX_MOMENTS_PER_SESSION_IN_PROMPT = 3
+_MAX_WHAT_HAPPENED_CHARS = 200
+_MAX_WHY_IT_MATTERS_CHARS = 200
+
+
+def _truncate(text: str, limit: int) -> str:
+    """Trim *text* to *limit* characters, appending an ellipsis on truncation."""
+    if len(text) <= limit:
+        return text
+    # Reserve 1 char for the ellipsis marker so total length stays at *limit*.
+    return text[: max(0, limit - 1)] + "…"
+
+
+def _moment_summary_for_experience(m: KeyMoment) -> str:
+    """Render one KeyMoment compactly inside an experience block.
+
+    Mirrors :func:`_moment_summary_for_stance` but truncates free-text fields
+    to bound prompt size (see ``_MAX_*`` constants above).
+    """
+    what = _truncate(m.what_happened, _MAX_WHAT_HAPPENED_CHARS)
+    why = _truncate(m.why_it_matters, _MAX_WHY_IT_MATTERS_CHARS)
+    parts = [
+        f"  - [{m.when.isoformat()}] {what}",
+        f"      felt: valence={m.how_i_felt.emotional_valence:+.2f} "
+        f"intensity={m.how_i_felt.emotional_intensity:.2f} depth={m.how_i_felt.depth.value}",
+        f"      why_it_matters: {why}",
+    ]
+    if m.values_touched:
+        parts.append(f"      values_touched: {', '.join(m.values_touched)}")
+    return "\n".join(parts)
+
+
+def _experience_summary(
+    exp: SessionExperience,
+    moments: list[KeyMoment] | None = None,
+) -> str:
+    """Compact textual summary of a single experience for prompt inclusion.
+
+    When *moments* is provided, the top-N (by salience desc, capped at
+    ``_MAX_MOMENTS_PER_SESSION_IN_PROMPT``) are rendered with their actual
+    ``what_happened`` / ``why_it_matters`` / ``values_touched`` so the LLM
+    can see the story behind the stats (HLE-46). Empty / missing moments
+    fall back to the legacy counters-only summary.
+    """
     lines: list[str] = [f"Session {exp.session_id} ({exp.timestamp.isoformat()})"]
     # Use metadata instead of iterating through key moments (which are now stored separately)
     lines.append(
@@ -62,7 +109,25 @@ def _experience_summary(exp: SessionExperience) -> str:
     )
     if exp.fact_refs:
         lines.append(f"    facts accessed: {len(exp.fact_refs)} total")
+
+    if moments:
+        ranked = sorted(moments, key=lambda m: m.salience, reverse=True)
+        top = ranked[:_MAX_MOMENTS_PER_SESSION_IN_PROMPT]
+        if top:
+            lines.append(f"  top {len(top)} of {len(moments)} moments by salience:")
+            for m in top:
+                lines.append(_moment_summary_for_experience(m))
     return "\n".join(lines)
+
+
+def _moments_for(
+    exp: SessionExperience,
+    key_moments_by_session: dict[UUID, list[KeyMoment]] | None,
+) -> list[KeyMoment] | None:
+    """Look up KeyMoments for *exp* in the per-session mapping, if provided."""
+    if key_moments_by_session is None:
+        return None
+    return key_moments_by_session.get(exp.session_id)
 
 
 # ---------------------------------------------------------------------------
@@ -84,13 +149,15 @@ def build_reframing_messages(
     experience: SessionExperience,
     context: dict[str, str],
     output_model: type[ReframingNoteOutput] = ReframingNoteOutput,
+    *,
+    key_moments_by_session: dict[UUID, list[KeyMoment]] | None = None,
 ) -> OllamaMessages:
     """Build Ollama messages for :meth:`generate_reframing_note`."""
     system = SYSTEM_PROMPT_REFRAMING.format(schema=_schema_block(output_model))
 
     user_parts = [
         "## Experience",
-        _experience_summary(experience),
+        _experience_summary(experience, _moments_for(experience, key_moments_by_session)),
     ]
     if context:
         user_parts.append("\n## Context")
@@ -123,13 +190,15 @@ def build_pattern_messages(
     experiences: list[SessionExperience],
     context: dict[str, str],
     output_model: type[PatternDetectionOutput] = PatternDetectionOutput,
+    *,
+    key_moments_by_session: dict[UUID, list[KeyMoment]] | None = None,
 ) -> OllamaMessages:
     """Build Ollama messages for :meth:`detect_pattern`."""
     system = SYSTEM_PROMPT_PATTERN.format(schema=_schema_block(output_model))
 
     user_parts = ["## Experiences"]
     for exp in experiences:
-        user_parts.append(_experience_summary(exp))
+        user_parts.append(_experience_summary(exp, _moments_for(exp, key_moments_by_session)))
         user_parts.append("")
 
     if context:
@@ -166,6 +235,8 @@ def build_narrative_messages(
     recent_experiences: list[SessionExperience],
     reflection_level: ReflectionLevel,
     output_model: type[NarrativeUpdateOutput] = NarrativeUpdateOutput,
+    *,
+    key_moments_by_session: dict[UUID, list[KeyMoment]] | None = None,
 ) -> OllamaMessages:
     """Build Ollama messages for :meth:`propose_narrative_update`."""
     system = SYSTEM_PROMPT_NARRATIVE.format(
@@ -181,7 +252,7 @@ def build_narrative_messages(
         "## Recent Experiences",
     ]
     for exp in recent_experiences:
-        user_parts.append(_experience_summary(exp))
+        user_parts.append(_experience_summary(exp, _moments_for(exp, key_moments_by_session)))
         user_parts.append("")
 
     return [
@@ -289,6 +360,8 @@ def build_health_messages(
     experiences: list[SessionExperience],
     criterion: JahodaCriterion,
     output_model: type[HealthCriterionOutput] = HealthCriterionOutput,
+    *,
+    key_moments_by_session: dict[UUID, list[KeyMoment]] | None = None,
 ) -> OllamaMessages:
     """Build Ollama messages for :meth:`assess_health_criterion`."""
     system = SYSTEM_PROMPT_HEALTH.format(
@@ -308,7 +381,7 @@ def build_health_messages(
     user_parts.append("")
     user_parts.append("## Recent Experiences")
     for exp in experiences:
-        user_parts.append(_experience_summary(exp))
+        user_parts.append(_experience_summary(exp, _moments_for(exp, key_moments_by_session)))
         user_parts.append("")
 
     return [

@@ -6,7 +6,7 @@ from uuid import uuid4
 
 import pytest
 
-from atman.reflection.models import ReflectionEvent, ReflectionLevel
+from atman.adapters.storage.reflection_persistence_models import ReflectionEvent, ReflectionLevel
 
 
 def _make_sql_module() -> MagicMock:
@@ -36,36 +36,36 @@ def _prime_schema_cache(store: object, agent_id: object, serial_id: int = 1) -> 
 class TestReflectionStore:
     """Tests for ReflectionStore."""
 
-    @patch("atman.reflection.store.psycopg")
+    @patch("atman.adapters.storage.reflection_store.psycopg")
     def test_init_with_db_url(self, mock_psycopg: Mock) -> None:
         """Test initialization with explicit database URL."""
-        from atman.reflection.store import ReflectionStore
+        from atman.adapters.storage.reflection_store import ReflectionStore
 
         store = ReflectionStore(db_url="postgresql://test:pass@localhost/db")
         assert store.db_url == "postgresql://test:pass@localhost/db"
         assert store._conn is None
 
     @patch.dict("os.environ", {"ATMAN_DB_URL": "postgresql://env:pass@localhost/db"})
-    @patch("atman.reflection.store.psycopg")
+    @patch("atman.adapters.storage.reflection_store.psycopg")
     def test_init_with_env_var(self, mock_psycopg: Mock) -> None:
         """Test initialization with database URL from environment."""
-        from atman.reflection.store import ReflectionStore
+        from atman.adapters.storage.reflection_store import ReflectionStore
 
         store = ReflectionStore()
         assert store.db_url == "postgresql://env:pass@localhost/db"
 
-    @patch("atman.reflection.store.psycopg", None)
+    @patch("atman.adapters.storage.reflection_store.psycopg", None)
     def test_init_without_psycopg_raises_error(self) -> None:
         """Test that initialization fails without psycopg."""
-        from atman.reflection.store import ReflectionStore
+        from atman.adapters.storage.reflection_store import ReflectionStore
 
         with pytest.raises(ImportError, match="psycopg is required"):
             ReflectionStore()
 
-    @patch("atman.reflection.store.psycopg")
+    @patch("atman.adapters.storage.reflection_store.psycopg")
     def test_connect(self, mock_psycopg: Mock) -> None:
         """Test database connection."""
-        from atman.reflection.store import ReflectionStore
+        from atman.adapters.storage.reflection_store import ReflectionStore
 
         mock_conn = MagicMock()
         mock_psycopg.connect.return_value = mock_conn
@@ -76,10 +76,10 @@ class TestReflectionStore:
         mock_psycopg.connect.assert_called_once_with("postgresql://test:pass@localhost/db")
         assert store._conn == mock_conn
 
-    @patch("atman.reflection.store.psycopg")
+    @patch("atman.adapters.storage.reflection_store.psycopg")
     def test_connect_when_already_connected(self, mock_psycopg: Mock) -> None:
         """Test that connect doesn't reconnect if already connected."""
-        from atman.reflection.store import ReflectionStore
+        from atman.adapters.storage.reflection_store import ReflectionStore
 
         mock_conn = MagicMock()
         mock_conn.closed = False
@@ -92,10 +92,10 @@ class TestReflectionStore:
         # Should not call connect again
         mock_psycopg.connect.assert_not_called()
 
-    @patch("atman.reflection.store.psycopg")
+    @patch("atman.adapters.storage.reflection_store.psycopg")
     def test_close(self, mock_psycopg: Mock) -> None:
         """Test closing database connection."""
-        from atman.reflection.store import ReflectionStore
+        from atman.adapters.storage.reflection_store import ReflectionStore
 
         mock_conn = MagicMock()
         mock_conn.closed = False
@@ -108,10 +108,10 @@ class TestReflectionStore:
         mock_conn.close.assert_called_once()
         assert store._closed is True
 
-    @patch("atman.reflection.store.psycopg")
+    @patch("atman.adapters.storage.reflection_store.psycopg")
     def test_context_manager(self, mock_psycopg: Mock) -> None:
         """Test using store as context manager."""
-        from atman.reflection.store import ReflectionStore
+        from atman.adapters.storage.reflection_store import ReflectionStore
 
         mock_conn = MagicMock()
         mock_conn.closed = False
@@ -122,12 +122,12 @@ class TestReflectionStore:
 
         mock_conn.close.assert_called_once()
 
-    @patch("atman.reflection.store.Jsonb", FakeJsonb)
-    @patch("atman.reflection.store.sql", new_callable=_make_sql_module)
-    @patch("atman.reflection.store.psycopg")
+    @patch("atman.adapters.storage.reflection_store.Jsonb", FakeJsonb)
+    @patch("atman.adapters.storage.reflection_store.sql", new_callable=_make_sql_module)
+    @patch("atman.adapters.storage.reflection_store.psycopg")
     def test_add_reflection(self, mock_psycopg: Mock, _mock_sql: MagicMock) -> None:
         """Test adding a reflection event."""
-        from atman.reflection.store import ReflectionStore
+        from atman.adapters.storage.reflection_store import ReflectionStore
 
         mock_conn = MagicMock()
         mock_conn.closed = False
@@ -152,10 +152,10 @@ class TestReflectionStore:
         mock_cursor.execute.assert_called_once()
         mock_conn.commit.assert_called_once()
 
-    @patch("atman.reflection.store.psycopg")
+    @patch("atman.adapters.storage.reflection_store.psycopg")
     def test_add_reflection_without_connection_raises_error(self, mock_psycopg: Mock) -> None:
         """Test that add raises error without connection."""
-        from atman.reflection.store import ReflectionStore
+        from atman.adapters.storage.reflection_store import ReflectionStore
 
         store = ReflectionStore(db_url="postgresql://test:pass@localhost/db")
 
@@ -169,12 +169,12 @@ class TestReflectionStore:
         with pytest.raises(RuntimeError, match="Database connection not established"):
             store.add(event)
 
-    @patch("atman.reflection.store.class_row", _noop_class_row)
-    @patch("atman.reflection.store.sql", new_callable=_make_sql_module)
-    @patch("atman.reflection.store.psycopg")
+    @patch("atman.adapters.storage.reflection_store.class_row", _noop_class_row)
+    @patch("atman.adapters.storage.reflection_store.sql", new_callable=_make_sql_module)
+    @patch("atman.adapters.storage.reflection_store.psycopg")
     def test_get_reflection(self, mock_psycopg: Mock, _mock_sql: MagicMock) -> None:
         """Test getting a reflection by ID."""
-        from atman.reflection.store import ReflectionStore
+        from atman.adapters.storage.reflection_store import ReflectionStore
 
         agent_id = uuid4()
         expected_event = ReflectionEvent(
@@ -200,12 +200,12 @@ class TestReflectionStore:
         assert result == expected_event
         mock_cursor.execute.assert_called_once()
 
-    @patch("atman.reflection.store.class_row", _noop_class_row)
-    @patch("atman.reflection.store.sql", new_callable=_make_sql_module)
-    @patch("atman.reflection.store.psycopg")
+    @patch("atman.adapters.storage.reflection_store.class_row", _noop_class_row)
+    @patch("atman.adapters.storage.reflection_store.sql", new_callable=_make_sql_module)
+    @patch("atman.adapters.storage.reflection_store.psycopg")
     def test_get_reflection_not_found(self, mock_psycopg: Mock, _mock_sql: MagicMock) -> None:
         """Test getting a non-existent reflection returns None."""
-        from atman.reflection.store import ReflectionStore
+        from atman.adapters.storage.reflection_store import ReflectionStore
 
         mock_conn = MagicMock()
         mock_conn.closed = False
@@ -222,12 +222,12 @@ class TestReflectionStore:
 
         assert result is None
 
-    @patch("atman.reflection.store.class_row", _noop_class_row)
-    @patch("atman.reflection.store.sql", new_callable=_make_sql_module)
-    @patch("atman.reflection.store.psycopg")
+    @patch("atman.adapters.storage.reflection_store.class_row", _noop_class_row)
+    @patch("atman.adapters.storage.reflection_store.sql", new_callable=_make_sql_module)
+    @patch("atman.adapters.storage.reflection_store.psycopg")
     def test_list_by_session(self, mock_psycopg: Mock, _mock_sql: MagicMock) -> None:
         """Test listing reflections by session."""
-        from atman.reflection.store import ReflectionStore
+        from atman.adapters.storage.reflection_store import ReflectionStore
 
         agent_id = uuid4()
         session_id = uuid4()
@@ -262,12 +262,12 @@ class TestReflectionStore:
         assert len(result) == 2
         assert result == events
 
-    @patch("atman.reflection.store.class_row", _noop_class_row)
-    @patch("atman.reflection.store.sql", new_callable=_make_sql_module)
-    @patch("atman.reflection.store.psycopg")
+    @patch("atman.adapters.storage.reflection_store.class_row", _noop_class_row)
+    @patch("atman.adapters.storage.reflection_store.sql", new_callable=_make_sql_module)
+    @patch("atman.adapters.storage.reflection_store.psycopg")
     def test_list_recent(self, mock_psycopg: Mock, _mock_sql: MagicMock) -> None:
         """Test listing recent reflections for an agent."""
-        from atman.reflection.store import ReflectionStore
+        from atman.adapters.storage.reflection_store import ReflectionStore
 
         agent_id = uuid4()
         events = [
@@ -300,12 +300,12 @@ class TestReflectionStore:
         assert len(result) == 2
         assert result == events
 
-    @patch("atman.reflection.store.class_row", _noop_class_row)
-    @patch("atman.reflection.store.sql", new_callable=_make_sql_module)
-    @patch("atman.reflection.store.psycopg")
+    @patch("atman.adapters.storage.reflection_store.class_row", _noop_class_row)
+    @patch("atman.adapters.storage.reflection_store.sql", new_callable=_make_sql_module)
+    @patch("atman.adapters.storage.reflection_store.psycopg")
     def test_list_by_level(self, mock_psycopg: Mock, _mock_sql: MagicMock) -> None:
         """Test listing reflections by level."""
-        from atman.reflection.store import ReflectionStore
+        from atman.adapters.storage.reflection_store import ReflectionStore
 
         agent_id = uuid4()
         events = [
@@ -338,12 +338,12 @@ class TestReflectionStore:
         assert len(result) == 2
         assert result == events
 
-    @patch("atman.reflection.store.class_row", _noop_class_row)
-    @patch("atman.reflection.store.sql", new_callable=_make_sql_module)
-    @patch("atman.reflection.store.psycopg")
+    @patch("atman.adapters.storage.reflection_store.class_row", _noop_class_row)
+    @patch("atman.adapters.storage.reflection_store.sql", new_callable=_make_sql_module)
+    @patch("atman.adapters.storage.reflection_store.psycopg")
     def test_list_by_level_with_since(self, mock_psycopg: Mock, _mock_sql: MagicMock) -> None:
         """Test listing reflections by level with time filter."""
-        from atman.reflection.store import ReflectionStore
+        from atman.adapters.storage.reflection_store import ReflectionStore
 
         agent_id = uuid4()
         since = datetime(2026, 5, 1, 0, 0, 0, tzinfo=UTC)
@@ -378,9 +378,9 @@ class TestReflectionStore:
 class TestReflectionStoreDevinReviewFixes:
     """Regression tests for Devin Review issues on PR #414."""
 
-    @patch("atman.reflection.store.Jsonb", FakeJsonb)
-    @patch("atman.reflection.store.sql", new_callable=_make_sql_module)
-    @patch("atman.reflection.store.psycopg")
+    @patch("atman.adapters.storage.reflection_store.Jsonb", FakeJsonb)
+    @patch("atman.adapters.storage.reflection_store.sql", new_callable=_make_sql_module)
+    @patch("atman.adapters.storage.reflection_store.psycopg")
     def test_add_wraps_metadata_with_jsonb_adapter(
         self, mock_psycopg: Mock, _mock_sql: MagicMock
     ) -> None:
@@ -390,7 +390,7 @@ class TestReflectionStoreDevinReviewFixes:
         ``dict`` into the ``metadata jsonb`` column and the INSERT fails at
         runtime.
         """
-        from atman.reflection.store import ReflectionStore
+        from atman.adapters.storage.reflection_store import ReflectionStore
 
         mock_conn = MagicMock()
         mock_conn.closed = False
@@ -418,12 +418,12 @@ class TestReflectionStoreDevinReviewFixes:
         assert isinstance(metadata_param, FakeJsonb)
         assert metadata_param.obj == {"k": "v", "n": 1}
 
-    @patch("atman.reflection.store.class_row", _noop_class_row)
-    @patch("atman.reflection.store.sql", new_callable=_make_sql_module)
-    @patch("atman.reflection.store.psycopg")
+    @patch("atman.adapters.storage.reflection_store.class_row", _noop_class_row)
+    @patch("atman.adapters.storage.reflection_store.sql", new_callable=_make_sql_module)
+    @patch("atman.adapters.storage.reflection_store.psycopg")
     def test_get_commits_after_select(self, mock_psycopg: Mock, _mock_sql: MagicMock) -> None:
         """Read methods commit so connections do not stay ``idle in transaction``."""
-        from atman.reflection.store import ReflectionStore
+        from atman.adapters.storage.reflection_store import ReflectionStore
 
         mock_conn = MagicMock()
         mock_conn.closed = False
@@ -440,13 +440,13 @@ class TestReflectionStoreDevinReviewFixes:
 
         assert mock_conn.commit.called
 
-    @patch("atman.reflection.store.class_row", _noop_class_row)
-    @patch("atman.reflection.store.sql", new_callable=_make_sql_module)
-    @patch("atman.reflection.store.psycopg")
+    @patch("atman.adapters.storage.reflection_store.class_row", _noop_class_row)
+    @patch("atman.adapters.storage.reflection_store.sql", new_callable=_make_sql_module)
+    @patch("atman.adapters.storage.reflection_store.psycopg")
     def test_list_recent_commits_after_select(
         self, mock_psycopg: Mock, _mock_sql: MagicMock
     ) -> None:
-        from atman.reflection.store import ReflectionStore
+        from atman.adapters.storage.reflection_store import ReflectionStore
 
         mock_conn = MagicMock()
         mock_conn.closed = False
@@ -463,13 +463,13 @@ class TestReflectionStoreDevinReviewFixes:
 
         assert mock_conn.commit.called
 
-    @patch("atman.reflection.store.class_row", _noop_class_row)
-    @patch("atman.reflection.store.sql", new_callable=_make_sql_module)
-    @patch("atman.reflection.store.psycopg")
+    @patch("atman.adapters.storage.reflection_store.class_row", _noop_class_row)
+    @patch("atman.adapters.storage.reflection_store.sql", new_callable=_make_sql_module)
+    @patch("atman.adapters.storage.reflection_store.psycopg")
     def test_list_by_session_commits_after_select(
         self, mock_psycopg: Mock, _mock_sql: MagicMock
     ) -> None:
-        from atman.reflection.store import ReflectionStore
+        from atman.adapters.storage.reflection_store import ReflectionStore
 
         mock_conn = MagicMock()
         mock_conn.closed = False
@@ -484,13 +484,13 @@ class TestReflectionStoreDevinReviewFixes:
 
         assert mock_conn.commit.called
 
-    @patch("atman.reflection.store.class_row", _noop_class_row)
-    @patch("atman.reflection.store.sql", new_callable=_make_sql_module)
-    @patch("atman.reflection.store.psycopg")
+    @patch("atman.adapters.storage.reflection_store.class_row", _noop_class_row)
+    @patch("atman.adapters.storage.reflection_store.sql", new_callable=_make_sql_module)
+    @patch("atman.adapters.storage.reflection_store.psycopg")
     def test_list_by_level_commits_after_select(
         self, mock_psycopg: Mock, _mock_sql: MagicMock
     ) -> None:
-        from atman.reflection.store import ReflectionStore
+        from atman.adapters.storage.reflection_store import ReflectionStore
 
         mock_conn = MagicMock()
         mock_conn.closed = False

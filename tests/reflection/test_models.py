@@ -5,7 +5,7 @@ from uuid import uuid4
 
 import pytest
 
-from atman.reflection.models import ReflectionEvent, ReflectionLevel
+from atman.adapters.storage.reflection_persistence_models import ReflectionEvent, ReflectionLevel
 
 
 class TestReflectionEvent:

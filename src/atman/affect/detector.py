@@ -308,6 +308,7 @@ class AffectDetector:
             why_it_matters=f"AffectDetector tagged moment ({record.trigger_reason.value}).",
             values_touched=list(dict.fromkeys(record.tags)),
             context_halo=ContextHalo(description="atman:affect-detector", metadata=meta),
+            session_id=session_id,
         )
         self._append(session_id, km)
 
@@ -376,6 +377,7 @@ class AffectDetector:
             why_it_matters=why,
             values_touched=list(dict.fromkeys(tags)),
             context_halo=ContextHalo(description="atman:affect-detector", metadata=meta),
+            session_id=session_id,
         )
         if session_id is not None:
             self._append(session_id, km)

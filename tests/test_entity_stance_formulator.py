@@ -6,11 +6,11 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 from uuid import UUID, uuid4
 
+from atman.adapters.clock import FrozenClock
 from atman.adapters.memory.in_memory_entity_registry import InMemoryEntityRegistry
 from atman.adapters.memory.in_memory_entity_stance import InMemoryEntityStanceStore
 from atman.adapters.reflection.mock_reflection_model import MockReflectionModel
 from atman.adapters.storage.in_memory_state_store import InMemoryStateStore
-from atman.core.clock_impl import FrozenClock
 from atman.core.models.entity import Entity, EntityType
 from atman.core.models.experience import EmotionalDepth, FeltSense, KeyMoment
 from atman.core.models.reflection import StanceFormulationOutput

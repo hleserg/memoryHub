@@ -181,7 +181,7 @@ def test_identity_save_failure_preserves_previous_file(monkeypatch: pytest.Monke
         def fail_replace(src: str | bytes | Path, dst: str | bytes | Path) -> None:
             raise OSError("simulated replace failure")
 
-        monkeypatch.setattr("atman.adapters.storage.file_state_store.os.replace", fail_replace)
+        monkeypatch.setattr("atman.adapters.storage._atomic_write.os.replace", fail_replace)
 
         changed = Identity(id=agent, self_description="Interrupted.")
         with pytest.raises(OSError, match="simulated replace failure"):

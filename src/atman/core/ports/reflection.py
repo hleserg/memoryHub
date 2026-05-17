@@ -372,6 +372,8 @@ class ReflectionModel(ABC):
         self,
         experience: SessionExperience,
         context: dict[str, str],
+        *,
+        key_moments_by_session: dict[UUID, list[KeyMoment]] | None = None,
     ) -> ReframingNoteOutput:
         """
         Generate a reframing note for an experience.
@@ -379,6 +381,12 @@ class ReflectionModel(ABC):
         Args:
             experience: The experience to reframe
             context: Additional context (identity, recent patterns, etc.)
+            key_moments_by_session: Optional map of session_id → ranked
+                :class:`KeyMoment` list, used by adapters to render the actual
+                content of moments (what_happened / why_it_matters / values_touched)
+                inside the prompt instead of relying on aggregate counters
+                alone (HLE-46). Default ``None`` keeps backwards compatibility
+                with existing implementations.
 
         Returns:
             Structured note; empty ``reflection`` means skip persistence.
@@ -390,6 +398,8 @@ class ReflectionModel(ABC):
         self,
         experiences: list[SessionExperience],
         context: dict[str, str],
+        *,
+        key_moments_by_session: dict[UUID, list[KeyMoment]] | None = None,
     ) -> PatternDetectionOutput:
         """
         Detect and describe a pattern across experiences.
@@ -397,6 +407,8 @@ class ReflectionModel(ABC):
         Args:
             experiences: List of experiences to analyze
             context: Additional context (identity, known patterns, etc.)
+            key_moments_by_session: Optional map of session_id → ranked
+                :class:`KeyMoment` list (see :meth:`generate_reframing_note`).
 
         Returns:
             Structured detection; empty ``description`` means no pattern.
@@ -409,6 +421,8 @@ class ReflectionModel(ABC):
         current_narrative: NarrativeDocument,
         recent_experiences: list[SessionExperience],
         reflection_level: ReflectionLevel,
+        *,
+        key_moments_by_session: dict[UUID, list[KeyMoment]] | None = None,
     ) -> NarrativeUpdateOutput:
         """
         Propose an update to the narrative.
@@ -417,6 +431,8 @@ class ReflectionModel(ABC):
             current_narrative: Current narrative document
             recent_experiences: Recent experiences to incorporate
             reflection_level: Level of reflection being performed
+            key_moments_by_session: Optional map of session_id → ranked
+                :class:`KeyMoment` list (see :meth:`generate_reframing_note`).
 
         Returns:
             Structured proposal; ``body`` is applied to the narrative layer.
@@ -429,6 +445,8 @@ class ReflectionModel(ABC):
         identity: Identity,
         experiences: list[SessionExperience],
         criterion: JahodaCriterion,
+        *,
+        key_moments_by_session: dict[UUID, list[KeyMoment]] | None = None,
     ) -> HealthCriterionOutput:
         """
         Assess one Jahoda health criterion.
@@ -437,6 +455,8 @@ class ReflectionModel(ABC):
             identity: Current identity
             experiences: Recent experiences
             criterion: Which criterion to assess
+            key_moments_by_session: Optional map of session_id → ranked
+                :class:`KeyMoment` list (see :meth:`generate_reframing_note`).
 
         Returns:
             Structured score, evidence, and concerns.

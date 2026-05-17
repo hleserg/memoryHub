@@ -16,7 +16,12 @@ from uuid import UUID
 
 from atman.core.clock_impl import SystemClock, ensure_utc
 from atman.core.exceptions import NarrativePersistenceConflictError
-from atman.core.models.experience import ReframingNote, ReframingNoteAppendResult, SessionExperience
+from atman.core.models.experience import (
+    KeyMoment,
+    ReframingNote,
+    ReframingNoteAppendResult,
+    SessionExperience,
+)
 from atman.core.models.identity import Identity
 from atman.core.models.reflection import (
     CriterionAssessment,
@@ -88,16 +93,88 @@ from atman.core.services.structured_markers_aggregator import StructuredMarkersA
 # read before every execution. Worth it whenever the operation has observable
 # side effects that must not be repeated.
 # PLAYBOOK-END
-def _daily_run_terminal_success(notes: str) -> bool:
-    return any(
-        x in notes for x in ("outcome=daily_ok", "outcome=daily_empty", "outcome=daily_skipped")
-    )
+def _run_terminal_success(notes: str, prefix: str) -> bool:
+    """Return True when ``notes`` carries a terminal-success outcome for ``prefix``.
+
+    ``prefix`` is the reflection level tag used in the run-key contract
+    (``"daily"`` or ``"deep"``). Terminal outcomes are ``{prefix}_ok``,
+    ``{prefix}_empty`` and ``{prefix}_skipped`` — anything else is treated
+    as "did not finish" and the run will be retried.
+    """
+    return any(f"outcome={prefix}_{suffix}" in notes for suffix in ("ok", "empty", "skipped"))
 
 
-def _deep_run_terminal_success(notes: str) -> bool:
-    return any(
-        x in notes for x in ("outcome=deep_ok", "outcome=deep_empty", "outcome=deep_skipped")
-    )
+def _apply_reframing_notes(
+    *,
+    reflection_model: ReflectionModel,
+    session_repo: SessionRepository,
+    experiences: list[SessionExperience],
+    patterns: list[PatternCandidate],
+    run_key: str,
+    max_experiences: int,
+    key_moments_by_session: dict[UUID, list[KeyMoment]] | None = None,
+) -> tuple[int, int, int, int]:
+    """Generate and persist reframing notes for the first ``max_experiences`` experiences.
+
+    Returns ``(stored, not_found, storage_rejected, duplicate_triggered_by)``.
+    Shared by daily (``max_experiences=2``) and deep (``max_experiences=3``)
+    reflection paths so the reframing contract stays single-sourced.
+    """
+    if not patterns:
+        return (0, 0, 0, 0)
+
+    stored = not_found = storage_rejected = duplicate = 0
+    for exp in experiences[:max_experiences]:
+        context = {"patterns": ", ".join(p.description for p in patterns)}
+        reframing_out = reflection_model.generate_reframing_note(
+            experience=exp,
+            context=context,
+            key_moments_by_session=key_moments_by_session,
+        )
+        reframing_text = reframing_out.reflection.strip()
+        if not (reframing_text and len(reframing_text) > 10):
+            continue
+
+        note = ReframingNote(
+            reflection=reframing_text,
+            reflection_type=reframing_out.reflection_type,
+            triggered_by=reframing_trigger_key(run_key, exp.id),
+        )
+        outcome = session_repo.add_reframing_note(exp.id, note)
+        if outcome == ReframingNoteAppendResult.STORED:
+            stored += 1
+        elif outcome == ReframingNoteAppendResult.EXPERIENCE_NOT_FOUND:
+            not_found += 1
+        elif outcome == ReframingNoteAppendResult.STORAGE_REJECTED:
+            storage_rejected += 1
+        elif outcome == ReframingNoteAppendResult.DUPLICATE_TRIGGERED_BY:
+            duplicate += 1
+
+    return (stored, not_found, storage_rejected, duplicate)
+
+
+def _read_persisted_event(
+    event_store: ReflectionEventStore, event: ReflectionEvent
+) -> ReflectionEvent:
+    """Re-read ``event`` by its run-key; fall back to the in-memory copy.
+
+    Used after a successful save to give callers the canonical persisted row
+    (implementations may upsert by run-key) without coupling them to the
+    store's read API.
+    """
+    if event.reflection_run_key:
+        stored = event_store.get_by_reflection_run_key(event.reflection_run_key)
+        if stored is not None:
+            return stored
+    return event
+
+
+def _save_and_get_event(
+    event_store: ReflectionEventStore, event: ReflectionEvent
+) -> ReflectionEvent:
+    """Save ``event`` and return the canonical persisted instance."""
+    event_store.save(event)
+    return _read_persisted_event(event_store, event)
 
 
 def _utc_calendar_day_bounds(calendar_anchor: datetime) -> tuple[datetime, datetime]:
@@ -135,6 +212,28 @@ def _mark_requests_consumed(
     for req in requests:
         with contextlib.suppress(Exception):
             queue.mark_consumed(req.id, consumed_at=consumed_at, reflection_event_id=event.id)
+
+
+# HLE-46: cap how many moments per session we ship to the LLM prompt. The
+# prompt-builder already truncates each session block to its top-3 by
+# salience, but we cap at the service layer too so we never hold more than
+# necessary in memory while building the per-session map.
+_MAX_MOMENTS_PER_SESSION_FOR_PROMPT = 5
+
+
+def _top_moments_by_session(
+    moments_by_session: dict[UUID, list[KeyMoment]],
+    *,
+    per_session_cap: int = _MAX_MOMENTS_PER_SESSION_FOR_PROMPT,
+) -> dict[UUID, list[KeyMoment]]:
+    """Return a copy with each session's moments sorted by salience desc and capped."""
+    out: dict[UUID, list[KeyMoment]] = {}
+    for sid, ms in moments_by_session.items():
+        if not ms:
+            continue
+        ranked = sorted(ms, key=lambda m: m.salience, reverse=True)
+        out[sid] = ranked[:per_session_cap]
+    return out
 
 
 def _reflection_identity_anchor_snapshot_id(
@@ -220,9 +319,14 @@ class MicroReflectionService:
                 experience_ids=[exp.id for exp in experiences],
             )
 
+        # HLE-46: forward the session's KeyMoments to the prompt builder via
+        # NarrativeRevisionService so the LLM sees actual moment content.
+        key_moments_by_session = _top_moments_by_session({session_id: moments})
         try:
             proposed_update = self.narrative_revision.update_recent_layer(
-                experiences, ReflectionLevel.MICRO
+                experiences,
+                ReflectionLevel.MICRO,
+                key_moments_by_session=key_moments_by_session,
             )
         except NarrativePersistenceConflictError:
             event = ReflectionEvent(
@@ -373,12 +477,17 @@ class DailyReflectionService:
         sessions = self.session_repo.get_sessions_in_range(start, end)
         experiences: list[SessionExperience] = []
         all_moments: list = []
+        # HLE-46: keep per-session moments so the reflection prompts can render
+        # the actual content of each KeyMoment, not just aggregate counters.
+        moments_by_session: dict[UUID, list[KeyMoment]] = {}
         for s in sessions:
             moments = self.session_repo.get_key_moments_for_session(s.id)
             if not moments:
                 continue
             all_moments.extend(moments)
+            moments_by_session[s.id] = moments
             experiences.append(build_session_experience(s, moments))
+        key_moments_by_session = _top_moments_by_session(moments_by_session)
 
         # Drain agent-driven reflection requests at the daily level. Even with
         # no experiences for the day we still want to acknowledge pending
@@ -413,7 +522,7 @@ class DailyReflectionService:
 
         run_key = daily_reflection_run_key_for_identity(calendar_anchor, identity.id)
         existing = self.event_store.get_by_reflection_run_key(run_key)
-        if existing is not None and _daily_run_terminal_success(existing.notes or ""):
+        if existing is not None and _run_terminal_success(existing.notes or "", "daily"):
             # Replay path: don't drain again — leave them for the next live run.
             return existing
 
@@ -423,10 +532,17 @@ class DailyReflectionService:
 
         agent_reasons = [r.reason for r in pending_requests]
         patterns_detected = self._detect_patterns(
-            experiences, identity, run_key, agent_reasons=agent_reasons
+            experiences,
+            identity,
+            run_key,
+            agent_reasons=agent_reasons,
+            key_moments_by_session=key_moments_by_session,
         )
         reframing_count, reframing_nf, reframing_sr, reframing_dup = self._add_reframing_notes(
-            experiences, patterns_detected, run_key
+            experiences,
+            patterns_detected,
+            run_key,
+            key_moments_by_session=key_moments_by_session,
         )
         # Marker-aggregation runs after reframing so the LLM-driven reframing
         # prompt isn't polluted with deterministic marker descriptions.
@@ -507,8 +623,7 @@ class DailyReflectionService:
                 error_message=f"{type(exc).__name__}: {exc}",
             )
             raise
-        got = self.event_store.get_by_reflection_run_key(run_key)
-        persisted = got if got is not None else event
+        persisted = _read_persisted_event(self.event_store, event)
         _mark_requests_consumed(
             self._reflection_request_queue,
             pending_requests,
@@ -540,6 +655,7 @@ class DailyReflectionService:
         run_key: str,
         *,
         agent_reasons: list[str] | None = None,
+        key_moments_by_session: dict[UUID, list[KeyMoment]] | None = None,
     ) -> list[PatternCandidate]:
         """Detect patterns across experiences."""
         if len(experiences) < 2:
@@ -554,7 +670,11 @@ class DailyReflectionService:
             # framing for this run.
             context["agent_requested_focus"] = " | ".join(agent_reasons)
 
-        detection = self.reflection_model.detect_pattern(experiences=experiences, context=context)
+        detection = self.reflection_model.detect_pattern(
+            experiences=experiences,
+            context=context,
+            key_moments_by_session=key_moments_by_session,
+        )
         pattern_description = detection.description.strip()
 
         if not pattern_description or len(pattern_description) < 10:
@@ -580,40 +700,19 @@ class DailyReflectionService:
         experiences: list[SessionExperience],
         patterns: list[PatternCandidate],
         run_key: str,
+        *,
+        key_moments_by_session: dict[UUID, list[KeyMoment]] | None = None,
     ) -> tuple[int, int, int, int]:
         """Add reframing notes; return (stored, not_found, storage_rejected, duplicate_triggered_by)."""
-        if not patterns:
-            return (0, 0, 0, 0)
-
-        count = 0
-        not_found = 0
-        storage_rejected = 0
-        duplicate = 0
-        for exp in experiences[:2]:
-            context = {"patterns": ", ".join(p.description for p in patterns)}
-
-            reframing_out = self.reflection_model.generate_reframing_note(
-                experience=exp, context=context
-            )
-            reframing_text = reframing_out.reflection.strip()
-
-            if reframing_text and len(reframing_text) > 10:
-                note = ReframingNote(
-                    reflection=reframing_text,
-                    reflection_type=reframing_out.reflection_type,
-                    triggered_by=reframing_trigger_key(run_key, exp.id),
-                )
-                outcome = self.session_repo.add_reframing_note(exp.id, note)
-                if outcome == ReframingNoteAppendResult.STORED:
-                    count += 1
-                elif outcome == ReframingNoteAppendResult.EXPERIENCE_NOT_FOUND:
-                    not_found += 1
-                elif outcome == ReframingNoteAppendResult.STORAGE_REJECTED:
-                    storage_rejected += 1
-                elif outcome == ReframingNoteAppendResult.DUPLICATE_TRIGGERED_BY:
-                    duplicate += 1
-
-        return (count, not_found, storage_rejected, duplicate)
+        return _apply_reframing_notes(
+            reflection_model=self.reflection_model,
+            session_repo=self.session_repo,
+            experiences=experiences,
+            patterns=patterns,
+            run_key=run_key,
+            max_experiences=2,
+            key_moments_by_session=key_moments_by_session,
+        )
 
     def _create_empty_event(self, date: datetime) -> ReflectionEvent:
         """Create an event for when there's nothing to reflect on."""
@@ -632,9 +731,7 @@ class DailyReflectionService:
             timestamp=self._clock.now(),
         )
 
-        self.event_store.save(event)
-        got = self.event_store.get_by_reflection_run_key(run_key)
-        return got if got is not None else event
+        return _save_and_get_event(self.event_store, event)
 
     def _create_skipped_daily_no_identity(
         self, date: datetime, experience_ids: list[UUID]
@@ -658,9 +755,7 @@ class DailyReflectionService:
             reflection_run_key=run_key,
             timestamp=self._clock.now(),
         )
-        self.event_store.save(event)
-        got = self.event_store.get_by_reflection_run_key(run_key)
-        return got if got is not None else event
+        return _save_and_get_event(self.event_store, event)
 
 
 class DeepReflectionService:
@@ -731,11 +826,15 @@ class DeepReflectionService:
         until_utc = ensure_utc(until)
         sessions = self.session_repo.get_sessions_in_range(since_utc, until_utc)
         experiences: list[SessionExperience] = []
+        # HLE-46: per-session moments fed to the LLM prompt builders.
+        moments_by_session: dict[UUID, list[KeyMoment]] = {}
         for s in sessions:
             moments = self.session_repo.get_key_moments_for_session(s.id)
             if not moments:
                 continue
+            moments_by_session[s.id] = moments
             experiences.append(build_session_experience(s, moments))
+        key_moments_by_session = _top_moments_by_session(moments_by_session)
 
         pending_requests = _take_pending_requests(
             self._reflection_request_queue, ReflectionRequestLevel.DEEP
@@ -766,7 +865,7 @@ class DeepReflectionService:
 
         run_key = deep_reflection_run_key_for_identity(since_utc, until_utc, identity.id)
         existing = self.event_store.get_by_reflection_run_key(run_key)
-        if existing is not None and _deep_run_terminal_success(existing.notes or ""):
+        if existing is not None and _run_terminal_success(existing.notes or "", "deep"):
             # Replay path — don't drain the queue again.
             return existing
 
@@ -774,18 +873,30 @@ class DeepReflectionService:
             self.identity_repo, identity, run_key
         )
 
-        health_assessment = self._perform_health_assessment(identity, experiences, run_key)
+        health_assessment = self._perform_health_assessment(
+            identity, experiences, run_key, key_moments_by_session=key_moments_by_session
+        )
 
         agent_reasons = [r.reason for r in pending_requests]
         patterns_detected = self._detect_deep_patterns(
-            experiences, identity, run_key, agent_reasons=agent_reasons
+            experiences,
+            identity,
+            run_key,
+            agent_reasons=agent_reasons,
+            key_moments_by_session=key_moments_by_session,
         )
         reframing_count, reframing_nf, reframing_sr, reframing_dup = self._add_strategic_reframing(
-            experiences, patterns_detected, run_key
+            experiences,
+            patterns_detected,
+            run_key,
+            key_moments_by_session=key_moments_by_session,
         )
 
         narrative_changes = self._propose_narrative_revision(
-            experiences, identity, patterns_detected
+            experiences,
+            identity,
+            patterns_detected,
+            key_moments_by_session=key_moments_by_session,
         )
 
         # R7 Deep — revise stale stances against new evidence.
@@ -912,8 +1023,7 @@ class DeepReflectionService:
             with contextlib.suppress(Exception):
                 self.event_store.save(failed)
             raise
-        got = self.event_store.get_by_reflection_run_key(run_key)
-        persisted = got if got is not None else event
+        persisted = _read_persisted_event(self.event_store, event)
         _mark_requests_consumed(
             self._reflection_request_queue,
             pending_requests,
@@ -923,14 +1033,22 @@ class DeepReflectionService:
         return persisted
 
     def _perform_health_assessment(
-        self, identity: Identity, experiences: list[SessionExperience], run_key: str
+        self,
+        identity: Identity,
+        experiences: list[SessionExperience],
+        run_key: str,
+        *,
+        key_moments_by_session: dict[UUID, list[KeyMoment]] | None = None,
     ) -> HealthAssessment:
         """Perform health assessment on 6 Jahoda criteria."""
         criteria: dict[JahodaCriterion, CriterionAssessment] = {}
 
         for criterion in JahodaCriterion:
             hc = self.reflection_model.assess_health_criterion(
-                identity=identity, experiences=experiences, criterion=criterion
+                identity=identity,
+                experiences=experiences,
+                criterion=criterion,
+                key_moments_by_session=key_moments_by_session,
             )
 
             criteria[criterion] = CriterionAssessment(
@@ -958,6 +1076,7 @@ class DeepReflectionService:
         run_key: str,
         *,
         agent_reasons: list[str] | None = None,
+        key_moments_by_session: dict[UUID, list[KeyMoment]] | None = None,
     ) -> list[PatternCandidate]:
         """Detect patterns across extended period."""
         if len(experiences) < 3:
@@ -974,7 +1093,9 @@ class DeepReflectionService:
                 context["agent_requested_focus"] = " | ".join(agent_reasons)
 
             detection = self.reflection_model.detect_pattern(
-                experiences=experiences, context=context
+                experiences=experiences,
+                context=context,
+                key_moments_by_session=key_moments_by_session,
             )
             pattern_description = detection.description.strip()
 
@@ -1000,46 +1121,27 @@ class DeepReflectionService:
         experiences: list[SessionExperience],
         patterns: list[PatternCandidate],
         run_key: str,
+        *,
+        key_moments_by_session: dict[UUID, list[KeyMoment]] | None = None,
     ) -> tuple[int, int, int, int]:
         """Add strategic reframing; return (stored, not_found, storage_rejected, duplicate_triggered_by)."""
-        if not patterns:
-            return (0, 0, 0, 0)
-
-        count = 0
-        not_found = 0
-        storage_rejected = 0
-        duplicate = 0
-        for exp in experiences[:3]:
-            context = {"patterns": ", ".join(p.description for p in patterns)}
-
-            reframing_out = self.reflection_model.generate_reframing_note(
-                experience=exp, context=context
-            )
-            reframing_text = reframing_out.reflection.strip()
-
-            if reframing_text and len(reframing_text) > 10:
-                note = ReframingNote(
-                    reflection=reframing_text,
-                    reflection_type=reframing_out.reflection_type,
-                    triggered_by=reframing_trigger_key(run_key, exp.id),
-                )
-                outcome = self.session_repo.add_reframing_note(exp.id, note)
-                if outcome == ReframingNoteAppendResult.STORED:
-                    count += 1
-                elif outcome == ReframingNoteAppendResult.EXPERIENCE_NOT_FOUND:
-                    not_found += 1
-                elif outcome == ReframingNoteAppendResult.STORAGE_REJECTED:
-                    storage_rejected += 1
-                elif outcome == ReframingNoteAppendResult.DUPLICATE_TRIGGERED_BY:
-                    duplicate += 1
-
-        return (count, not_found, storage_rejected, duplicate)
+        return _apply_reframing_notes(
+            reflection_model=self.reflection_model,
+            session_repo=self.session_repo,
+            experiences=experiences,
+            patterns=patterns,
+            run_key=run_key,
+            max_experiences=3,
+            key_moments_by_session=key_moments_by_session,
+        )
 
     def _propose_narrative_revision(
         self,
         experiences: list[SessionExperience],
         identity: Identity,
         patterns: list[PatternCandidate],
+        *,
+        key_moments_by_session: dict[UUID, list[KeyMoment]] | None = None,
     ) -> str:
         """Propose revisions to narrative based on patterns."""
         narrative = self.narrative_repo.get_current()
@@ -1050,6 +1152,7 @@ class DeepReflectionService:
             current_narrative=narrative,
             recent_experiences=experiences,
             reflection_level=ReflectionLevel.DEEP,
+            key_moments_by_session=key_moments_by_session,
         )
 
         return proposed.body
@@ -1193,9 +1296,7 @@ class DeepReflectionService:
             reflection_run_key=run_key,
             timestamp=self._clock.now(),
         )
-        self.event_store.save(event)
-        got = self.event_store.get_by_reflection_run_key(run_key)
-        return got if got is not None else event
+        return _save_and_get_event(self.event_store, event)
 
     def _create_skipped_deep_no_identity(
         self, since: datetime, until: datetime, experience_ids: list[UUID]
@@ -1220,6 +1321,4 @@ class DeepReflectionService:
             reflection_run_key=run_key,
             timestamp=self._clock.now(),
         )
-        self.event_store.save(event)
-        got = self.event_store.get_by_reflection_run_key(run_key)
-        return got if got is not None else event
+        return _save_and_get_event(self.event_store, event)

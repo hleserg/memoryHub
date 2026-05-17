@@ -279,6 +279,16 @@ class NarrativeDocument(BaseModel):
         default_factory=list, description="Ongoing narrative threads"
     )
 
+    # Finish-session bookkeeping
+    finished_session_ids: list[UUID] = Field(
+        default_factory=list,
+        description=(
+            "Session IDs whose finish_session writes were successfully committed. "
+            "Survives recent_layer replacements (by MicroReflection etc.) so crash "
+            "recovery does not redo finish based on prose content."
+        ),
+    )
+
     # Metadata
     schema_version: str = Field(default="1.0.0", description="Schema version for migrations")
 
@@ -310,6 +320,17 @@ class NarrativeDocument(BaseModel):
             content=new_content,
         )
         self.updated_at = datetime.now(UTC)
+
+    def mark_session_finished(self, session_id: UUID) -> None:
+        """Record that a session's finish artifacts have been committed.
+
+        Idempotent: a second call with the same id is a no-op. Stored in a
+        dedicated field rather than the recent-layer prose so reflections that
+        replace ``recent_layer`` cannot accidentally lose the marker.
+        """
+        if session_id not in self.finished_session_ids:
+            self.finished_session_ids.append(session_id)
+            self.updated_at = datetime.now(UTC)
 
     def update_core_layer(self, new_content: str) -> None:
         """

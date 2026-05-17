@@ -6,13 +6,12 @@ Suitable for local development and single-agent use cases.
 """
 
 import json
-import os
-import tempfile
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 from uuid import UUID
 
+from atman.adapters.storage._atomic_write import write_atomically
 from atman.core.models import (
     Eigenstate,
     ExperienceRecord,
@@ -92,30 +91,12 @@ class FileStateStore(StateStore):
         self.key_moments_path = self.workspace / "key_moments.jsonl"
 
     def _write_json_atomically(self, path: Path, content: str) -> None:
-        """Write JSON without exposing callers to partially rewritten files."""
-        path.parent.mkdir(parents=True, exist_ok=True)
-        file_mode = path.stat().st_mode & 0o777 if path.exists() else 0o600
-        temp_file = tempfile.NamedTemporaryFile(
-            mode="w",
-            encoding="utf-8",
-            dir=path.parent,
-            prefix=f".{path.name}.",
-            suffix=".tmp",
-            delete=False,
-        )
-        temp_path = Path(temp_file.name)
+        """Write JSON without exposing callers to partially rewritten files.
 
-        try:
-            with temp_file as f:
-                f.write(content)
-                f.flush()
-                os.fsync(f.fileno())
-
-            temp_path.chmod(file_mode)
-            os.replace(temp_path, path)
-        finally:
-            if temp_path.exists():
-                temp_path.unlink()
+        Thin wrapper over ``write_atomically``; preserved as a method since
+        internal call sites (and possibly subclasses) rely on it.
+        """
+        write_atomically(path, content)
 
     # Experience Store operations (minimal implementation)
 
@@ -165,7 +146,16 @@ class FileStateStore(StateStore):
     def search_experiences(
         self, query: ExperienceQuery | None = None, limit: int = 10
     ) -> list[ExperienceRecord]:
-        """Search experiences (basic implementation)."""
+        """Search experiences (basic implementation).
+
+        For moment-aware queries (``ValuesTouchedQuery``, ``DepthQuery``,
+        ``FactRefsContainsQuery``) we batch-load all moments for an experience
+        in a single read of ``{session_id}_moments.json`` instead of calling
+        ``get_key_moment`` once per moment id (HLE-43). The per-moment
+        ``{id}.json`` fallback handles moments not present in the session file
+        (e.g. created via ``create_key_moment`` without a per-session bundle,
+        or belonging to a different session than the experience record).
+        """
         all_experiences: list[ExperienceRecord] = []
 
         for experience_file in self.experiences_dir.glob("*.json"):
@@ -178,34 +168,54 @@ class FileStateStore(StateStore):
             elif isinstance(query, SessionExperienceQuery):
                 if record.experience.session_id == query.session_id:
                     all_experiences.append(record)
-            elif isinstance(query, ValuesTouchedQuery):
-                for moment_id in record.experience.key_moment_ids:
-                    moment = self.get_key_moment(moment_id)
-                    if moment and any(v in moment.values_touched for v in query.values):
+            elif isinstance(query, ValuesTouchedQuery | DepthQuery | FactRefsContainsQuery):
+                moments = self._load_moments_for_record(record)
+                if isinstance(query, ValuesTouchedQuery):
+                    if any(any(v in m.values_touched for v in query.values) for m in moments):
                         all_experiences.append(record)
-                        break
-            elif isinstance(query, DepthQuery):
-                for moment_id in record.experience.key_moment_ids:
-                    moment = self.get_key_moment(moment_id)
-                    if moment and moment.how_i_felt.depth.value == query.depth:
+                elif isinstance(query, DepthQuery):
+                    if any(m.how_i_felt.depth.value == query.depth for m in moments):
                         all_experiences.append(record)
-                        break
+                else:  # FactRefsContainsQuery
+                    if any(query.fact_id in m.fact_refs for m in moments):
+                        all_experiences.append(record)
             elif (
                 isinstance(query, DateRangeQuery)
                 and query.start_date <= record.experience.timestamp <= query.end_date
             ):
                 all_experiences.append(record)
-            elif isinstance(query, FactRefsContainsQuery):
-                # Check fact refs in key moments (fetch by ID)
-                for moment_id in record.experience.key_moment_ids:
-                    moment = self.get_key_moment(moment_id)
-                    if moment and query.fact_id in moment.fact_refs:
-                        all_experiences.append(record)
-                        break
 
         # Sort by timestamp descending
         all_experiences.sort(key=lambda r: r.experience.timestamp, reverse=True)
         return all_experiences[:limit]
+
+    def _load_moments_for_record(self, record: ExperienceRecord) -> list[KeyMoment]:
+        """Load all key moments referenced by ``record`` with a single batched read.
+
+        Reads ``{session_id}_moments.json`` once and filters in memory; any
+        ``key_moment_ids`` not present in the session bundle (different session
+        or solo ``create_key_moment``) fall back to per-moment ``{id}.json``
+        lookups via ``get_key_moment``. Missing moments are skipped silently,
+        matching the previous per-id loop behavior.
+        """
+        needed_ids = list(record.experience.key_moment_ids)
+        if not needed_ids:
+            return []
+
+        moments_by_id: dict[UUID, KeyMoment] = {}
+        session_id = getattr(record.experience, "session_id", None)
+        if session_id is not None:
+            for moment in self.get_key_moments_for_session(session_id):
+                moments_by_id[moment.id] = moment
+
+        result: list[KeyMoment] = []
+        for moment_id in needed_ids:
+            moment = moments_by_id.get(moment_id)
+            if moment is None:
+                moment = self.get_key_moment(moment_id)
+            if moment is not None:
+                result.append(moment)
+        return result
 
     def list_recent_experiences(self, limit: int = 10) -> list[ExperienceRecord]:
         """List recent experiences."""
@@ -223,31 +233,35 @@ class FileStateStore(StateStore):
             self._write_json_atomically(moment_file, moment.model_dump_json(indent=2))
 
     def get_key_moment(self, moment_id: UUID) -> KeyMoment | None:
-        """Retrieve a key moment by ID (per-session files or JSONL from create_key_moment)."""
-        import json
-        import warnings
+        """Retrieve a key moment by ID.
 
+        Fast path: per-moment ``{id}.json`` file written by all current write
+        paths (``store_key_moments``, ``store_key_moment``, ``create_key_moment``).
+        Falls back to a one-shot scan of ``key_moments.jsonl`` for moments
+        written by **old** code that only appended to the JSONL log without
+        materialising the per-moment file (e.g. legacy crash-recovery paths
+        pre-HLE-43). If the JSONL hit matches, the per-moment file is
+        backfilled so the next call hits the fast path.
+        """
         moment_file = self.key_moments_dir / f"{moment_id}.json"
         if moment_file.exists():
-            data = _read_json_file(moment_file)
-            return KeyMoment.model_validate(data)
+            return KeyMoment.model_validate(_read_json_file(moment_file))
 
         if not self.key_moments_path.exists():
             return None
-
+        target = str(moment_id)
         for line in self.key_moments_path.read_text(encoding="utf-8").splitlines():
-            if line.strip():
-                try:
-                    data = json.loads(line)
-                    if data.get("id") == str(moment_id):
-                        return KeyMoment.model_validate(data)
-                except (json.JSONDecodeError, ValueError) as e:
-                    warnings.warn(
-                        f"Skipping corrupted line in {self.key_moments_path}: {e}",
-                        stacklevel=2,
-                    )
-                    continue
-
+            if not line.strip():
+                continue
+            try:
+                data = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if data.get("id") == target:
+                moment = KeyMoment.model_validate(data)
+                # Backfill the per-moment index file so future reads are O(1).
+                self._write_json_atomically(moment_file, moment.model_dump_json(indent=2))
+                return moment
         return None
 
     def get_key_moments_for_session(self, session_id: UUID) -> list[KeyMoment]:
@@ -444,25 +458,18 @@ class FileStateStore(StateStore):
     # KeyMoment operations
 
     def create_key_moment(self, key_moment: KeyMoment) -> KeyMoment:
-        """Create key moment by appending to JSONL file."""
-        import warnings
+        """Create key moment — writes per-moment file and appends to JSONL log."""
+        # Per-moment file is the source of truth for ``get_key_moment``;
+        # treat its presence as the existence check (cheap O(1) stat vs
+        # scanning the whole JSONL).
+        moment_file = self.key_moments_dir / f"{key_moment.id}.json"
+        if moment_file.exists():
+            raise ValueError(f"KeyMoment {key_moment.id} already exists")
 
-        # Check if key moment already exists
-        if self.key_moments_path.exists():
-            for line in self.key_moments_path.read_text(encoding="utf-8").splitlines():
-                if line.strip():
-                    try:
-                        data = json.loads(line)
-                        if data.get("id") == str(key_moment.id):
-                            raise ValueError(f"KeyMoment {key_moment.id} already exists")
-                    except json.JSONDecodeError as e:
-                        warnings.warn(
-                            f"Skipping corrupted line in {self.key_moments_path}: {e}",
-                            stacklevel=2,
-                        )
-                        continue
+        self._write_json_atomically(moment_file, key_moment.model_dump_json(indent=2))
 
-        # Append to JSONL file
+        # Append to JSONL log (kept for backwards compatibility with
+        # ``list_key_moments`` and ``store_key_moment`` upsert path).
         with self.key_moments_path.open("a", encoding="utf-8") as f:
             f.write(key_moment.model_dump_json() + "\n")
 

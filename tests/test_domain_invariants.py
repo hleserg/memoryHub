@@ -44,9 +44,9 @@ from uuid import uuid4
 
 import pytest
 
+from atman.adapters.clock import FrozenClock
 from atman.adapters.memory import InMemoryBackend
 from atman.adapters.storage import FileStateStore, InMemoryStateStore
-from atman.core.clock_impl import FrozenClock
 from atman.core.models import (
     CoreValue,
     EmotionalDepth,
