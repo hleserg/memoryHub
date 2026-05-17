@@ -11,7 +11,7 @@ import sys
 from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from uuid import UUID
 
 from pydantic import BaseModel, Field
@@ -36,6 +36,10 @@ from atman.affect.metrics import (
 from atman.affect.models import AffectMetrics, AffectRecord, AgentMemoryReport, TriggerReason
 from atman.core.models.experience import ContextHalo, EmotionalDepth, FeltSense, KeyMoment
 from atman.core.ports.linguistic import LinguisticAnalyzer
+
+if TYPE_CHECKING:
+    from atman.core.ports.divergence_events import DivergenceEventStore
+    from atman.core.services.divergence_detector import DivergenceDetector
 
 _LOG = logging.getLogger(__name__)
 
@@ -90,11 +94,20 @@ class AffectDetector:
         workspace: Path,
         append_moment: Callable[[UUID, KeyMoment], None],
         linguistic_analyzer: LinguisticAnalyzer | None = None,
+        divergence_detector: DivergenceDetector | None = None,
+        divergence_event_store: DivergenceEventStore | None = None,
     ) -> None:
         self.config = config
         self._workspace = workspace
         self._append = append_moment
         self._linguistic_analyzer = linguistic_analyzer
+        # HLE-29: optional divergence pipeline. When both are wired, every
+        # AgentMessageAnalysis is fed through the detector and the resulting
+        # events are persisted. Either being None disables the pipeline
+        # silently — required for in-memory dev runs where the user-message
+        # path doesn't allocate the detector.
+        self._divergence_detector = divergence_detector
+        self._divergence_event_store = divergence_event_store
         self._baseline = RollingBaseline(
             workspace / "affect_baseline.jsonl",
             window=config.baseline_window,
@@ -209,6 +222,27 @@ class AffectDetector:
                     tags.append(tag)
             if TriggerReason.LINGUISTIC not in reasons:
                 reasons.append(TriggerReason.LINGUISTIC)
+
+        # HLE-29: persist the divergence events derived from this analysis so
+        # downstream reflection (R6 DivergenceAggregator) can read them later.
+        # Failures in detect/write must not break message processing — the
+        # store is auxiliary observability, not part of the correctness path.
+        if (
+            _linguistic_analysis is not None
+            and self._divergence_detector is not None
+            and self._divergence_event_store is not None
+        ):
+            try:
+                events = self._divergence_detector.detect(
+                    _linguistic_analysis,
+                    session_id=session_id,
+                )
+                for evt in events:
+                    self._divergence_event_store.write_event(evt)
+            except Exception:
+                _LOG.warning(
+                    "divergence detector / store failed; skipping persistence", exc_info=True
+                )
 
         if not cold:
             strong = sum(1 for k in METRIC_KEYS if abs(z.get(k, 0.0)) > self.config.sigma_threshold)

@@ -55,6 +55,9 @@ if TYPE_CHECKING:
     # canonical wiring is to pass an already-built ``AffectPort`` via the
     # ``affect`` kwarg from the composition root.
     from atman.affect.detector import AffectDetectorConfig
+    from atman.core.ports.divergence_events import DivergenceEventStore
+    from atman.core.ports.linguistic import LinguisticAnalyzer
+    from atman.core.services.divergence_detector import DivergenceDetector
     from atman.core.services.post_write_scheduler import PostWriteScheduler
 
 # Cap for eigenstate list fields; order is insertion-derived until salience ranking exists.
@@ -111,6 +114,9 @@ class SessionManager:
         affect_config: AffectDetectorConfig | None = None,
         workspace: Path | None = None,
         post_write_scheduler: PostWriteScheduler | None = None,
+        linguistic_analyzer: LinguisticAnalyzer | None = None,
+        divergence_detector: DivergenceDetector | None = None,
+        divergence_event_store: DivergenceEventStore | None = None,
     ) -> None:
         """
         Initialize Session Manager.
@@ -154,6 +160,9 @@ class SessionManager:
                 affect_config,
                 workspace=affect_workspace,
                 append_moment=self.append_key_moment,
+                linguistic_analyzer=linguistic_analyzer,
+                divergence_detector=divergence_detector,
+                divergence_event_store=divergence_event_store,
             )
 
     @property

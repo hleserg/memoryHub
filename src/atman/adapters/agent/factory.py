@@ -128,6 +128,21 @@ def build_deps(
     maintenance_queue = InMemoryMaintenanceQueue()
     post_write_scheduler = PostWriteScheduler(maintenance_queue)
 
+    # HLE-29: divergence pipeline. The detector turns LinguisticAnalysis into
+    # DivergenceEvent rows; the store persists them so R6 DivergenceAggregator
+    # (Daily reflection) can read populated history later. Wire with the NoOp
+    # analyzer by default — real GLiNER/mREBEL adapters can be slotted in when
+    # the linguistic extra is installed.
+    from atman.adapters.linguistic.noop_adapter import NoOpLinguisticAnalyzer
+    from atman.adapters.memory.in_memory_divergence_events import (
+        InMemoryDivergenceEventStore,
+    )
+    from atman.core.services.divergence_detector import DivergenceDetector
+
+    _affect_linguistic = NoOpLinguisticAnalyzer()
+    _divergence_detector = DivergenceDetector(agent_id)
+    _divergence_event_store = InMemoryDivergenceEventStore()
+
     # HLE-52: build the affect adapter here (composition root) and inject via
     # AffectPort so SessionManager never imports the concrete implementation.
     session_manager = SessionManager(
@@ -142,6 +157,9 @@ def build_deps(
                 _AffectDetectorConfig(),
                 workspace=workspace,
                 append_moment=session_manager.append_key_moment,
+                linguistic_analyzer=_affect_linguistic,
+                divergence_detector=_divergence_detector,
+                divergence_event_store=_divergence_event_store,
             )
         )
 
