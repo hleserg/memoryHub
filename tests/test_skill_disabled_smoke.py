@@ -20,6 +20,7 @@ Covered:
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 from uuid import uuid4
 
 import pytest
@@ -169,10 +170,12 @@ def test_micro_reflection_without_agent_id_skips_skill_hook() -> None:
         def save(self, _event):
             return None
 
+    from typing import cast
+
     svc = MicroReflectionService(
-        session_repo=_SessionRepo(),
-        narrative_revision=_NarrativeRev(),
-        event_store=_EventStore(),
+        session_repo=cast("Any", _SessionRepo()),
+        narrative_revision=cast("Any", _NarrativeRev()),
+        event_store=cast("Any", _EventStore()),
         skill_manager=_RecordingSkillManager(),
     )
 

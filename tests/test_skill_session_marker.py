@@ -131,7 +131,12 @@ def test_marker_handles_missing_skill_row(tmp_path: Path) -> None:
     skill.manifest_path.parent.mkdir(parents=True)
     manager._store.save_skill(skill)
     manager._store.create_invocation(skill.id, agent_id, session_id)
-    del manager._store._skills[skill.id]
+    # Cast to InMemorySkillStore to access internal state for this test scenario.
+    from atman.skills.in_memory_store import InMemorySkillStore
+
+    inner_store = manager._store
+    assert isinstance(inner_store, InMemorySkillStore)
+    del inner_store._skills[skill.id]
 
     path = manager.write_session_skills_marker(workspace, session_id, agent_id)
     assert path is not None

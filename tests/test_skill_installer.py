@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import io
 import zipfile
+from collections.abc import Mapping
 from pathlib import Path
 from uuid import uuid4
 
@@ -34,7 +35,7 @@ def _write_manifest(root: Path, *, name: str = "demo", runtime_entry: str | None
     )
 
 
-def _make_zip(payload: dict[str, str | bytes]) -> bytes:
+def _make_zip(payload: Mapping[str, str | bytes]) -> bytes:
     """Build a zip in memory from a {arcname: contents} mapping."""
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w") as zf:
