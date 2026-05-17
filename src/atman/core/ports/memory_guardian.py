@@ -1,9 +1,15 @@
 """Port: MemoryGuardian — scan for inconsistencies and quality issues."""
 
 from abc import ABC, abstractmethod
+from typing import TYPE_CHECKING
 from uuid import UUID
 
 from atman.core.models.validation import ValidationFinding
+
+if TYPE_CHECKING:
+    from atman.core.models.entity import Entity
+    from atman.core.models.experience import KeyMoment
+    from atman.core.models.fact import FactRecord
 
 
 class MemoryGuardian(ABC):
@@ -70,6 +76,27 @@ class MemoryGuardian(ABC):
             stance_too_fast_hours,
             stance_too_fast_min_count,
         )
+        return []
+
+    # HLE-32: inline post-write checks. Concrete adapters detect
+    # lightweight per-row issues (missing embedding, no entity links,
+    # incomplete coloring) within milliseconds of the originating INSERT.
+    # Callers must run these in a try/except — the hot path must never block
+    # on validation per plan §17 principle 12. Default returns ``[]`` so
+    # legacy adapters stay valid without an explicit override.
+    def inline_check_fact(
+        self, fact: "FactRecord", *, agent_id: UUID
+    ) -> list[ValidationFinding]:  # pragma: no cover - default no-op
+        return []
+
+    def inline_check_entity(
+        self, entity: "Entity", *, agent_id: UUID
+    ) -> list[ValidationFinding]:  # pragma: no cover - default no-op
+        return []
+
+    def inline_check_key_moment(
+        self, moment: "KeyMoment", *, agent_id: UUID
+    ) -> list[ValidationFinding]:  # pragma: no cover - default no-op
         return []
 
     @abstractmethod

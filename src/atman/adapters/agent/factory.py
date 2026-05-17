@@ -167,12 +167,35 @@ def build_deps(
     _divergence_detector = DivergenceDetector(agent_id)
     _divergence_event_store = InMemoryDivergenceEventStore()
 
+    # HLE-31 / HLE-32: shared MemoryGuardian + InlineValidator so writes
+    # surface lightweight findings within milliseconds. Both Level-C scans
+    # (HLE-31, scheduled) and the inline checks (HLE-32, post-write) feed
+    # the same finding store so consumers see a unified validation_findings
+    # stream.
+    #
+    # IMPORTANT (Devin Review #599): this default wire-up only feeds the
+    # guardian a ``state_store`` and ``divergence_event_store``. The Level-B
+    # batch scans (``scan_orphan_entities``, ``scan_merge_candidates``,
+    # ``scan_embedding_gaps``) need an ``entity_registry`` / ``factual_memory``
+    # and silently return ``[]`` here. cli_maintenance / cron workers that
+    # want those signals should construct their own guardian with the full
+    # dep set; the inline + Level-C paths are intentionally lighter.
+    from atman.adapters.memory.in_memory_memory_guardian import InMemoryMemoryGuardian
+    from atman.core.services.inline_validator import InlineValidator
+
+    _memory_guardian = InMemoryMemoryGuardian(
+        state_store=state_store,
+        divergence_event_store=_divergence_event_store,
+    )
+    _inline_validator = InlineValidator(_memory_guardian)
+
     # HLE-52: build the affect adapter here (composition root) and inject via
     # AffectPort so SessionManager never imports the concrete implementation.
     session_manager = SessionManager(
         state_store,
         workspace=workspace,
         post_write_scheduler=post_write_scheduler,
+        inline_validator=_inline_validator,
     )
     if _AFFECT_AVAILABLE:
         assert _AffectDetector is not None and _AffectDetectorConfig is not None
@@ -307,6 +330,7 @@ def build_deps(
         divergence_event_store=_divergence_event_store,
         reflection_overload_monitor=_overload_monitor,
         overload_alert_inspect=_overload_sink_inmem,
+        memory_guardian=_memory_guardian,
     )
 
     return deps, session_manager, state_store

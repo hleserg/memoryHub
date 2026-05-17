@@ -59,6 +59,7 @@ if TYPE_CHECKING:
     from atman.core.ports.divergence_events import DivergenceEventStore
     from atman.core.ports.linguistic import LinguisticAnalyzer
     from atman.core.services.divergence_detector import DivergenceDetector
+    from atman.core.services.inline_validator import InlineValidator
     from atman.core.services.post_write_scheduler import PostWriteScheduler
 
 # Cap for eigenstate list fields; order is insertion-derived until salience ranking exists.
@@ -118,6 +119,7 @@ class SessionManager:
         linguistic_analyzer: LinguisticAnalyzer | None = None,
         divergence_detector: DivergenceDetector | None = None,
         divergence_event_store: DivergenceEventStore | None = None,
+        inline_validator: InlineValidator | None = None,
     ) -> None:
         """
         Initialize Session Manager.
@@ -149,6 +151,7 @@ class SessionManager:
         self._lock = threading.Lock()
         self._workspace = workspace
         self._post_write_scheduler = post_write_scheduler
+        self._inline_validator = inline_validator
         # HLE-56: pending fire-and-forget AffectDetector tasks per session.
         # ``finish_session`` drains these before flipping ``is_finished`` so
         # that key moments produced by the affect hook are not silently
@@ -1207,6 +1210,20 @@ class SessionManager:
                 ):
                     for moment in session_result.key_moments:
                         self._schedule_post_write(moment, session_result.identity_id)
+
+                # HLE-32: inline post-write validation. Runs the lightweight
+                # row-level checks (e.g. incomplete_coloring on a fresh
+                # moment) immediately after persistence so the resulting
+                # findings surface in `validation_findings` within
+                # milliseconds rather than waiting for the next scheduled
+                # guardian scan. Errors inside the validator are logged but
+                # never propagated — the hot path must not block on
+                # validation per plan §17 principle 12.
+                if self._inline_validator is not None and session_result.identity_id is not None:
+                    for moment in session_result.key_moments:
+                        self._inline_validator.check_key_moment(
+                            moment, agent_id=session_result.identity_id
+                        )
 
                 # Compute avg_emotional_intensity and has_profound_moment
                 avg_emotional_intensity = 0.5  # default
