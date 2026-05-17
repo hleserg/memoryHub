@@ -9,6 +9,9 @@ desktop.ini
 *.swp
 *~
 
+# Claude Code (local settings + transient agent worktrees)
+.claude/
+
 # Секреты и локальная конфигурация
 .env
 .env.*
