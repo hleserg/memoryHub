@@ -117,6 +117,27 @@ def test_get_sessions_in_range_three_arg_explicit_agent_id() -> None:
     assert {s.id for s in only_a} == {s_a.id}
 
 
+def test_get_sessions_in_range_handles_naive_started_at_without_typeerror() -> None:
+    """HLE-59 regression (Devin #594): a Session with a naive ``started_at``
+    must not raise ``TypeError`` against UTC-aware range bounds — the new
+    native ``list_sessions_in_range`` path normalises via ``ensure_utc``
+    before comparison.
+    """
+    store = InMemoryStateStore()
+    agent = uuid4()
+    now = datetime.now(UTC)
+    # Naive timestamp — what legacy JSON rows or test fixtures produce.
+    naive_in = Session(
+        agent_id=agent,
+        started_at=(now - timedelta(days=2)).replace(tzinfo=None),
+    )
+    store.create_session(naive_in)
+
+    repo = StateStoreSessionRepository(store, agent_id=agent)
+    result = repo.get_sessions_in_range(now - timedelta(days=5), now)
+    assert {s.id for s in result} == {naive_in.id}
+
+
 def test_get_key_moments_for_session() -> None:
     store = InMemoryStateStore()
     sid = uuid4()

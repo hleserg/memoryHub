@@ -631,6 +631,16 @@ class FileStateStore(StateStore):
         Reads every session JSON once and filters in Python — this is the
         same I/O profile as ``list_recent_sessions`` with no artificial
         ``limit`` cap, so historical reflections over agents with very
-        large session counts no longer drop the oldest rows.
+        large session counts no longer drop the oldest rows. Legacy session
+        JSONs persisted without a timezone suffix yield naive
+        ``started_at`` values via :meth:`Session.model_validate`; normalise
+        via :func:`ensure_utc` so the inclusive range check doesn't raise
+        ``TypeError`` against UTC-aware bounds.
         """
-        return [s for s in self._iter_sessions_for_agent(agent_id) if start <= s.started_at <= end]
+        from atman.core.clock_impl import ensure_utc
+
+        return [
+            s
+            for s in self._iter_sessions_for_agent(agent_id)
+            if start <= ensure_utc(s.started_at) <= end
+        ]

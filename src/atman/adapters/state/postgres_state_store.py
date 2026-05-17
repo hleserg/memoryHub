@@ -386,6 +386,41 @@ class PostgresStateStore(StateStore):
             rows = cur.fetchall()
         return [_row_to_session(r) for r in rows]
 
+    def list_sessions_in_range(
+        self,
+        agent_id: UUID,
+        start: datetime,
+        end: datetime,
+    ) -> list[Session]:
+        """HLE-59: native ranged SQL query using the ``started_at`` index.
+
+        Overrides the port default so high-volume agents don't fall through
+        to ``list_recent_sessions(limit=10_000_000)``, which would
+        materialise the full session table and sort it. Inclusive on both
+        bounds to match the in-memory / file adapters and the prior
+        ``StateStoreSessionRepository.get_sessions_in_range`` semantics.
+        Postgres ``timestamptz`` columns return UTC-aware datetimes, so the
+        ``ensure_utc`` normalisation the in-memory / file paths need is
+        redundant here.
+        """
+        schema = self._schema_ident(agent_id)
+        conn = self._get_conn()
+        with conn.transaction(), conn.cursor() as cur:
+            q = sql.SQL(
+                """
+                SELECT id, agent_id, started_at, ended_at, status, identity_snapshot_id,
+                       close_reason, agent_recap, restart_reason, user_language,
+                       overall_tone, key_insight, unexamined_fact_refs
+                FROM {s}.sessions
+                WHERE agent_id = %(aid)s
+                  AND started_at BETWEEN %(start)s AND %(end)s
+                ORDER BY started_at DESC
+                """
+            ).format(s=schema)
+            cur.execute(q, {"aid": agent_id, "start": start, "end": end})
+            rows = cur.fetchall()
+        return [_row_to_session(r) for r in rows]
+
     # ------------------------------------------------------------------
     # KeyMoment operations (v2 — agent_N.key_moments)
     # ------------------------------------------------------------------

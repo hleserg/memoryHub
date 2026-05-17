@@ -466,10 +466,17 @@ class StateStore(ABC):
 
         Inclusive bounds match the prior
         ``StateStoreSessionRepository.get_sessions_in_range`` semantics.
+        ``s.started_at`` is normalised via :func:`ensure_utc` before the
+        comparison so legacy rows persisted without a timezone suffix don't
+        raise ``TypeError`` against UTC-aware ``start`` / ``end`` bounds.
         """
+        # Lazy import keeps the port free of a static dependency on
+        # ``core.clock_impl`` (which itself only imports stdlib).
+        from atman.core.clock_impl import ensure_utc
+
         # Default fallback for adapters that don't override: pull a generous
         # window and filter. We intentionally use a very large limit here —
         # adapters with O(N) ``list_recent_sessions`` cost should provide a
         # native override to avoid the materialisation.
         candidates = self.list_recent_sessions(agent_id, limit=10_000_000)
-        return [s for s in candidates if start <= s.started_at <= end]
+        return [s for s in candidates if start <= ensure_utc(s.started_at) <= end]

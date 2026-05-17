@@ -369,12 +369,17 @@ class InMemoryStateStore(StateStore):
 
         Avoids the legacy ``list_recent_sessions(limit=N)`` cap that the
         reflection engine used to fall back to client-side. Inclusive on
-        both bounds to match the prior repository semantics.
+        both bounds to match the prior repository semantics. Normalises
+        ``s.started_at`` via :func:`ensure_utc` so direct-API or test code
+        that inserts a Session with a naive ``started_at`` doesn't trip a
+        ``TypeError`` against UTC-aware bounds.
         """
+        from atman.core.clock_impl import ensure_utc
+
         sessions = [
             s
             for s in self._sessions.values()
-            if s.agent_id == agent_id and start <= s.started_at <= end
+            if s.agent_id == agent_id and start <= ensure_utc(s.started_at) <= end
         ]
         sessions.sort(key=lambda s: s.started_at, reverse=True)
         return [s.model_copy(deep=True) for s in sessions]
