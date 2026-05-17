@@ -24,6 +24,7 @@ if TYPE_CHECKING:
         InMemoryOverloadAlertSink,
     )
     from atman.core.ports.divergence_events import DivergenceEventStore
+    from atman.core.ports.memory_guardian import MemoryGuardian
     from atman.core.ports.pending_human_review import PendingHumanReviewInbox
     from atman.core.ports.reflection_request_queue import ReflectionRequestQueue
     from atman.core.ports.state_store import StateStore
@@ -119,6 +120,12 @@ class AtmanDeps:
     ``.alerts`` list to introspect captured cadence anomalies without
     reaching into the monitor's private ``_sink`` chain."""
 
+    memory_guardian: MemoryGuardian | None = None
+    """Quality-finding scanner (HLE-31 batch scans + HLE-32 inline checks).
+    Exposed on AtmanDeps so cli_maintenance / cron workers and any future
+    admin endpoints can read findings (``get_unresolved``) and resolve them
+    via the same instance the in-memory inline pipeline writes to."""
+
     @classmethod
     def from_config(
         cls,
@@ -138,6 +145,7 @@ class AtmanDeps:
         divergence_event_store: DivergenceEventStore | None = None,
         reflection_overload_monitor: ReflectionOverloadMonitor | None = None,
         overload_alert_inspect: InMemoryOverloadAlertSink | None = None,
+        memory_guardian: MemoryGuardian | None = None,
     ) -> AtmanDeps:
         """
         Build :class:`AtmanDeps` from a validated :class:`AgentConfig`.
@@ -167,4 +175,5 @@ class AtmanDeps:
             divergence_event_store=divergence_event_store,
             reflection_overload_monitor=reflection_overload_monitor,
             overload_alert_inspect=overload_alert_inspect,
+            memory_guardian=memory_guardian,
         )

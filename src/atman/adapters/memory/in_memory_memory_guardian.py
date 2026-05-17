@@ -379,6 +379,119 @@ class InMemoryMemoryGuardian(MemoryGuardian):
             )
         ]
 
+    # ---- Inline post-write checks (HLE-32) -----------------------------------
+
+    @override
+    def inline_check_fact(self, fact: object, *, agent_id: UUID) -> list[ValidationFinding]:
+        """Row-level checks on a freshly written FactRecord.
+
+        Surfaces ``embedding_missing`` when the row landed without an
+        embedding vector in its metadata bag — the asynchronous embedding
+        job (if any) hasn't filled it yet and downstream RAG would miss
+        this row. FactRecord has no first-class ``embedding`` column, so
+        we sniff ``metadata['embedding']``.
+        """
+        metadata = getattr(fact, "metadata", None) or {}
+        has_embedding = metadata.get("embedding") is not None
+        if has_embedding:
+            return []
+        target_id = fact.id  # type: ignore[attr-defined]
+        if self._has_unresolved(agent_id, "facts", target_id, FindingType.embedding_missing):
+            return []
+        return [
+            ValidationFinding(
+                agent_id=agent_id,
+                finding_type=FindingType.embedding_missing,
+                severity=FindingSeverity.info,
+                target_table="facts",
+                target_id=target_id,
+                details={
+                    "phase": "inline",
+                    "content_excerpt": (getattr(fact, "content", "") or "")[:120],
+                },
+                detected_by="memory_guardian:inline",
+            )
+        ]
+
+    @override
+    def inline_check_entity(self, entity: object, *, agent_id: UUID) -> list[ValidationFinding]:
+        """Row-level checks on a freshly written Entity."""
+        # Value/principle "entities" are short labels — skip the embedding
+        # check, matches the existing scan_embedding_gaps policy.
+        etype = getattr(entity, "entity_type", None)
+        if etype is not None and etype in {EntityType.core_value, EntityType.principle}:
+            return []
+        if getattr(entity, "embedding", None) is not None:
+            return []
+        target_id = entity.id  # type: ignore[attr-defined]
+        if self._has_unresolved(agent_id, "entities", target_id, FindingType.embedding_missing):
+            return []
+        return [
+            ValidationFinding(
+                agent_id=agent_id,
+                finding_type=FindingType.embedding_missing,
+                severity=FindingSeverity.info,
+                target_table="entities",
+                target_id=target_id,
+                details={
+                    "phase": "inline",
+                    "canonical_name": getattr(entity, "canonical_name", ""),
+                },
+                detected_by="memory_guardian:inline",
+            )
+        ]
+
+    @override
+    def inline_check_key_moment(self, moment: object, *, agent_id: UUID) -> list[ValidationFinding]:
+        """Row-level checks on a freshly written KeyMoment.
+
+        Flags moments persisted with ``incomplete_coloring=True`` so the
+        operator sees the gap immediately rather than waiting for the
+        sliding-window ``affect_detector_silent`` aggregate to trip.
+        Severity stays at ``info`` — a single moment doesn't prove a
+        systemic problem.
+        """
+        if not _is_incomplete_coloring(moment):
+            return []
+        target_id = moment.id  # type: ignore[attr-defined]
+        if self._has_unresolved(
+            agent_id, "key_moments", target_id, FindingType.affect_detector_silent
+        ):
+            return []
+        return [
+            ValidationFinding(
+                agent_id=agent_id,
+                finding_type=FindingType.affect_detector_silent,
+                severity=FindingSeverity.info,
+                target_table="key_moments",
+                target_id=target_id,
+                details={
+                    "phase": "inline",
+                    "what_happened_excerpt": (getattr(moment, "what_happened", "") or "")[:120],
+                },
+                detected_by="memory_guardian:inline",
+            )
+        ]
+
+    def _has_unresolved(
+        self,
+        agent_id: UUID,
+        target_table: str,
+        target_id: UUID,
+        finding_type: FindingType,
+    ) -> bool:
+        """De-duplication: return True when an unresolved finding for this
+        ``(target_table, target_id, finding_type)`` already exists."""
+        with self._lock:
+            return any(
+                f.agent_id == agent_id
+                and f.target_table == target_table
+                and f.target_id == target_id
+                and f.finding_type == finding_type
+                and not f.is_resolved
+                for f in self._findings.values()
+            )
+
     @override
     def write_finding(self, finding: ValidationFinding) -> ValidationFinding:
         """Persist a finding."""
