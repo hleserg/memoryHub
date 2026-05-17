@@ -8,7 +8,7 @@
 [![Python 3.12+](https://img.shields.io/badge/python-3.12%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
 
-**Tests:** 568 passing (`pytest tests/` on `main`; see CI workflow above).
+**Tests:** 1764 passing, 138 skipped (`pytest tests/` on `main`; see CI workflow above).
 
 [[ru](README-ru.md)] — *Russian version*
 
@@ -65,7 +65,7 @@ Under the hood — seven components: store of lived experiences, reflection engi
   ├─ Identity Store     ✅ Implemented (WP03)
   ├─ Reflection Engine  ✅ Implemented (WP04)
   ├─ Session Manager    ✅ Implemented (WP05)
-  └─ CI & test coverage ✅ GitHub Actions on `main`/PRs (`make check`, pytest-cov ≥90%)
+  └─ CI & test coverage ✅ GitHub Actions on `main`/PRs (`make check`, pytest-cov ≥89%)
 ○ First implementation
 ○ Integration
 ○ Evolution

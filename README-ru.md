@@ -8,7 +8,7 @@
 [![Python 3.12+](https://img.shields.io/badge/python-3.12%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
 
-**Тесты:** 568 проходят (`pytest tests/` на `main`; см. workflow CI выше).
+**Тесты:** 1764 проходят, 138 пропущены (`pytest tests/` на `main`; см. workflow CI выше).
 
 [[en](README.md)] — *English version*
 
@@ -65,7 +65,7 @@ Atman - это инфраструктура с открытым исходным
   ├─ Identity Store     ✅ Реализовано (WP03)
   ├─ Reflection Engine  ✅ Реализовано (WP04)
   ├─ Session Manager    ✅ Реализовано (WP05)
-  └─ CI и покрытие тестами ✅ GitHub Actions для `main`/PR (`make check`, pytest-cov ≥90%)
+  └─ CI и покрытие тестами ✅ GitHub Actions для `main`/PR (`make check`, pytest-cov ≥89%)
 ○ Первая реализация
 ○ Интеграция
 ○ Развитие
