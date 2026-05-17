@@ -28,6 +28,7 @@ from uuid import uuid4
 from rich.table import Table
 
 import atman.term as term
+from atman.adapters.clock import FrozenClock
 from atman.adapters.reflection.state_store_session_repository import (
     StateStoreSessionRepository,
 )
@@ -37,7 +38,6 @@ from atman.adapters.storage.in_memory_reflection_store import (
     InMemoryPatternStore,
     InMemoryReflectionEventStore,
 )
-from atman.adapters.clock import FrozenClock
 from atman.core.narrative_write_audit import NoOpNarrativeWriteAudit
 from atman.core.services import SessionManager
 from atman.core.services.narrative_revision import NarrativeRevisionService

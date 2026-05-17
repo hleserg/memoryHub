@@ -171,9 +171,7 @@ class FileStateStore(StateStore):
             elif isinstance(query, ValuesTouchedQuery | DepthQuery | FactRefsContainsQuery):
                 moments = self._load_moments_for_record(record)
                 if isinstance(query, ValuesTouchedQuery):
-                    if any(
-                        any(v in m.values_touched for v in query.values) for m in moments
-                    ):
+                    if any(any(v in m.values_touched for v in query.values) for m in moments):
                         all_experiences.append(record)
                 elif isinstance(query, DepthQuery):
                     if any(m.how_i_felt.depth.value == query.depth for m in moments):
