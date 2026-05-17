@@ -385,15 +385,21 @@ class InMemoryMemoryGuardian(MemoryGuardian):
     def inline_check_fact(self, fact: object, *, agent_id: UUID) -> list[ValidationFinding]:
         """Row-level checks on a freshly written FactRecord.
 
-        Surfaces ``embedding_missing`` when the row landed without an
-        embedding vector in its metadata bag — the asynchronous embedding
-        job (if any) hasn't filled it yet and downstream RAG would miss
-        this row. FactRecord has no first-class ``embedding`` column, so
-        we sniff ``metadata['embedding']``.
+        Only fires when the caller explicitly opted into the embedding
+        signal by stashing ``embedding`` in ``metadata`` (and left it as
+        ``None``). The default in-memory `FactRecord` neither has a
+        first-class ``embedding`` column nor stores one in `metadata`, so
+        a freshly-constructed fact triggers no finding — matching the
+        Devin Review #599 concern that the previous logic produced an
+        embedding_missing finding for *every* fact. The real
+        "embedding_missing" signal will land in the future
+        PostgresMemoryGuardian where embeddings live as a halfvec column
+        on the row itself.
         """
         metadata = getattr(fact, "metadata", None) or {}
-        has_embedding = metadata.get("embedding") is not None
-        if has_embedding:
+        if "embedding" not in metadata:
+            return []
+        if metadata.get("embedding") is not None:
             return []
         target_id = fact.id  # type: ignore[attr-defined]
         if self._has_unresolved(agent_id, "facts", target_id, FindingType.embedding_missing):

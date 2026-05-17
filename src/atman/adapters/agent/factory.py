@@ -172,6 +172,14 @@ def build_deps(
     # (HLE-31, scheduled) and the inline checks (HLE-32, post-write) feed
     # the same finding store so consumers see a unified validation_findings
     # stream.
+    #
+    # IMPORTANT (Devin Review #599): this default wire-up only feeds the
+    # guardian a ``state_store`` and ``divergence_event_store``. The Level-B
+    # batch scans (``scan_orphan_entities``, ``scan_merge_candidates``,
+    # ``scan_embedding_gaps``) need an ``entity_registry`` / ``factual_memory``
+    # and silently return ``[]`` here. cli_maintenance / cron workers that
+    # want those signals should construct their own guardian with the full
+    # dep set; the inline + Level-C paths are intentionally lighter.
     from atman.adapters.memory.in_memory_memory_guardian import InMemoryMemoryGuardian
     from atman.core.services.inline_validator import InlineValidator
 

@@ -30,10 +30,15 @@ def _moment(*, incomplete: bool, session_id: UUID | None = None) -> KeyMoment:
 # ---- inline_check_fact -----------------------------------------------
 
 
-def test_inline_fact_missing_embedding_emits_finding() -> None:
+def test_inline_fact_with_explicit_null_embedding_emits_finding() -> None:
+    """Per Devin Review #599: only fire when the caller explicitly opted
+    into the embedding signal by writing ``embedding=None`` into metadata
+    (e.g. Postgres adapter or a future inline embedder). A fresh FactRecord
+    without the key is silent — embeddings are not a first-class field on
+    the in-memory model so flagging every row would be noise."""
     agent = uuid4()
     guardian = InMemoryMemoryGuardian()
-    fact = FactRecord(content="example", source="test")  # embedding=None by default
+    fact = FactRecord(content="example", source="test", metadata={"embedding": None})
     findings = guardian.inline_check_fact(fact, agent_id=agent)
     assert len(findings) == 1
     f = findings[0]
@@ -43,9 +48,18 @@ def test_inline_fact_missing_embedding_emits_finding() -> None:
     assert f.severity == FindingSeverity.info
 
 
+def test_inline_fact_without_embedding_signal_emits_nothing() -> None:
+    """Default-constructed FactRecord has no 'embedding' key in metadata
+    and must therefore be silent — fixes the Devin #599 every-row-flagged
+    noise."""
+    agent = uuid4()
+    guardian = InMemoryMemoryGuardian()
+    fact = FactRecord(content="ex", source="t")
+    assert guardian.inline_check_fact(fact, agent_id=agent) == []
+
+
 def test_inline_fact_with_embedding_in_metadata_emits_nothing() -> None:
-    """FactRecord has no first-class embedding column; the inline check
-    sniffs metadata['embedding'] to decide whether the row is ready."""
+    """A populated metadata['embedding'] is the success case."""
     agent = uuid4()
     guardian = InMemoryMemoryGuardian()
     fact = FactRecord(content="ex", source="t", metadata={"embedding": [0.1, 0.2]})
@@ -117,10 +131,11 @@ def test_inline_entity_with_embedding_emits_nothing() -> None:
 
 
 def test_inline_fact_check_dedups() -> None:
-    """Same fact rechecked after write_finding → empty list (de-dup branch)."""
+    """Same fact rechecked after write_finding → empty list (de-dup branch).
+    Requires the explicit embedding=None opt-in (see #599)."""
     agent = uuid4()
     guardian = InMemoryMemoryGuardian()
-    fact = FactRecord(content="example", source="t")
+    fact = FactRecord(content="example", source="t", metadata={"embedding": None})
     out1 = guardian.inline_check_fact(fact, agent_id=agent)
     guardian.write_finding(out1[0])
     out2 = guardian.inline_check_fact(fact, agent_id=agent)
@@ -153,7 +168,7 @@ def test_inline_check_dedups_against_existing_unresolved() -> None:
     must return [] — the de-dup check fires inside the guardian."""
     agent = uuid4()
     guardian = InMemoryMemoryGuardian()
-    fact = FactRecord(content="example", source="t")
+    fact = FactRecord(content="example", source="t", metadata={"embedding": None})
     # First check writes; pretend the validator persisted it.
     findings = guardian.inline_check_fact(fact, agent_id=agent)
     assert len(findings) == 1
@@ -177,11 +192,15 @@ def test_validator_persists_findings_via_write_finding() -> None:
 
 
 def test_validator_check_fact_persists_finding() -> None:
-    """InlineValidator.check_fact also writes to the guardian."""
+    """InlineValidator.check_fact also writes to the guardian. Uses the
+    explicit metadata['embedding'] = None opt-in (see #599)."""
     agent = uuid4()
     guardian = InMemoryMemoryGuardian()
     validator = InlineValidator(guardian)
-    validator.check_fact(FactRecord(content="ex", source="t"), agent_id=agent)
+    validator.check_fact(
+        FactRecord(content="ex", source="t", metadata={"embedding": None}),
+        agent_id=agent,
+    )
     unresolved = guardian.get_unresolved(agent)
     assert len(unresolved) == 1
     assert unresolved[0].finding_type == FindingType.embedding_missing

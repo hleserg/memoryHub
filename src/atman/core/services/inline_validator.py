@@ -26,6 +26,24 @@ if TYPE_CHECKING:
 _LOG = logging.getLogger(__name__)
 
 
+# PLAYBOOK-START
+# id: fire-and-forget-post-write-validation
+# category: design-patterns
+# title: Fire-and-Forget Post-Write Validation with Per-Record Error Isolation
+# status: draft
+# since: 2026-05-17
+#
+# Pattern: wrap per-record quality checks with individual try/except so a
+# single bad row never breaks the writer's hot path. Each finding is
+# persisted independently with its own error guard, and de-duplication is
+# delegated to the checker. The result is a "best-effort" validation
+# stream that never blocks or fails the producer.
+#
+# Why generalizable: any write-heavy pipeline (event sourcing, CDC, ETL)
+# benefits from lightweight inline quality checks that degrade gracefully
+# on partial failure — the alternative (batch-only scans) introduces
+# detection latency proportional to the scan interval.
+# PLAYBOOK-END
 class InlineValidator:
     """Run lightweight post-write checks through a :class:`MemoryGuardian`."""
 
