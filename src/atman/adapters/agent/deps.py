@@ -20,6 +20,7 @@ from uuid import UUID
 
 if TYPE_CHECKING:
     from atman.adapters.agent.config import AgentConfig, ModelConfig
+    from atman.core.ports.divergence_events import DivergenceEventStore
     from atman.core.ports.pending_human_review import PendingHumanReviewInbox
     from atman.core.ports.reflection_request_queue import ReflectionRequestQueue
     from atman.core.ports.state_store import StateStore
@@ -93,6 +94,13 @@ class AtmanDeps:
     operations are silently skipped. When present, provides pinned-skill bootstrap
     injection, trigger routing, invocation tracking, and reflection processing."""
 
+    divergence_event_store: DivergenceEventStore | None = None
+    """Append-only store of :class:`DivergenceEvent` rows persisted from the
+    affect pipeline (HLE-29). Exposed on AtmanDeps so the R6
+    DivergenceAggregator (Daily reflection) — and any future ad-hoc readers —
+    can consume the populated stream without reaching into ``SessionManager``
+    internals."""
+
     @classmethod
     def from_config(
         cls,
@@ -109,6 +117,7 @@ class AtmanDeps:
         reflection_request_queue: ReflectionRequestQueue | None = None,
         passive_memory_injector: PassiveMemoryInjector | None = None,
         skill_manager: SkillManagerPort | None = None,
+        divergence_event_store: DivergenceEventStore | None = None,
     ) -> AtmanDeps:
         """
         Build :class:`AtmanDeps` from a validated :class:`AgentConfig`.
@@ -135,4 +144,5 @@ class AtmanDeps:
             reflection_request_queue=reflection_request_queue,
             passive_memory_injector=passive_memory_injector,
             skill_manager=skill_manager,
+            divergence_event_store=divergence_event_store,
         )

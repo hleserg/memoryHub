@@ -249,6 +249,7 @@ def build_deps(
         reflection_request_queue=InMemoryReflectionRequestQueue(),
         passive_memory_injector=passive_memory_injector,
         skill_manager=skill_manager,
+        divergence_event_store=_divergence_event_store,
     )
 
     return deps, session_manager, state_store

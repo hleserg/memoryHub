@@ -141,3 +141,6 @@ def test_factory_wires_divergence_pipeline_through_session_manager(tmp_path: Pat
     assert affect._linguistic_analyzer is not None  # type: ignore[attr-defined]
     assert affect._divergence_detector is not None  # type: ignore[attr-defined]
     assert affect._divergence_event_store is not None  # type: ignore[attr-defined]
+    # The store is also exposed on AtmanDeps so readers (R6 aggregator,
+    # ad-hoc consumers) can find it without reaching into SessionManager.
+    assert deps.divergence_event_store is affect._divergence_event_store  # type: ignore[attr-defined]
