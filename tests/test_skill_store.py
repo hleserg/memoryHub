@@ -155,6 +155,46 @@ class TestInMemorySkillStore:
         assert updated is not None
         assert updated.sessions_since_use == 0
 
+    def test_bump_sessions_since_use_covers_unpinned_active(self):
+        """Devin Review ANALYSIS_..._0004: the counter must keep advancing
+        for auto-downgraded (now unpinned, still active) skills so deep-
+        reflection archive thresholds are actually reachable.
+        """
+        from atman.skills.models import SkillStatus
+
+        unpinned = _make_skill(
+            agent_id=self.agent_id,
+            name="unpinned-active",
+            user_pinned=False,
+        )
+        self.store.save_skill(unpinned)
+        self.store.bump_sessions_since_use(self.agent_id, exclude_skill_ids=set())
+
+        updated = self.store.get_skill_by_id(unpinned.id)
+        assert updated is not None
+        assert updated.sessions_since_use == 1
+        assert updated.status == SkillStatus.active
+
+    def test_bump_sessions_since_use_skips_non_active_status(self):
+        """Disabled and draft skills aren't reachable, so tracking their
+        idleness is noise — they must NOT be bumped.
+        """
+        from atman.skills.models import SkillStatus
+
+        disabled = _make_skill(agent_id=self.agent_id, name="disabled-skill", user_pinned=False)
+        draft = _make_skill(agent_id=self.agent_id, name="draft-skill", user_pinned=False)
+        self.store.save_skill(disabled)
+        self.store.save_skill(draft)
+        self.store.update_skill_status(disabled.id, SkillStatus.disabled)
+        self.store.update_skill_status(draft.id, SkillStatus.draft)
+
+        self.store.bump_sessions_since_use(self.agent_id, exclude_skill_ids=set())
+
+        for sid in (disabled.id, draft.id):
+            after = self.store.get_skill_by_id(sid)
+            assert after is not None
+            assert after.sessions_since_use == 0
+
     def test_set_revision_needed(self):
         skill = _make_skill(agent_id=self.agent_id)
         self.store.save_skill(skill)

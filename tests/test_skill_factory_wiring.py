@@ -64,6 +64,33 @@ def test_runner_passes_agent_id_to_micro_reflection_reflect() -> None:
     )
 
 
+def test_runner_writes_skills_marker_even_when_finish_session_raises() -> None:
+    """``write_session_skills_marker`` must run regardless of finish_session
+    outcome — the invocation data it summarises is already persisted before
+    finalize runs, so a finalize failure (DB error, unexpected ValueError,
+    …) must not cost us the marker.
+
+    Source-level guard for Devin Review BUG_..._7c1b66... .
+    """
+    runner_path = Path(__file__).resolve().parents[1] / "src/atman/adapters/agent/runner.py"
+    body = runner_path.read_text(encoding="utf-8")
+    # The marker write must happen via the deferred-exception pattern,
+    # not directly inside the try/except for finish_session.
+    assert "deferred_finish_exc" in body, (
+        "runner.py must defer the finish_session exception until after the "
+        "session-skills marker has been attempted."
+    )
+    # Verify the structural ordering: marker call → re-raise of deferred exc.
+    marker_idx = body.find("write_session_skills_marker(")
+    raise_idx = body.find("raise deferred_finish_exc")
+    assert marker_idx != -1, "runner.py must call write_session_skills_marker"
+    assert raise_idx != -1, "runner.py must re-raise the deferred finish exception"
+    assert marker_idx < raise_idx, (
+        "write_session_skills_marker must be invoked BEFORE re-raising the "
+        "deferred finish_session exception."
+    )
+
+
 # ── WARNING #6 — InMemorySkillStore fallback when PostgreSQL is down ─────
 
 

@@ -12,7 +12,7 @@ from typing import TYPE_CHECKING, Protocol, runtime_checkable
 from uuid import UUID
 
 if TYPE_CHECKING:
-    from atman.skills.models import Skill, SkillSuggestion
+    from atman.skills.models import DailySkillSummary, DeepSkillSummary, Skill, SkillSuggestion
 
 
 @runtime_checkable
@@ -75,5 +75,44 @@ class SkillManagerPort(Protocol):
         Determines final_status for each unprocessed invocation in the session,
         updates success/failure counts, handles auto-pin/auto-downgrade, and
         sets revision_needed flags.
+        """
+        ...
+
+    def write_session_skills_marker(
+        self,
+        workspace: Path,
+        session_id: UUID,
+        agent_id: UUID,
+    ) -> Path | None:
+        """Write a JSON summary of this session's skill activity.
+
+        Produces ``atman_session_skills_<timestamp>.json`` under
+        ``workspace`` describing each skill used in the session, with
+        invocation counts and the dominant preliminary status. Called by
+        the runner at session end so the on-disk session bundle is
+        self-contained for later dashboards / analytics.
+
+        Returns the path on success, ``None`` when there is nothing to
+        write or the loop is disabled.
+        """
+        ...
+
+    def process_daily_skills(self, agent_id: UUID) -> DailySkillSummary:
+        """Daily-reflection hook: surface revision-needed skills.
+
+        Bumps ``revision_priority`` for skills whose ``revision_needed``
+        flag has been set and that have stayed idle for at least
+        ``daily_revision_idle_bump_sessions`` sessions, and returns a
+        compact summary the DailyReflectionService can fold into its
+        ``ReflectionEvent`` notes.
+        """
+        ...
+
+    def process_deep_skills(self, agent_id: UUID) -> DeepSkillSummary:
+        """Deep-reflection hook: surface archive candidates + problem skills.
+
+        Pure read — never modifies skill rows. The deep reflection service
+        is the only place permitted to make identity-level decisions about
+        archiving / removing skills; this hook merely classifies them.
         """
         ...
