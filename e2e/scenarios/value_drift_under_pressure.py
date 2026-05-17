@@ -27,6 +27,7 @@ from pathlib import Path
 from typing import Any
 from uuid import NAMESPACE_URL, UUID, uuid4, uuid5
 
+from atman.adapters.clock import FrozenClock
 from atman.adapters.reflection.state_store_session_repository import (
     StateStoreSessionRepository,
 )
@@ -35,7 +36,6 @@ from atman.adapters.storage.in_memory_reflection_store import (
     InMemoryPatternStore,
     InMemoryReflectionEventStore,
 )
-from atman.adapters.clock import FrozenClock
 from atman.core.models import (
     CoreValue,
     Goal,
@@ -103,6 +103,8 @@ class ScenarioReflectionModel(ReflectionModel):
         self,
         experiences: list[Any],
         context: dict[str, Any],
+        *,
+        key_moments_by_session: Any = None,
     ) -> PatternDetectionOutput:
         return PatternDetectionOutput(
             description=(
@@ -122,6 +124,8 @@ class ScenarioReflectionModel(ReflectionModel):
         self,
         experience: Any,
         context: dict[str, Any],
+        *,
+        key_moments_by_session: Any = None,
     ) -> ReframingNoteOutput:
         return ReframingNoteOutput(
             reflection=(
@@ -140,6 +144,8 @@ class ScenarioReflectionModel(ReflectionModel):
         current_narrative: Any,
         recent_experiences: list[Any],
         reflection_level: Any,
+        *,
+        key_moments_by_session: Any = None,
     ) -> NarrativeUpdateOutput:
         return NarrativeUpdateOutput(
             body=(
@@ -157,6 +163,8 @@ class ScenarioReflectionModel(ReflectionModel):
         identity: Any,
         experiences: list[Any],
         criterion: Any,
+        *,
+        key_moments_by_session: Any = None,
     ) -> HealthCriterionOutput:
         return HealthCriterionOutput(
             score=0.72,
@@ -264,6 +272,7 @@ class ScenarioDailyReflectionService(DailyReflectionService):
         run_key: str,
         *,
         agent_reasons: list[str] | None = None,
+        key_moments_by_session: Any = None,
     ) -> list[Any]:
         # Bypass the len < 2 guard for demo purposes
         if not experiences:

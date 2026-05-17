@@ -34,8 +34,8 @@ import tempfile
 from pathlib import Path
 from uuid import uuid4
 
-from atman.adapters.storage.file_state_store import FileStateStore
 from atman.adapters.clock import SystemClock
+from atman.adapters.storage.file_state_store import FileStateStore
 from atman.core.models import (
     CoreValue,
     Goal,
