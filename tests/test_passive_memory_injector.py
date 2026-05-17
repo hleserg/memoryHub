@@ -16,7 +16,7 @@ from atman.core.models.experience import EmotionalDepth, ExperienceRecord, FeltS
 from atman.core.models.fact import FactRecord, FactStatus, Relation
 from atman.core.services.passive_memory_injector import (
     PassiveMemoryInjector,
-    SurfacedMemoryItem,
+    SurfacedMemory,
     _surfaced_text,
     build_rag_context,
     estimate_tokens,
@@ -367,8 +367,8 @@ def _key_moment(what: str = "something", why: str = "matters") -> KeyMoment:
     )
 
 
-def _surfaced(item, score: float = 1.0, source: str = "similarity") -> SurfacedMemoryItem:
-    return SurfacedMemoryItem(item=item, source=source, score=score)
+def _surfaced(item, score: float = 1.0, source: str = "similarity") -> SurfacedMemory:
+    return SurfacedMemory(item=item, source=source, score=score)
 
 
 def test_estimate_tokens_basic():
@@ -570,7 +570,7 @@ def test_surface_for_context_bm25_rrf_lifts_exact_lexical_match():
 def test_surface_for_context_applies_reranker_in_ambient_mode():
     """When both linguistic_analyzer and memory_reranker are wired, the
     reranker reorders the top candidates and the final_score reaches the
-    SurfacedMemoryItem output."""
+    SurfacedMemory output."""
     from atman.core.ports.memory_reranker import MemoryReranker
 
     backend = InMemoryBackend()
@@ -608,7 +608,7 @@ def test_surface_for_context_applies_reranker_in_ambient_mode():
     # Reranker inverted dense order: beta (lower dense) now ranks first
     assert surfaced[0].item.id == b.id
     assert surfaced[1].item.id == a.id
-    # final_score from reranker propagates to the SurfacedMemoryItem
+    # final_score from reranker propagates to the SurfacedMemory
     assert surfaced[0].score == pytest.approx(0.99, abs=1e-6)
 
 

@@ -148,18 +148,9 @@ class BM25EmbeddingAdapter(EmbeddingPort):
 
     @override
     def similarity(self, vec1: list[float], vec2: list[float]) -> float:
-        """Calculate cosine similarity between two sparse vectors.
-
-        Raises ValueError when the two vectors have different dimensions.
-        The most common cause is mixing the output of ``embed()``/``embed_batch()``
-        (fixed hashing-trick dimension) with ``embed_with_corpus()`` (variable
-        vocabulary-derived dimension) — never combine those two families.
-        """
+        """Calculate cosine similarity between two sparse vectors."""
         if len(vec1) != len(vec2):
-            raise ValueError(
-                f"BM25 vector dimension mismatch: {len(vec1)} vs {len(vec2)}. "
-                "Do not mix embed()/embed_batch() and embed_with_corpus() vectors."
-            )
+            raise ValueError("Vectors must have same dimension")
 
         dot_product = sum(a * b for a, b in zip(vec1, vec2, strict=True))
         norm1 = math.sqrt(sum(a * a for a in vec1))

@@ -85,11 +85,7 @@ class AgentConfig(BaseModel):
     context_tail_messages: int = Field(
         default=10,
         gt=0,
-        description=(
-            "Number of user/assistant exchanges to preserve verbatim at the "
-            "end of history during context compression / restart. "
-            "Each exchange = 2 messages (one user + one assistant)."
-        ),
+        description="Number of recent conversation exchanges to retain in context window on restart (one exchange = one user message + one assistant reply; total messages = value × 2)",
     )
     session_timeout_minutes: int = Field(
         default=7,

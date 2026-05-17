@@ -189,9 +189,11 @@ class AffectDetector:
                 reasons.append(TriggerReason.DIVERGENCE)
 
         # Linguistic enrichment: when a LinguisticAnalyzer is wired in, run a
-        # full agent-message analysis and fold its divergence_signals into the
-        # affect tags so downstream consumers (KeyMomentBuilder, divergence
-        # detectors) see them as part of the record.
+        # full agent-message analysis so downstream code (e.g. DivergenceDetector)
+        # can consume the structured result.
+        # TODO(injection-point): store analysis.divergence_signals into tags /
+        # reasons and pass analysis to _append_key_moment for structured_markers
+        # enrichment once KeyMomentBuilder is integrated into the affect pipeline.
         _linguistic_analysis = None
         if self._linguistic_analyzer is not None:
             try:
@@ -201,12 +203,6 @@ class AffectDetector:
                 )
             except Exception:
                 _LOG.warning("LinguisticAnalyzer failed; continuing without it", exc_info=True)
-                _linguistic_analysis = None
-        if _linguistic_analysis is not None and _linguistic_analysis.divergence_signals:
-            for sig in _linguistic_analysis.divergence_signals:
-                tag = f"linguistic:{sig}"
-                if tag not in tags:
-                    tags.append(tag)
 
         if not cold:
             strong = sum(1 for k in METRIC_KEYS if abs(z.get(k, 0.0)) > self.config.sigma_threshold)
@@ -275,12 +271,10 @@ class AffectDetector:
         if session_id is not None:
             self._append_key_moment(session_id, excerpt, felt, record)
 
-        # LLM emotion classification (not yet implemented). Logging keeps
-        # the path observable but does not crash callers that flip
-        # use_llm_analysis on prematurely.
+        # LLM emotion classification (reserved — logs and continues so callers aren't broken)
         if self.config.use_llm_analysis:
             _LOG.warning(
-                "LLM emotion classification for emphasis not implemented — skipping enrichment"
+                "use_llm_analysis=True is reserved; LLM emotion classification not yet implemented"
             )
 
     def _append_key_moment(
@@ -315,7 +309,9 @@ class AffectDetector:
     ) -> AffectRecord:
         """Agent-originated memory with optional objective enrichment."""
         if self.config.use_llm_analysis:
-            _LOG.warning("LLM sincerity path not implemented — proceeding without it")
+            _LOG.warning(
+                "use_llm_analysis=True is reserved; LLM sincerity path not yet implemented"
+            )
 
         tags = list(dict.fromkeys([*report.tags, "affect:self-report"]))
         demonstrates: dict[str, Any] | None = None

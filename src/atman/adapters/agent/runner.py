@@ -1085,7 +1085,7 @@ class AtmanRunner:
             print_plain("  reflect - Run micro reflection on this session")
         print_plain("  wait <minutes> - Reset timer and continue")
         print_plain("  sleep - Close session and exit")
-        print_plain("  save_to_memory <content> - Save to factual memory")
+        print_plain("  save_to_memory <content> - Save to factual memory (not yet implemented)")
         if self._config.enable_free_time:
             print_plain("  free_time - Enter free time mode")
         print_plain("")
@@ -1158,19 +1158,14 @@ class AtmanRunner:
                 return "exit"
 
             elif cmd == "save_to_memory":
-                if not arg.strip():
+                if not arg:
                     print_warn("Usage: save_to_memory <content>")
                     retry_count += 1
                     continue
-                if deps.passive_memory_injector is None:
-                    print_warn("Memory not available (set ATMAN_LINGUISTIC_ENABLED=true to enable)")
-                    retry_count += 1
-                    continue
-                from atman.core.models.fact import FactRecord
-
-                fact = FactRecord(content=arg.strip(), source="user_command")
-                saved = deps.passive_memory_injector.factual_memory.add_fact(fact)
-                print_info(f"Saved to memory: {saved.id}")
+                # Save to factual memory - placeholder for future implementation
+                # Full implementation would require FactualMemory port in AtmanDeps
+                print_warn(f"save_to_memory not yet implemented (content NOT saved): {arg[:50]}...")
+                print_info("Returning to menu. Use 'wait' to continue session.")
                 retry_count += 1
                 continue
 
