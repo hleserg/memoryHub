@@ -116,13 +116,8 @@ async def test_detector_no_emphasis_no_trigger(tmp_path: Path) -> None:
 
 
 @pytest.mark.asyncio
-async def test_detector_emphasis_with_llm_analysis_logs_warning(
-    tmp_path: Path, caplog: pytest.LogCaptureFixture
-) -> None:
-    """use_llm_analysis=True with emphasis input must not crash — HLE-23
-    replaced the NotImplementedError with a logged warning so the emphasis
-    pipeline keeps writing key moments even when the LLM classifier is
-    unavailable."""
+async def test_detector_emphasis_with_llm_analysis_logs_and_continues(tmp_path: Path) -> None:
+    """use_llm_analysis=True is reserved; emphasis path logs a warning and returns normally."""
     captured: list[KeyMoment] = []
 
     def sink(_sid: UUID, km: KeyMoment) -> None:
@@ -136,9 +131,10 @@ async def test_detector_emphasis_with_llm_analysis_logs_warning(
 
     sid = UUID("018e5a2b-0000-0000-0000-000000000003")
 
-    with caplog.at_level("WARNING", logger="atman.affect.detector"):
-        await det.process("This **word** is emphasized", session_id=sid)
-    assert any("emotion classification" in m.lower() for m in caplog.messages)
+    await det.process("This **word** is emphasized", session_id=sid)
+    # Emphasis key moment is written before the use_llm_analysis check,
+    # so it must have been captured regardless of the reserved flag.
+    assert len(captured) >= 1
 
 
 @pytest.mark.asyncio

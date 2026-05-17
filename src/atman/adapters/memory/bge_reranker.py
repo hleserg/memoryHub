@@ -96,7 +96,7 @@ class BgeReranker(MemoryReranker):
 
         # FlagReranker.compute_score may return a single float for one pair;
         # normalise to list[float].
-        if isinstance(raw_scores, (int, float)):
+        if isinstance(raw_scores, int | float):
             raw_scores = [float(raw_scores)]
         scored = [
             c.model_copy(update={"final_score": float(s)})

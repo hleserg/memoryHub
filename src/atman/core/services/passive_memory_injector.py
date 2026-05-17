@@ -24,7 +24,7 @@ RRF_K = 60
 
 
 @dataclass
-class SurfacedMemoryItem:
+class SurfacedMemory:
     """A memory item surfaced by the injector."""
 
     item: FactRecord | SessionExperience | KeyMoment
@@ -36,7 +36,7 @@ class SurfacedMemoryItem:
 class RagContext:
     """Result of token-budget-capped RAG selection."""
 
-    items: list[SurfacedMemoryItem] = field(default_factory=list)
+    items: list[SurfacedMemory] = field(default_factory=list)
     tokens_used: int = 0
 
 
@@ -47,7 +47,7 @@ def estimate_tokens(text: str) -> int:
     return max(1, len(text.encode("utf-8")) // 3) if text else 0
 
 
-def _surfaced_text(mem: SurfacedMemoryItem) -> str:
+def _surfaced_text(mem: SurfacedMemory) -> str:
     """Return the primary text of a surfaced memory item for token estimation."""
     item = mem.item
     if isinstance(item, FactRecord):
@@ -60,7 +60,7 @@ def _surfaced_text(mem: SurfacedMemoryItem) -> str:
 
 
 def build_rag_context(
-    candidates: list[SurfacedMemoryItem],
+    candidates: list[SurfacedMemory],
     budget: int = 2000,
 ) -> RagContext:
     """
@@ -69,7 +69,7 @@ def build_rag_context(
     Candidates are assumed to be pre-sorted by descending score.
     Stops as soon as adding the next candidate would exceed the budget.
     """
-    result: list[SurfacedMemoryItem] = []
+    result: list[SurfacedMemory] = []
     spent = 0
     for candidate in candidates:
         t = estimate_tokens(_surfaced_text(candidate))
@@ -137,7 +137,7 @@ class PassiveMemoryInjector:
         context_text: str,
         *,
         limit: int = 10,
-    ) -> list[SurfacedMemoryItem]:
+    ) -> list[SurfacedMemory]:
         """
         Surface relevant key moments (v2 API — uses state_store.list_key_moments).
 
@@ -177,7 +177,7 @@ class PassiveMemoryInjector:
             ranked = sorted(candidates, key=lambda c: c.score, reverse=True)[:limit]
 
         return [
-            SurfacedMemoryItem(
+            SurfacedMemory(
                 item=moment_by_id[r.key_moment_id],
                 source=r.source,
                 # Use `is not None` rather than `or` so a legitimate 0.0
@@ -192,7 +192,7 @@ class PassiveMemoryInjector:
         self,
         context_text: str,
         working_memory: SessionWorkingMemory | None = None,
-    ) -> list[SurfacedMemoryItem]:
+    ) -> list[SurfacedMemory]:
         """
         Surface relevant memories for given context.
 
@@ -208,7 +208,7 @@ class PassiveMemoryInjector:
         5. Expand 1-hop via associative graph; associative items get
            a real embedding similarity score, not a hardcoded constant.
         """
-        surfaced: list[SurfacedMemoryItem] = []
+        surfaced: list[SurfacedMemory] = []
         seen_ids: set[UUID] = set()
 
         query_embedding = self.embedding.embed(context_text)
@@ -246,7 +246,7 @@ class PassiveMemoryInjector:
         ordered = self._apply_reranker(context_text, ordered)
 
         for fact, score in ordered[: self.top_k]:
-            surfaced.append(SurfacedMemoryItem(item=fact, source="similarity", score=score))
+            surfaced.append(SurfacedMemory(item=fact, source="similarity", score=score))
             seen_ids.add(fact.id)
             if working_memory:
                 working_memory.add_fact(fact)
@@ -262,7 +262,7 @@ class PassiveMemoryInjector:
                 rel_embedding = self.embedding.embed(fact.content)
                 rel_score = float(self.embedding.similarity(query_embedding, rel_embedding))
                 surfaced.append(
-                    SurfacedMemoryItem(item=fact, source="associative", score=min(rel_score, 0.5))
+                    SurfacedMemory(item=fact, source="associative", score=min(rel_score, 0.5))
                 )
                 seen_ids.add(fact.id)
                 if working_memory:
@@ -381,7 +381,7 @@ class PassiveMemoryInjector:
         context_text: str,
         limit: int = 3,
         working_memory: SessionWorkingMemory | None = None,
-    ) -> list[SurfacedMemoryItem]:
+    ) -> list[SurfacedMemory]:
         """
         Surface relevant past experiences.
 
@@ -391,9 +391,9 @@ class PassiveMemoryInjector:
             working_memory: Optional cache
 
         Returns:
-            list[SurfacedMemoryItem]: Surfaced experiences
+            list[SurfacedMemory]: Surfaced experiences
         """
-        surfaced: list[SurfacedMemoryItem] = []
+        surfaced: list[SurfacedMemory] = []
 
         # Query experiences via state_store. ExperienceQuery is a marker base
         # class (no constructor args); pull a candidate window via the
@@ -430,7 +430,7 @@ class PassiveMemoryInjector:
         # Sort and return top results
         scored.sort(key=lambda x: x[1], reverse=True)
         for exp, score in scored[:limit]:
-            surfaced.append(SurfacedMemoryItem(item=exp, source="similarity", score=score))
+            surfaced.append(SurfacedMemory(item=exp, source="similarity", score=score))
             if working_memory:
                 working_memory.add_experience(exp)
 

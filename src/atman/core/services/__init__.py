@@ -16,7 +16,7 @@ from atman.core.services.narrative_service import NarrativeService
 from atman.core.services.passive_memory_injector import (
     PassiveMemoryInjector,
     RagContext,
-    SurfacedMemoryItem,
+    SurfacedMemory,
     build_rag_context,
     estimate_tokens,
 )
@@ -58,7 +58,7 @@ __all__ = [
     "SessionNotFoundError",
     "SessionSummary",
     "SessionWorkingMemory",
-    "SurfacedMemoryItem",
+    "SurfacedMemory",
     "TooManyActiveSessionsError",
     "build_rag_context",
     "estimate_tokens",
