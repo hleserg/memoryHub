@@ -19,7 +19,15 @@ from uuid import UUID, uuid4
 
 from atman.config import SkillsSettings
 from atman.skills.manifest import SkillManifest, write_skill_md
-from atman.skills.models import Skill, SkillKind, SkillOrigin, SkillStatus, SkillSuggestion
+from atman.skills.models import (
+    DailySkillSummary,
+    DeepSkillSummary,
+    Skill,
+    SkillKind,
+    SkillOrigin,
+    SkillStatus,
+    SkillSuggestion,
+)
 from atman.skills.projection import ProjectionAdapter
 from atman.skills.retriever import SkillRetriever
 from atman.skills.store import SkillStore
@@ -427,6 +435,78 @@ class SkillManager:
             return "didnt_help"
 
         return "unclear"
+
+    # ── Daily / Deep reflection hooks (HLE-36) ────────────────────────────────
+
+    def process_daily_skills(self, agent_id: UUID) -> DailySkillSummary:
+        """Daily-reflection hook.
+
+        Bumps ``revision_priority`` for revision-needed skills that have
+        stayed idle longer than ``daily_revision_idle_bump_sessions``, then
+        returns a summary listing skills the operator should look at this
+        run. ``high_priority_revisions`` lifts anything with priority ≥ 3.
+        """
+        try:
+            pending = self._store.list_by_revision_needed(agent_id)
+        except Exception as exc:
+            _log.warning("process_daily_skills: store lookup failed: %s", exc)
+            return DailySkillSummary()
+
+        if not pending:
+            return DailySkillSummary()
+
+        idle_threshold = self._config.daily_revision_idle_bump_sessions
+        bumped = 0
+        high_priority: list[str] = []
+        for skill in pending:
+            if skill.sessions_since_use >= idle_threshold:
+                try:
+                    self._store.set_revision_needed(skill.id, priority_bump=1)
+                    bumped += 1
+                except Exception as exc:
+                    _log.warning(
+                        "process_daily_skills: priority bump failed for %s: %s",
+                        skill.name,
+                        exc,
+                    )
+            # Threshold for "operator must look at this" is intentionally
+            # equal to a sustained-failure signal: priority defaults to 0,
+            # a single failed cycle adds 1, repeated failures bring it to 3+.
+            if skill.revision_priority >= 3:
+                high_priority.append(skill.name)
+
+        return DailySkillSummary(
+            revision_needed_count=len(pending),
+            revision_priority_bumped=bumped,
+            high_priority_revisions=high_priority,
+        )
+
+    def process_deep_skills(self, agent_id: UUID) -> DeepSkillSummary:
+        """Deep-reflection hook — classify without mutating skill rows."""
+        try:
+            active = self._store.list_by_status(agent_id, SkillStatus.active)
+        except Exception as exc:
+            _log.warning("process_deep_skills: store lookup failed: %s", exc)
+            return DeepSkillSummary()
+
+        archive_threshold = self._config.deep_archive_sessions
+        failure_threshold = self._config.deep_failure_rate_threshold
+        min_invocations = self._config.deep_min_invocations_for_failure_rate
+
+        archive_candidates: list[str] = []
+        problematic: list[str] = []
+        for skill in active:
+            if not skill.user_pinned and skill.sessions_since_use >= archive_threshold:
+                archive_candidates.append(skill.name)
+            if skill.invocations_count >= min_invocations:
+                failure_rate = skill.failure_count / skill.invocations_count
+                if failure_rate > failure_threshold:
+                    problematic.append(skill.name)
+
+        return DeepSkillSummary(
+            archive_candidates=archive_candidates,
+            problematic_skills=problematic,
+        )
 
     def _recalculate_pinning(self, agent_id: UUID, used_skill_ids: set[UUID]) -> None:
         """Apply auto-pin and auto-downgrade rules for active skills."""

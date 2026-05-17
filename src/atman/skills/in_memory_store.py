@@ -51,6 +51,10 @@ class InMemorySkillStore:
             if s.status == SkillStatus.active and not s.user_pinned and not s.auto_pinned
         ]
 
+    def list_by_revision_needed(self, agent_id: UUID) -> list[Skill]:
+        skills = [s for s in self._skills_for(agent_id) if s.revision_needed]
+        return sorted(skills, key=lambda s: s.revision_priority, reverse=True)
+
     def update_skill_status(self, skill_id: UUID, status: SkillStatus) -> None:
         s = self._skills[skill_id]
         self._skills[skill_id] = replace(s, status=status, updated_at=_now())

@@ -12,7 +12,7 @@ from typing import TYPE_CHECKING, Protocol, runtime_checkable
 from uuid import UUID
 
 if TYPE_CHECKING:
-    from atman.skills.models import Skill, SkillSuggestion
+    from atman.skills.models import DailySkillSummary, DeepSkillSummary, Skill, SkillSuggestion
 
 
 @runtime_checkable
@@ -94,5 +94,25 @@ class SkillManagerPort(Protocol):
 
         Returns the path on success, ``None`` when there is nothing to
         write or the loop is disabled.
+        """
+        ...
+
+    def process_daily_skills(self, agent_id: UUID) -> DailySkillSummary:
+        """Daily-reflection hook: surface revision-needed skills.
+
+        Bumps ``revision_priority`` for skills whose ``revision_needed``
+        flag has been set and that have stayed idle for at least
+        ``daily_revision_idle_bump_sessions`` sessions, and returns a
+        compact summary the DailyReflectionService can fold into its
+        ``ReflectionEvent`` notes.
+        """
+        ...
+
+    def process_deep_skills(self, agent_id: UUID) -> DeepSkillSummary:
+        """Deep-reflection hook: surface archive candidates + problem skills.
+
+        Pure read — never modifies skill rows. The deep reflection service
+        is the only place permitted to make identity-level decisions about
+        archiving / removing skills; this hook merely classifies them.
         """
         ...

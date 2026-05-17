@@ -36,6 +36,10 @@ class SkillStore(Protocol):
         """Return active, non-pinned skills for retriever scanning."""
         ...
 
+    def list_by_revision_needed(self, agent_id: UUID) -> list[Skill]:
+        """Return skills with ``revision_needed=True``, highest priority first."""
+        ...
+
     def update_skill_status(self, skill_id: UUID, status: SkillStatus) -> None: ...
 
     def update_pinning(

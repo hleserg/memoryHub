@@ -313,6 +313,18 @@ class PostgresSkillStore:
             ).fetchall()
         return [_row_to_skill(r) for r in rows]
 
+    def list_by_revision_needed(self, agent_id: UUID) -> list[Skill]:
+        with self._conn(agent_id) as conn:
+            rows = conn.execute(
+                """
+                SELECT * FROM public.skills
+                WHERE agent_id = %s AND revision_needed = true
+                ORDER BY revision_priority DESC, name
+                """,
+                [agent_id],
+            ).fetchall()
+        return [_row_to_skill(r) for r in rows]
+
     def update_skill_status(self, skill_id: UUID, status: SkillStatus) -> None:
         agent_id = self._resolve_agent_for_skill(skill_id)
         with self._conn(agent_id) as conn:

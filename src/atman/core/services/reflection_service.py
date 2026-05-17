@@ -433,6 +433,7 @@ class DailyReflectionService:
         divergence_aggregator: DivergenceAggregator | None = None,
         findings_triage: FindingsTriage | None = None,
         agent_id: UUID | None = None,
+        skill_manager=None,  # SkillManagerPort | None — HLE-36
     ):
         """Initialize daily reflection service.
 
@@ -441,6 +442,10 @@ class DailyReflectionService:
         ``rupture`` severity → key_insight observations); ``findings_triage``
         resolves level-B ``validation_findings`` by policy. Both require
         ``agent_id`` to scope the query.
+
+        Optional HLE-36 hook: ``skill_manager`` lets the daily run surface
+        revision-needed skills via ``process_daily_skills``. Failures in the
+        hook are logged and never abort the daily reflection.
         """
         self.session_repo = session_repo
         self.identity_repo = identity_repo
@@ -459,6 +464,7 @@ class DailyReflectionService:
         self._divergence_aggregator = divergence_aggregator
         self._findings_triage = findings_triage
         self._agent_id = agent_id
+        self._skill_manager = skill_manager
 
     def reflect(self, date: datetime) -> ReflectionEvent:
         """
@@ -568,6 +574,11 @@ class DailyReflectionService:
         # R8: triage level-B validation_findings (optional hook).
         triage_outcome = self._triage_findings()
 
+        # HLE-36: skill-loop daily summary. Errors are logged and never
+        # abort the daily reflection — the loop is optional, the reflection
+        # is not.
+        skill_summary = self._process_skills_for_daily()
+
         notes = "outcome=daily_ok"
         if reframing_nf or reframing_sr:
             notes += (
@@ -589,6 +600,17 @@ class DailyReflectionService:
             )
         if stance_outcome is not None and (stance_outcome.formulated or stance_outcome.skipped):
             notes += f" entity_stances_formulated={stance_outcome.formulated}"
+        if skill_summary is not None:
+            if skill_summary.revision_needed_count:
+                notes += f" skill_revision_pending={skill_summary.revision_needed_count}"
+            if skill_summary.revision_priority_bumped:
+                notes += (
+                    f" skill_revision_priority_bumped={skill_summary.revision_priority_bumped}"
+                )
+            if skill_summary.high_priority_revisions:
+                notes += (
+                    f" skill_revision_high_priority={len(skill_summary.high_priority_revisions)}"
+                )
 
         key_insight_parts = [f"Daily reflection: {len(patterns_detected)} patterns detected"]
         if agent_reasons:
@@ -597,6 +619,9 @@ class DailyReflectionService:
         if rupture_observations:
             joined = "; ".join(rupture_observations[:3])
             key_insight_parts.append(f"Ruptures observed: {joined}")
+        if skill_summary is not None and skill_summary.high_priority_revisions:
+            joined = ", ".join(skill_summary.high_priority_revisions[:3])
+            key_insight_parts.append(f"Skills needing revision: {joined}")
         key_insight = ". ".join(key_insight_parts)
 
         event = ReflectionEvent(
@@ -631,6 +656,20 @@ class DailyReflectionService:
             self._clock.now(),
         )
         return persisted
+
+    def _process_skills_for_daily(self):
+        """Optional HLE-36 hook. Returns ``DailySkillSummary`` or ``None``."""
+        if self._skill_manager is None or self._agent_id is None:
+            return None
+        try:
+            return self._skill_manager.process_daily_skills(self._agent_id)
+        except Exception:
+            import logging as _logging
+
+            _logging.getLogger(__name__).warning(
+                "DailyReflectionService: process_daily_skills hook failed", exc_info=True
+            )
+            return None
 
     def _aggregate_divergences(
         self, start: datetime, end: datetime, run_key: str
@@ -792,8 +831,15 @@ class DeepReflectionService:
         entity_relations_formulator: EntityRelationsFormulator | None = None,
         merge_candidates_handler: MergeCandidatesHandler | None = None,
         agent_id: UUID | None = None,
+        skill_manager=None,  # SkillManagerPort | None — HLE-36
     ):
-        """Initialize deep reflection service."""
+        """Initialize deep reflection service.
+
+        Optional HLE-36 hook: ``skill_manager`` surfaces long-idle skills as
+        archive candidates and high-failure-rate skills as problematic via
+        ``process_deep_skills``. Failures in the hook are logged and never
+        abort the deep reflection.
+        """
         self.session_repo = session_repo
         self.identity_repo = identity_repo
         self.narrative_repo = narrative_repo
@@ -810,6 +856,7 @@ class DeepReflectionService:
         self._entity_relations_formulator = entity_relations_formulator
         self._merge_candidates_handler = merge_candidates_handler
         self._agent_id = agent_id
+        self._skill_manager = skill_manager
 
     def reflect(self, since: datetime, until: datetime) -> ReflectionEvent:
         """
@@ -923,6 +970,9 @@ class DeepReflectionService:
             except Exception:  # pragma: no cover - defensive
                 merge_outcome = None
 
+        # HLE-36 — skill loop deep classification (archive / problematic).
+        skill_summary = self._process_skills_for_deep()
+
         # R11 — feed all collected R5/R7/R9/R10 signals into the identity-
         # revision proposal. Governance / audit still go through R11.5
         # (``IdentityService.apply_self_change``); this is the proposal text.
@@ -962,6 +1012,11 @@ class DeepReflectionService:
                 f" entity_relations_formulated={relation_outcome.formulated}"
                 f" entity_relations_pairs={relation_outcome.pairs_considered}"
             )
+        if skill_summary is not None:
+            if skill_summary.archive_candidates:
+                notes += f" skill_archive_candidates={len(skill_summary.archive_candidates)}"
+            if skill_summary.problematic_skills:
+                notes += f" skill_problematic={len(skill_summary.problematic_skills)}"
 
         key_insight = (
             f"Deep reflection: {len(patterns_detected)} patterns, "
@@ -970,6 +1025,19 @@ class DeepReflectionService:
         if agent_reasons:
             joined = "; ".join(agent_reasons[:3])
             key_insight = f"{key_insight}. Agent asked to look at: {joined}"
+        if skill_summary is not None and (
+            skill_summary.archive_candidates or skill_summary.problematic_skills
+        ):
+            parts = []
+            if skill_summary.problematic_skills:
+                parts.append(
+                    "problematic skills: " + ", ".join(skill_summary.problematic_skills[:3])
+                )
+            if skill_summary.archive_candidates:
+                parts.append(
+                    "archive candidates: " + ", ".join(skill_summary.archive_candidates[:3])
+                )
+            key_insight = f"{key_insight}. Skill loop — {'; '.join(parts)}"
 
         event = ReflectionEvent(
             reflection_level=ReflectionLevel.DEEP,
@@ -1031,6 +1099,20 @@ class DeepReflectionService:
             self._clock.now(),
         )
         return persisted
+
+    def _process_skills_for_deep(self):
+        """Optional HLE-36 hook. Returns ``DeepSkillSummary`` or ``None``."""
+        if self._skill_manager is None or self._agent_id is None:
+            return None
+        try:
+            return self._skill_manager.process_deep_skills(self._agent_id)
+        except Exception:
+            import logging as _logging
+
+            _logging.getLogger(__name__).warning(
+                "DeepReflectionService: process_deep_skills hook failed", exc_info=True
+            )
+            return None
 
     def _perform_health_assessment(
         self,
