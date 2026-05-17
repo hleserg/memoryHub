@@ -235,6 +235,48 @@ class HealthCriterionOutput(BaseModel):
         return [item.strip() for item in v if isinstance(item, str) and item.strip()]
 
 
+class StanceFormulationOutput(BaseModel):
+    """
+    Structured result from :meth:`~atman.core.ports.reflection.ReflectionModel.formulate_entity_stance`.
+
+    R7 (REFLECTION_FUTURE.md §4.3, §9): the LLM **interprets** a sequence of
+    KeyMoments involving an entity and puts into words how the agent relates
+    to that entity *right now*. Empty ``stance_text`` means the LLM declined
+    to commit to a stance — the service skips persistence and tries again
+    next cycle.
+    """
+
+    stance_text: str = Field(
+        default="",
+        description="Free-form first-person stance toward the entity; whitespace-only means skip",
+    )
+    valence_estimate: float | None = Field(
+        default=None,
+        ge=-1.0,
+        le=1.0,
+        description="Rough +/- sentiment scalar (-1 hostile, 0 neutral, +1 warm) — interpretive, not aggregated",
+    )
+    intensity_estimate: float | None = Field(
+        default=None,
+        ge=0.0,
+        le=1.0,
+        description="How charged the stance feels (0 indifferent, 1 highly charged)",
+    )
+    confidence: float | None = Field(
+        default=None,
+        ge=0.0,
+        le=1.0,
+        description="LLM-self-reported confidence; service may default if None",
+    )
+
+    @field_validator("stance_text", mode="before")
+    @classmethod
+    def strip_text(cls, v: Any) -> Any:
+        if isinstance(v, str):
+            return v.strip()
+        return v
+
+
 class JahodaCriterion(StrEnum):
     """
     Six criteria for psychological health based on Marie Jahoda's framework.

@@ -55,6 +55,7 @@ from atman.core.reflection_run_keys import (
     reframing_trigger_key,
 )
 from atman.core.services.divergence_aggregator import DivergenceAggregator
+from atman.core.services.entity_stance_formulator import EntityStanceFormulator
 from atman.core.services.findings_triage import FindingsTriage, TriageOutcome
 from atman.core.services.narrative_revision import NarrativeRevisionService
 from atman.core.services.session_experience_view import build_session_experience
@@ -321,6 +322,7 @@ class DailyReflectionService:
         clock: ClockPort | None = None,
         reflection_event_observer: ReflectionEventPersistenceObserver | None = None,
         structured_markers_aggregator: StructuredMarkersAggregator | None = None,
+        entity_stance_formulator: EntityStanceFormulator | None = None,
         reflection_request_queue: ReflectionRequestQueue | None = None,
         divergence_aggregator: DivergenceAggregator | None = None,
         findings_triage: FindingsTriage | None = None,
@@ -346,6 +348,7 @@ class DailyReflectionService:
         self._structured_markers_aggregator = (
             structured_markers_aggregator or StructuredMarkersAggregator(pattern_store)
         )
+        self._entity_stance_formulator = entity_stance_formulator
         self._reflection_request_queue = reflection_request_queue
         self._divergence_aggregator = divergence_aggregator
         self._findings_triage = findings_triage
@@ -428,6 +431,18 @@ class DailyReflectionService:
         marker_patterns = self._structured_markers_aggregator.analyze(all_moments, run_key=run_key)
         patterns_detected.extend(marker_patterns)
 
+        # R7: formulate per-entity stances. Runs only when both the
+        # formulator and an agent_id are configured — the formulator needs
+        # an agent scope to query EntityRegistry.
+        stance_outcome = None
+        if self._entity_stance_formulator is not None and self._agent_id is not None:
+            try:
+                stance_outcome = self._entity_stance_formulator.formulate_for_new_entities(
+                    self._agent_id
+                )
+            except Exception:  # pragma: no cover - defensive
+                stance_outcome = None
+
         # R6: aggregate divergence_events for the day (optional hook).
         divergence_patterns, rupture_observations = self._aggregate_divergences(start, end, run_key)
         patterns_detected.extend(divergence_patterns)
@@ -454,6 +469,8 @@ class DailyReflectionService:
                 f" findings_triage_resolved={triage_outcome.resolved_count}"
                 f" findings_triage_attention={triage_outcome.requires_attention_count}"
             )
+        if stance_outcome is not None and (stance_outcome.formulated or stance_outcome.skipped):
+            notes += f" entity_stances_formulated={stance_outcome.formulated}"
 
         key_insight_parts = [f"Daily reflection: {len(patterns_detected)} patterns detected"]
         if agent_reasons:
@@ -673,6 +690,8 @@ class DeepReflectionService:
         *,
         clock: ClockPort | None = None,
         reflection_event_observer: ReflectionEventPersistenceObserver | None = None,
+        entity_stance_formulator: EntityStanceFormulator | None = None,
+        agent_id: UUID | None = None,
         reflection_request_queue: ReflectionRequestQueue | None = None,
     ):
         """Initialize deep reflection service."""
@@ -687,6 +706,8 @@ class DeepReflectionService:
         self._reflection_event_observer = (
             reflection_event_observer or NoOpReflectionEventPersistenceObserver()
         )
+        self._entity_stance_formulator = entity_stance_formulator
+        self._agent_id = agent_id
         self._reflection_request_queue = reflection_request_queue
 
     def reflect(self, since: datetime, until: datetime) -> ReflectionEvent:
@@ -765,6 +786,14 @@ class DeepReflectionService:
             identity, patterns_detected, health_assessment
         )
 
+        # R7 Deep — revise stale stances against new evidence.
+        stance_outcome = None
+        if self._entity_stance_formulator is not None and self._agent_id is not None:
+            try:
+                stance_outcome = self._entity_stance_formulator.revise_stale(self._agent_id)
+            except Exception:  # pragma: no cover - defensive
+                stance_outcome = None
+
         notes = "outcome=deep_ok"
         if reframing_nf or reframing_sr:
             notes += (
@@ -773,6 +802,11 @@ class DeepReflectionService:
             )
         if reframing_dup:
             notes += f" reframing_duplicate_triggered_by={reframing_dup}"
+        if stance_outcome is not None and (stance_outcome.formulated or stance_outcome.promoted):
+            notes += (
+                f" entity_stances_revised={stance_outcome.formulated}"
+                f" entity_stances_promoted={stance_outcome.promoted}"
+            )
         if pending_requests:
             notes += f" agent_driven_requests={len(pending_requests)}"
 

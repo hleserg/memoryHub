@@ -11,7 +11,8 @@ from typing import TypedDict
 
 import pydantic
 
-from atman.core.models.experience import SessionExperience
+from atman.core.models.entity import Entity
+from atman.core.models.experience import KeyMoment, SessionExperience
 from atman.core.models.identity import Identity
 from atman.core.models.narrative import NarrativeDocument
 from atman.core.models.reflection import (
@@ -21,6 +22,7 @@ from atman.core.models.reflection import (
     PatternDetectionOutput,
     ReflectionLevel,
     ReframingNoteOutput,
+    StanceFormulationOutput,
 )
 
 
@@ -199,6 +201,85 @@ Use the identity and recent experiences as evidence.
 Respond ONLY with valid JSON matching this schema (no preamble, no markdown):
 {schema}
 """
+
+
+# ---------------------------------------------------------------------------
+# 5. formulate_entity_stance (R7 — REFLECTION_FUTURE.md §4.3, §9)
+# ---------------------------------------------------------------------------
+
+SYSTEM_PROMPT_STANCE = """\
+You are the introspective layer of an AI agent putting into words how it
+currently relates to a specific entity (a person, place, topic, etc).
+
+You will be given:
+  - the entity's canonical name and type;
+  - a chronological list of KeyMoments where that entity was involved;
+  - optional rolled-up structured_markers from those moments.
+
+This is **interpretation**, not aggregation. Read the moments and describe,
+in first person, the agent's current stance toward the entity: what it is,
+what it feels like, what stays unresolved. Do **not** compute averages of
+numeric fields and do **not** invent facts that aren't in the moments.
+
+If the moments are too thin or contradictory to commit to a stance, return
+an empty `stance_text` — the service will treat that as "decline" and try
+again next cycle.
+
+Estimate `valence_estimate` and `intensity_estimate` from the overall feel
+of the moments (interpretation, not arithmetic). Set `confidence` to how
+much you trust this formulation given the available evidence.
+
+Respond ONLY with valid JSON matching this schema (no preamble, no markdown):
+{schema}
+"""
+
+
+def _moment_summary_for_stance(m: KeyMoment) -> str:
+    """Compact textual summary of one KeyMoment for the stance prompt."""
+    parts = [
+        f"  - [{m.when.isoformat()}] {m.what_happened}",
+        f"      felt: valence={m.how_i_felt.emotional_valence:+.2f} "
+        f"intensity={m.how_i_felt.emotional_intensity:.2f} depth={m.how_i_felt.depth.value}",
+        f"      why_it_matters: {m.why_it_matters}",
+    ]
+    if m.values_touched:
+        parts.append(f"      values_touched: {', '.join(m.values_touched)}")
+    if m.structured_markers:
+        marker_bits = ", ".join(f"{k}={v}" for k, v in m.structured_markers.items())
+        parts.append(f"      markers: {marker_bits}")
+    return "\n".join(parts)
+
+
+def build_stance_formulation_messages(
+    entity: Entity,
+    moments: list[KeyMoment],
+    structured_markers: dict[str, int] | None = None,
+    output_model: type[StanceFormulationOutput] = StanceFormulationOutput,
+) -> OllamaMessages:
+    """Build Ollama messages for :meth:`formulate_entity_stance`."""
+    system = SYSTEM_PROMPT_STANCE.format(schema=_schema_block(output_model))
+
+    user_parts = [
+        "## Entity",
+        f"- canonical_name: {entity.canonical_name}",
+        f"- type: {entity.entity_type.value}",
+    ]
+    if entity.description:
+        user_parts.append(f"- description: {entity.description}")
+    user_parts.append("")
+    user_parts.append(f"## Moments ({len(moments)} involving this entity)")
+    for m in moments:
+        user_parts.append(_moment_summary_for_stance(m))
+    if structured_markers:
+        user_parts.append("")
+        user_parts.append("## Rolled-up structured_markers")
+        for key, count in sorted(structured_markers.items()):
+            user_parts.append(f"- {key}: {count}")
+
+    return [
+        OllamaMessage(role="system", content=system),
+        OllamaMessage(role="user", content="\n".join(user_parts)),
+    ]
 
 
 def build_health_messages(

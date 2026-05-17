@@ -6,11 +6,14 @@ from datetime import UTC, datetime
 from uuid import uuid4
 
 from atman.adapters.reflection.prompts import (
+    SYSTEM_PROMPT_STANCE,
     build_health_messages,
     build_narrative_messages,
     build_pattern_messages,
     build_reframing_messages,
+    build_stance_formulation_messages,
 )
+from atman.core.models.entity import Entity, EntityType
 from atman.core.models.experience import (
     EmotionalDepth,
     FeltSense,
@@ -111,3 +114,49 @@ def test_build_health_messages_identity_fields_and_experiences() -> None:
     assert "truth" in body
     assert "Be direct" in body
     assert "Session " in body
+
+
+# ---------------------------------------------------------------------------
+# R7 — stance formulation prompt
+# ---------------------------------------------------------------------------
+
+
+def test_build_stance_formulation_messages_includes_entity_moments_and_markers() -> None:
+    entity = Entity(
+        agent_id=uuid4(),
+        canonical_name="Vermont",
+        entity_type=EntityType.place,
+        description="A US state I keep coming back to.",
+    )
+    km1 = _km(["honesty"])
+    km1.structured_markers = {"cognitive_load": "low", "trust_signal": "warm"}
+    km2 = _km(["care"])
+    msgs = build_stance_formulation_messages(
+        entity,
+        [km1, km2],
+        structured_markers={"cognitive_load": 1, "trust_signal": 1},
+    )
+    assert msgs[0]["role"] == "system"
+    # System prompt enforces interpretation, not aggregation (§9).
+    assert "interpretation" in msgs[0]["content"].lower()
+    assert "aggregation" in msgs[0]["content"].lower()
+    user = msgs[1]["content"]
+    assert "Vermont" in user
+    assert "place" in user
+    assert "A US state I keep coming back to." in user
+    assert "Moments (2 involving this entity)" in user
+    assert "cognitive_load=low" in user  # per-moment markers
+    assert "Rolled-up structured_markers" in user
+    assert "trust_signal: 1" in user
+
+
+def test_build_stance_formulation_messages_optional_markers_omitted_when_none() -> None:
+    entity = Entity(agent_id=uuid4(), canonical_name="Bob", entity_type=EntityType.person)
+    msgs = build_stance_formulation_messages(entity, [_km()])
+    assert "Rolled-up structured_markers" not in msgs[1]["content"]
+
+
+def test_system_prompt_stance_module_constant_exposed() -> None:
+    # The constant exists, has a schema placeholder, and references the entity contract.
+    assert "{schema}" in SYSTEM_PROMPT_STANCE
+    assert "stance" in SYSTEM_PROMPT_STANCE.lower()
