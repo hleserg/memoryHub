@@ -142,6 +142,20 @@ def test_similar_entities_no_cosine_left_unresolved():
     assert g.resolved_calls == []
 
 
+def test_similar_entities_reads_similarity_key_when_cosine_absent():
+    """scan_merge_candidates writes the cosine score under details['similarity'],
+    not ['cosine']. The triage shortcut must read both so the
+    DAILY_TRIVIAL_DUPLICATE_THRESHOLD path is not dead code (Devin Review #598)."""
+    f = _finding(
+        ftype=FindingType.similar_entities,
+        details={"similarity": DAILY_TRIVIAL_DUPLICATE_THRESHOLD + 0.01},
+    )
+    g = _StubGuardian([f])
+    out = FindingsTriage(g).run(AGENT_ID)
+    assert out.resolved_count == 1
+    assert g.resolved_calls[0][1] == ResolutionStatus.ignored.value
+
+
 def test_pending_structured_markers_resolved_as_accepted():
     f = _finding(ftype=FindingType.pending_structured_markers)
     g = _StubGuardian([f])

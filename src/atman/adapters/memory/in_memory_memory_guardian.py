@@ -1,7 +1,8 @@
 """In-memory MemoryGuardian — scans agent memory for quality issues."""
 
 import threading
-from datetime import UTC, datetime
+from collections import Counter
+from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
 from typing_extensions import override
@@ -13,7 +14,9 @@ from atman.core.models.validation import (
     ResolutionStatus,
     ValidationFinding,
 )
+from atman.core.ports.divergence_events import DivergenceEventStore
 from atman.core.ports.entity_registry import EntityRegistry
+from atman.core.ports.entity_stance import EntityStanceStore
 from atman.core.ports.memory_backend import FactualMemory
 from atman.core.ports.memory_guardian import MemoryGuardian
 from atman.core.ports.state_store import StateStore
@@ -35,11 +38,19 @@ class InMemoryMemoryGuardian(MemoryGuardian):
         state_store: StateStore | None = None,
         *,
         embedding: object | None = None,
+        divergence_event_store: DivergenceEventStore | None = None,
+        entity_stance_store: EntityStanceStore | None = None,
     ) -> None:
         self._entities = entity_registry
         self._facts = factual_memory
         self._store = state_store
         self._embedding = embedding
+        # HLE-31: optional sources for Level-C psychological quality metrics.
+        # Missing inputs ⇒ the corresponding sub-scan silently emits zero
+        # findings instead of crashing, so dev/in-memory deploys without the
+        # full pipeline still work.
+        self._divergence_events = divergence_event_store
+        self._entity_stance = entity_stance_store
         self._findings: dict[UUID, ValidationFinding] = {}
         self._lock = threading.Lock()
 
@@ -180,6 +191,195 @@ class InMemoryMemoryGuardian(MemoryGuardian):
         return findings
 
     @override
+    def scan_quality_metrics(
+        self,
+        agent_id: UUID,
+        *,
+        window_days: int = 7,
+        incomplete_coloring_threshold: float = 0.3,
+        divergence_pattern_threshold: int = 5,
+        stance_too_fast_hours: int = 24,
+        stance_too_fast_min_count: int = 3,
+    ) -> list[ValidationFinding]:
+        """Level-C psychological quality-metric scans (HLE-31)."""
+        now = datetime.now(UTC)
+        window_start = now - timedelta(days=window_days)
+        findings: list[ValidationFinding] = []
+        findings.extend(
+            self._scan_affect_detector_silent(agent_id, window_start, incomplete_coloring_threshold)
+        )
+        findings.extend(
+            self._scan_divergence_pattern(agent_id, window_start, now, divergence_pattern_threshold)
+        )
+        findings.extend(
+            self._scan_stance_formation_too_fast(
+                agent_id,
+                window_start,
+                stance_too_fast_hours,
+                stance_too_fast_min_count,
+            )
+        )
+        return findings
+
+    # ---- Level-C sub-scans (HLE-31) ------------------------------------------
+
+    def _belongs_to_agent(self, moment: object, agent_id: UUID) -> bool:
+        """True when ``moment.session_id`` resolves to a session owned by
+        ``agent_id``. Used by the Level-C scans to keep multi-agent in-memory
+        stores from cross-pollinating findings. Falls back to False when the
+        moment has no session or the session lookup fails — the alternative
+        (assume it belongs) would manufacture findings for the wrong agent."""
+        if self._store is None:
+            return False
+        sid = getattr(moment, "session_id", None)
+        if sid is None:
+            return False
+        get_session = getattr(self._store, "get_session", None)
+        if get_session is None:
+            return False
+        try:
+            session = get_session(sid)
+        except Exception:
+            return False
+        return session is not None and getattr(session, "agent_id", None) == agent_id
+
+    def _scan_affect_detector_silent(
+        self, agent_id: UUID, window_start: datetime, threshold: float
+    ) -> list[ValidationFinding]:
+        """High incomplete_coloring rate over the window → pipeline silent.
+
+        Filters by ``agent_id`` via the KeyMoment → Session link so multi-agent
+        in-memory stores compute the rate per agent (one mis-coloured stream
+        from agent A must not cause a finding for agent B). Moments whose
+        ``session_id`` is None or whose session is unknown are conservatively
+        excluded — they cannot be attributed to this agent.
+        """
+        if self._store is None:
+            return []
+        moments = [
+            m
+            for m in self._store.list_key_moments()
+            if _aware(m.when) >= window_start and self._belongs_to_agent(m, agent_id)
+        ]
+        if not moments:
+            return []
+        incomplete = sum(1 for m in moments if _is_incomplete_coloring(m))
+        rate = incomplete / len(moments)
+        if rate <= threshold:
+            return []
+        return [
+            ValidationFinding(
+                agent_id=agent_id,
+                finding_type=FindingType.affect_detector_silent,
+                severity=FindingSeverity.warning,
+                target_table="key_moments",
+                target_id=moments[0].id,
+                details={
+                    "rate": round(rate, 3),
+                    "incomplete": incomplete,
+                    "total": len(moments),
+                    "threshold": threshold,
+                    "window_start": window_start.isoformat(),
+                },
+                detected_by="memory_guardian",
+            )
+        ]
+
+    def _scan_divergence_pattern(
+        self,
+        agent_id: UUID,
+        window_start: datetime,
+        window_end: datetime,
+        threshold: int,
+    ) -> list[ValidationFinding]:
+        """Same divergence_type ≥ threshold over the window → stable pattern."""
+        if self._divergence_events is None:
+            return []
+        events = self._divergence_events.list_in_range(agent_id, window_start, window_end)
+        counts: Counter[str] = Counter(str(e.divergence_type.value) for e in events)
+        findings: list[ValidationFinding] = []
+        # Deterministic order so repeated scans produce stable finding ids
+        # downstream when callers persist via `write_finding`.
+        for dtype, count in sorted(counts.items()):
+            if count < threshold:
+                continue
+            sample = next(e for e in events if e.divergence_type.value == dtype)
+            findings.append(
+                ValidationFinding(
+                    agent_id=agent_id,
+                    finding_type=FindingType.divergence_pattern,
+                    severity=FindingSeverity.warning,
+                    target_table="divergence_events",
+                    target_id=sample.id,
+                    details={
+                        "divergence_type": dtype,
+                        "count": count,
+                        "threshold": threshold,
+                        "window_start": window_start.isoformat(),
+                    },
+                    detected_by="memory_guardian",
+                )
+            )
+        return findings
+
+    def _scan_stance_formation_too_fast(
+        self,
+        agent_id: UUID,
+        window_start: datetime,
+        too_fast_hours: int,
+        min_count: int,
+    ) -> list[ValidationFinding]:
+        """Stances formed too close to their evidence moments → premature reflection."""
+        if self._entity_stance is None or self._store is None:
+            return []
+        list_active = getattr(self._entity_stance, "list_active_stances", None)
+        if list_active is None:
+            return []
+        try:
+            stances = list_active(agent_id, formed_after=window_start)
+        except Exception:
+            return []
+        too_fast: list[tuple[object, float]] = []
+        for stance in stances:
+            formed_at = getattr(stance, "formed_at", None)
+            moment_ids = list(getattr(stance, "based_on_moment_ids", []) or [])
+            if formed_at is None or not moment_ids:
+                continue
+            if _aware(formed_at) < window_start:
+                continue
+            moments_when: list[datetime] = []
+            for mid in moment_ids:
+                m = self._store.get_key_moment(mid)
+                if m is not None:
+                    moments_when.append(_aware(m.when))
+            if not moments_when:
+                continue
+            earliest = min(moments_when)
+            hours = (_aware(formed_at) - earliest).total_seconds() / 3600.0
+            if hours < too_fast_hours:
+                too_fast.append((stance, hours))
+        if len(too_fast) < min_count:
+            return []
+        sample_stance, sample_hours = too_fast[0]
+        return [
+            ValidationFinding(
+                agent_id=agent_id,
+                finding_type=FindingType.stance_formation_too_fast,
+                severity=FindingSeverity.warning,
+                target_table="entity_stance",
+                target_id=sample_stance.id,  # type: ignore[attr-defined]
+                details={
+                    "fast_stance_count": len(too_fast),
+                    "threshold_hours": too_fast_hours,
+                    "min_count": min_count,
+                    "sample_hours_to_formation": round(sample_hours, 2),
+                    "window_start": window_start.isoformat(),
+                },
+                detected_by="memory_guardian",
+            )
+        ]
+
+    @override
     def write_finding(self, finding: ValidationFinding) -> ValidationFinding:
         """Persist a finding."""
         with self._lock:
@@ -242,3 +442,16 @@ def _cosine(a: list[float], b: list[float]) -> float:
     na = math.sqrt(sum(x * x for x in a))
     nb = math.sqrt(sum(x * x for x in b))
     return dot / (na * nb) if na and nb else 0.0
+
+
+def _aware(ts: datetime) -> datetime:
+    """Normalise tz-naive timestamps to UTC for comparisons."""
+    if ts.tzinfo is None:
+        return ts.replace(tzinfo=UTC)
+    return ts
+
+
+def _is_incomplete_coloring(moment: object) -> bool:
+    """KeyMoment.incomplete_coloring flag access — falsey when the field
+    is missing on a legacy record so we don't fabricate a signal."""
+    return bool(getattr(moment, "incomplete_coloring", False))

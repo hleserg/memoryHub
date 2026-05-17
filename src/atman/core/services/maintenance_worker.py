@@ -119,6 +119,8 @@ class MaintenanceWorker:
             + self._guardian.scan_merge_candidates(agent_id)
             + self._guardian.scan_embedding_gaps(agent_id)
             + self._guardian.scan_stale_moments(agent_id)
+            # HLE-31: Level-C psychological metrics
+            + self._guardian.scan_quality_metrics(agent_id)
         )
         for f in findings:
             self._guardian.write_finding(f)

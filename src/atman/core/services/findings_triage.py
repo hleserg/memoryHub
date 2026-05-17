@@ -66,7 +66,14 @@ def _decide_similar_entities(finding: ValidationFinding) -> tuple[bool, str | No
     ``should_resolve`` is False the finding is left ``unresolved`` and
     becomes a Deep-reflection candidate.
     """
-    cosine = finding.details.get("cosine")
+    # Cosine score is written by scan_merge_candidates under the
+    # ``similarity`` key (cf. in_memory_memory_guardian._scan_merge_candidates).
+    # Older code paths used ``cosine`` — read both so the threshold actually
+    # takes effect (Devin Review #598 spotted the legacy-only key making the
+    # DAILY_TRIVIAL_DUPLICATE_THRESHOLD shortcut dead code).
+    cosine = finding.details.get("similarity")
+    if cosine is None:
+        cosine = finding.details.get("cosine")
     try:
         cosine_val = float(cosine) if cosine is not None else None
     except (TypeError, ValueError):
@@ -172,4 +179,10 @@ class FindingsTriage:
             )
         # Stale moments, embedding gaps, quality_metric — explicit no-op
         # at this layer (handled by maintenance worker policies).
+        # HLE-31 Level-C psychological signals (`divergence_pattern`,
+        # `stance_formation_too_fast`) also fall through here intentionally:
+        # they are diagnostic, not actionable from Daily triage — R6 consumes
+        # them, and Deep does not yet have a dedicated handler. Findings
+        # accumulate as unresolved until operator review or a future
+        # automated resolver is wired in.
         return None

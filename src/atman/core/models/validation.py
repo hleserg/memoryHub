@@ -24,6 +24,10 @@ class FindingType(StrEnum):
     pending_structured_markers = "pending_structured_markers"
     analysis_failed = "analysis_failed"
     affect_detector_silent = "affect_detector_silent"
+    # HLE-31: Level-C psychological quality metrics. Emitted by
+    # MemoryGuardian.scan_quality_metrics over a sliding window.
+    divergence_pattern = "divergence_pattern"
+    stance_formation_too_fast = "stance_formation_too_fast"
     other = "other"
 
 
