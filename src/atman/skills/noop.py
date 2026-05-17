@@ -73,3 +73,12 @@ class NoopSkillManager:
     def process_session_skills(self, agent_id: UUID, session_id: UUID) -> None:
         # Silent no-op: micro reflection always calls this; when disabled, nothing happens.
         return
+
+    def write_session_skills_marker(
+        self,
+        workspace: Path,
+        session_id: UUID,
+        agent_id: UUID,
+    ) -> Path | None:
+        # No invocations to summarise when the loop is disabled.
+        return None

@@ -31,6 +31,13 @@ def _now() -> datetime:
     return datetime.now(UTC)
 
 
+def _dominant(counts: dict[str, int]) -> str | None:
+    """Return the most-frequent key in ``counts`` (None on empty input)."""
+    if not counts:
+        return None
+    return max(counts.items(), key=lambda kv: kv[1])[0]
+
+
 class SkillManager:
     def __init__(
         self,
@@ -251,6 +258,103 @@ class SkillManager:
         self._store.save_skill(skill)
         _log.info("Captured skill '%s' for agent %s (draft)", name, agent_id)
         return skill
+
+    # ── Session-end marker (HLE-35) ───────────────────────────────────────────
+
+    SKILLS_MARKER_SCHEMA_VERSION = 1
+
+    def write_session_skills_marker(
+        self,
+        workspace: Path,
+        session_id: UUID,
+        agent_id: UUID,
+    ) -> Path | None:
+        """Write ``atman_session_skills_<timestamp>.json`` for the session.
+
+        The file lists each skill used during the session with invocation
+        counts and the dominant preliminary status — readable for later
+        dashboards / analytics. Returns the written path or ``None`` when
+        there is nothing to write (no invocations).
+
+        The marker is written **before** ``process_session_skills`` would
+        normally run, so it captures the raw outcomes the runner observed,
+        not the post-reflection ``final_status``.
+        """
+        try:
+            invocations = self._store.get_unprocessed_invocations(agent_id, session_id)
+        except Exception as exc:
+            _log.warning("write_session_skills_marker: store lookup failed: %s", exc)
+            return None
+
+        if not invocations:
+            return None
+
+        # Aggregate per skill_id: dominant preliminary status (most common).
+        per_skill: dict[UUID, dict] = {}
+        for inv in invocations:
+            entry = per_skill.setdefault(
+                inv.skill_id,
+                {
+                    "skill_id": str(inv.skill_id),
+                    "skill_name": None,
+                    "invocations": 0,
+                    "preliminary_status_counts": {},
+                    "agent_marker_counts": {},
+                },
+            )
+            entry["invocations"] += 1
+            if inv.preliminary_status:
+                counts = entry["preliminary_status_counts"]
+                counts[inv.preliminary_status] = counts.get(inv.preliminary_status, 0) + 1
+            if inv.agent_marker:
+                counts = entry["agent_marker_counts"]
+                counts[inv.agent_marker] = counts.get(inv.agent_marker, 0) + 1
+
+        # Resolve skill names (best-effort: the row may have been deleted).
+        for skill_id, entry in per_skill.items():
+            try:
+                skill = self._store.get_skill_by_id(skill_id)
+            except Exception:
+                skill = None
+            entry["skill_name"] = skill.name if skill is not None else None
+            # Reduce counts dicts to a single dominant value for compact output.
+            entry["preliminary_status"] = _dominant(entry.pop("preliminary_status_counts"))
+            entry["agent_marker"] = _dominant(entry.pop("agent_marker_counts"))
+
+        now = _now()
+        timestamp = now.strftime("%Y%m%dT%H%M%SZ")
+        marker_path = workspace / f"atman_session_skills_{timestamp}.json"
+        payload = {
+            "schema_version": self.SKILLS_MARKER_SCHEMA_VERSION,
+            "session_id": str(session_id),
+            "agent_id": str(agent_id),
+            "timestamp": now.isoformat(),
+            "total_invocations": sum(int(e["invocations"]) for e in per_skill.values()),
+            "skills_used": sorted(
+                per_skill.values(),
+                key=lambda e: int(e["invocations"]),
+                reverse=True,
+            ),
+        }
+        try:
+            workspace.mkdir(parents=True, exist_ok=True)
+            marker_path.write_text(
+                json.dumps(payload, ensure_ascii=False, indent=2),
+                encoding="utf-8",
+            )
+        except OSError as exc:
+            _log.warning(
+                "write_session_skills_marker: failed to write %s: %s", marker_path, exc
+            )
+            return None
+
+        _log.debug(
+            "Skills marker written: session=%s skills=%d path=%s",
+            session_id,
+            len(per_skill),
+            marker_path,
+        )
+        return marker_path
 
     # ── Micro-reflection hook ─────────────────────────────────────────────────
 

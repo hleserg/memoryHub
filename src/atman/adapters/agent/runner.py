@@ -1062,6 +1062,21 @@ class AtmanRunner:
                 except (SessionAlreadyFinishedError, SessionNotFoundError):
                     pass
 
+                # HLE-35: dump per-session skill activity to a JSON marker
+                # next to the workspace. Best-effort — never re-raise; the
+                # session has already been persisted at this point.
+                if deps.skill_manager is not None:
+                    try:
+                        deps.skill_manager.write_session_skills_marker(
+                            self._workspace, session_id, self._agent_id
+                        )
+                    except Exception:
+                        _LOG.debug(
+                            "write_session_skills_marker failed for session %s",
+                            session_id,
+                            exc_info=True,
+                        )
+
     async def _handle_menu_mode(
         self,
         deps: AtmanDeps,

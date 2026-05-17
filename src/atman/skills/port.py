@@ -77,3 +77,22 @@ class SkillManagerPort(Protocol):
         sets revision_needed flags.
         """
         ...
+
+    def write_session_skills_marker(
+        self,
+        workspace: Path,
+        session_id: UUID,
+        agent_id: UUID,
+    ) -> Path | None:
+        """Write a JSON summary of this session's skill activity.
+
+        Produces ``atman_session_skills_<timestamp>.json`` under
+        ``workspace`` describing each skill used in the session, with
+        invocation counts and the dominant preliminary status. Called by
+        the runner at session end so the on-disk session bundle is
+        self-contained for later dashboards / analytics.
+
+        Returns the path on success, ``None`` when there is nothing to
+        write or the loop is disabled.
+        """
+        ...
