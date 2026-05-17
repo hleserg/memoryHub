@@ -532,6 +532,14 @@ class SessionManager:
                         len(loaded_moments),
                     )
 
+                    # HLE-27: orphan-recovered moments are now durable in
+                    # state_store too — schedule the same post-write enrichment
+                    # that finish_session would have fired, so recovered
+                    # sessions get the mREBEL / lingvo passes instead of
+                    # silently skipping them.
+                    for moment in loaded_moments:
+                        self._schedule_post_write(moment, agent_id)
+
                 # Delete journal after successful recovery (or if no key moments)
                 journal_file.unlink()
 
