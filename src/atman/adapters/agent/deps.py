@@ -20,6 +20,9 @@ from uuid import UUID
 
 if TYPE_CHECKING:
     from atman.adapters.agent.config import AgentConfig, ModelConfig
+    from atman.adapters.observability.in_memory_overload_alert_sink import (
+        InMemoryOverloadAlertSink,
+    )
     from atman.core.ports.divergence_events import DivergenceEventStore
     from atman.core.ports.pending_human_review import PendingHumanReviewInbox
     from atman.core.ports.reflection_request_queue import ReflectionRequestQueue
@@ -108,6 +111,14 @@ class AtmanDeps:
     routes alerts through the wired sink (composite of in-memory + logging
     in the default factory build)."""
 
+    overload_alert_inspect: InMemoryOverloadAlertSink | None = None
+    """In-memory tap on the overload-alert fan-out (HLE-30). The factory wires
+    this sink as the first child of the composite passed into
+    ``reflection_overload_monitor``, so anything emitted by the monitor lands
+    here. Admin UIs, debugging endpoints, and integration tests read the
+    ``.alerts`` list to introspect captured cadence anomalies without
+    reaching into the monitor's private ``_sink`` chain."""
+
     @classmethod
     def from_config(
         cls,
@@ -126,6 +137,7 @@ class AtmanDeps:
         skill_manager: SkillManagerPort | None = None,
         divergence_event_store: DivergenceEventStore | None = None,
         reflection_overload_monitor: ReflectionOverloadMonitor | None = None,
+        overload_alert_inspect: InMemoryOverloadAlertSink | None = None,
     ) -> AtmanDeps:
         """
         Build :class:`AtmanDeps` from a validated :class:`AgentConfig`.
@@ -154,4 +166,5 @@ class AtmanDeps:
             skill_manager=skill_manager,
             divergence_event_store=divergence_event_store,
             reflection_overload_monitor=reflection_overload_monitor,
+            overload_alert_inspect=overload_alert_inspect,
         )

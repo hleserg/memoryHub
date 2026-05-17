@@ -87,6 +87,28 @@ def test_worker_skips_overload_check_when_monitor_not_configured() -> None:
     assert skipped[0].job_name == JobName.reflection_overload_check
 
 
+def test_factory_exposes_overload_inspect_sink_for_admin_access(tmp_path) -> None:
+    """build_deps should expose the in-memory tap as deps.overload_alert_inspect
+    so admin UIs / integration tests can read captured alerts without reaching
+    into the monitor's private _sink._sinks chain (Devin Review ANALYSIS, #596)."""
+    from uuid import uuid4
+
+    from atman.adapters.agent.factory import build_deps
+    from atman.adapters.observability.in_memory_overload_alert_sink import (
+        InMemoryOverloadAlertSink,
+    )
+
+    deps, _sm, _store = build_deps(tmp_path, uuid4())
+    assert deps.reflection_overload_monitor is not None
+    assert isinstance(deps.overload_alert_inspect, InMemoryOverloadAlertSink)
+    # The tap is the same instance that the composite fans into — anything the
+    # monitor emits lands here without further wiring.
+    deps.reflection_overload_monitor._sink.record_overload(  # type: ignore[attr-defined]
+        severity=ReflectionOverloadSeverity.WARNING, message="t", details={}
+    )
+    assert len(deps.overload_alert_inspect.alerts) == 1
+
+
 def test_composite_sink_fans_out_to_all_children() -> None:
     a = InMemoryOverloadAlertSink()
     b = InMemoryOverloadAlertSink()

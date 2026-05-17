@@ -298,6 +298,7 @@ def build_deps(
         skill_manager=skill_manager,
         divergence_event_store=_divergence_event_store,
         reflection_overload_monitor=_overload_monitor,
+        overload_alert_inspect=_overload_sink_inmem,
     )
 
     return deps, session_manager, state_store
