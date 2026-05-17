@@ -269,12 +269,9 @@ Connections between two or more parts. These are seams that may break independen
 | `MicroReflectionService` ↔ `SessionRepository` + `NarrativeRepository` | `core/services/reflection_service.py` | reads one session + its key moments, synthesises a virtual `SessionExperience` via `services/session_experience_view.build_session_experience`, updates recent layer (R-Micro — migrated off `ExperienceRepository`) |
 | `MicroReflectionService` ↔ `SkillManagerPort` | `core/services/reflection_service.py` | **WP-08 v2** optional hook: if `skill_manager` and `agent_id` are set, calls `process_session_skills(agent_id, session_id)` after narrative update; errors suppressed so reflection cannot be blocked by skill failures |
 | `DailyReflectionService` ↔ `SessionRepository` + `PatternStore` + `ReflectionEventStore` | `core/services/reflection_service.py` | pattern detection (R3 — migrated off `ExperienceRepository`; synthesises virtual `SessionExperience` via `services/session_experience_view.build_session_experience`) |
-<<<<<<< HEAD
 | `DailyReflectionService` ↔ `StructuredMarkersAggregator` (R5) | `core/services/structured_markers_aggregator.py` | pure aggregation over `KeyMoment.structured_markers`; ≥5 moments sharing a `signal_type`/`signal_value` → daily `PatternCandidate` persisted via `PatternStore.save_with_detection_key` (idempotent per `daily_marker_pattern_detection_key`) |
-=======
 | `DailyReflectionService` ↔ `DivergenceAggregator` (R6) | `core/services/divergence_aggregator.py` → `core/ports/divergence_events.py` (`DivergenceEventStore`) + `PatternStore` | optional hook; reads `divergence_events` for the UTC day (per-agent), groups by `divergence_type` and emits a `PatternCandidate(BEHAVIOR)` per type with ≥ `min_count` (default 3) events (idempotent via `daily_divergence_pattern_detection_key`); any `severity='rupture'` event surfaces in `ReflectionEvent.key_insight` regardless of the per-type threshold |
 | `DailyReflectionService` ↔ `FindingsTriage` (R8) | `core/services/findings_triage.py` → `core/ports/memory_guardian.py` (`get_unresolved` / `resolve_finding`) | optional hook; resolves level-B (`info`/`warning`) `validation_findings` by policy: `orphan_entity`→`ignored` (kept by policy), `pending_structured_markers`→`ignored` (accepted as-is), `analysis_failed`/`affect_detector_silent`→`requires_attention`, trivial `similar_entities` (cosine ≥ `DAILY_TRIVIAL_DUPLICATE_THRESHOLD=0.98`)→`ignored` (deferred to Deep R10), non-trivial `similar_entities`→left unresolved for Deep R10. Critical-severity findings are **never** auto-resolved here |
->>>>>>> cc46837 (feat(reflection): R6 DivergenceAggregator + R8 FindingsTriage (daily))
 | `DeepReflectionService` ↔ `SessionRepository` + `IdentityRepository` + `NarrativeRepository` + `PatternStore` + `HealthAssessmentStore` + `ReflectionEventStore` | `core/services/reflection_service.py` | health + identity + narrative update (R4 — migrated off `ExperienceRepository`; synthesises virtual `SessionExperience` via `services/session_experience_view.build_session_experience`) |
 | `PrincipleRevisionAdvisor` ↔ `PatternCandidate` + `Identity` | `core/services/principle_advisor.py` | analyzes patterns in identity context |
 | `ConflictDetector` ↔ `FactualMemory` | `core/services/conflict_detector.py` → `core/ports/memory_backend.py` | DI; lightweight contradiction scan over ACTIVE candidates returned by `search()` |
@@ -305,6 +302,7 @@ Connections between two or more parts. These are seams that may break independen
 | `StateStoreSessionRepository` (`adapters/reflection/`) | `SessionRepository` (R1 — successor to ExperienceRepository) |
 | `InMemorySkillStore` (`skills/in_memory_store.py`), `PostgresSkillStore` (`skills/postgres_store.py`) | `SkillStore` (WP-08 v2) |
 | `NoopSkillManager` (`skills/noop.py`), `SkillManager` (`skills/manager.py`) | `SkillManagerPort` (WP-08 v2) |
+| `InMemoryDivergenceEventStore` (`adapters/memory/in_memory_divergence_events.py`) | `DivergenceEventStore` (R6) |
 
 ### 2.2a. Agent adapter ↔ services
 

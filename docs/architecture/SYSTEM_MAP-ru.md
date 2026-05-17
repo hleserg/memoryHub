@@ -273,12 +273,9 @@
 | `MicroReflectionService` ↔ `SessionRepository` + `NarrativeRepository` | `core/services/reflection_service.py` | читает одну сессию + её key moments, синтезирует виртуальный `SessionExperience` через `services/session_experience_view.build_session_experience`, апдейт recent-слоя (R-Micro — мигрирован с `ExperienceRepository`) |
 | `MicroReflectionService` ↔ `SkillManagerPort` | `core/services/reflection_service.py` | **WP-08 v2** опциональный хук: если `skill_manager` и `agent_id` заданы, вызывает `process_session_skills(agent_id, session_id)` после апдейта нарратива; ошибки подавляются, чтобы слой навыков не мог заблокировать рефлексию |
 | `DailyReflectionService` ↔ `SessionRepository` + `PatternStore` + `ReflectionEventStore` | `core/services/reflection_service.py` | детекция паттернов (R3 — мигрирован с `ExperienceRepository`; синтезирует виртуальные `SessionExperience` через `services/session_experience_view.build_session_experience`) |
-<<<<<<< HEAD
 | `DailyReflectionService` ↔ `StructuredMarkersAggregator` (R5) | `core/services/structured_markers_aggregator.py` | чистая агрегация над `KeyMoment.structured_markers`; ≥5 моментов с одинаковым `signal_type`/`signal_value` → daily `PatternCandidate` через `PatternStore.save_with_detection_key` (идемпотентно по `daily_marker_pattern_detection_key`) |
-=======
 | `DailyReflectionService` ↔ `DivergenceAggregator` (R6) | `core/services/divergence_aggregator.py` → `core/ports/divergence_events.py` (`DivergenceEventStore`) + `PatternStore` | опциональный хук; читает `divergence_events` за UTC-день (per-agent), группирует по `divergence_type` и пишет `PatternCandidate(BEHAVIOR)` для каждого типа с ≥ `min_count` (по умолчанию 3) событий (идемпотентно через `daily_divergence_pattern_detection_key`); любое событие `severity='rupture'` попадает в `ReflectionEvent.key_insight` независимо от порога |
 | `DailyReflectionService` ↔ `FindingsTriage` (R8) | `core/services/findings_triage.py` → `core/ports/memory_guardian.py` (`get_unresolved` / `resolve_finding`) | опциональный хук; резолвит уровень B (`info`/`warning`) `validation_findings` по правилам: `orphan_entity`→`ignored` (kept by policy), `pending_structured_markers`→`ignored` (accepted as-is), `analysis_failed`/`affect_detector_silent`→`requires_attention`, тривиальный `similar_entities` (cosine ≥ `DAILY_TRIVIAL_DUPLICATE_THRESHOLD=0.98`)→`ignored` (передаётся в Deep R10), нетривиальный `similar_entities`→остаётся unresolved для Deep R10. Critical-severity findings **никогда** не резолвятся автоматически здесь |
->>>>>>> cc46837 (feat(reflection): R6 DivergenceAggregator + R8 FindingsTriage (daily))
 | `DeepReflectionService` ↔ `SessionRepository` + `IdentityRepository` + `NarrativeRepository` + `PatternStore` + `HealthAssessmentStore` + `ReflectionEventStore` | `core/services/reflection_service.py` | здоровье + апдейт identity и нарратива (R4 — мигрирован с `ExperienceRepository`; синтезирует виртуальные `SessionExperience` через `services/session_experience_view.build_session_experience`) |
 | `PrincipleRevisionAdvisor` ↔ `PatternCandidate` + `Identity` | `core/services/principle_advisor.py` | анализ паттернов в контексте identity |
 | `ConflictDetector` ↔ `FactualMemory` | `core/services/conflict_detector.py` → `core/ports/memory_backend.py` | DI; лёгкий поиск противоречий среди ACTIVE-кандидатов, возвращённых `search()` |
@@ -309,6 +306,7 @@
 | `StateStoreSessionRepository` (`adapters/reflection/`) | `SessionRepository` (R1 — преемник ExperienceRepository) |
 | `InMemorySkillStore` (`skills/in_memory_store.py`), `PostgresSkillStore` (`skills/postgres_store.py`) | `SkillStore` (WP-08 v2) |
 | `NoopSkillManager` (`skills/noop.py`), `SkillManager` (`skills/manager.py`) | `SkillManagerPort` (WP-08 v2) |
+| `InMemoryDivergenceEventStore` (`adapters/memory/in_memory_divergence_events.py`) | `DivergenceEventStore` (R6) |
 
 ### 2.2a. Agent adapter ↔ сервисы
 
