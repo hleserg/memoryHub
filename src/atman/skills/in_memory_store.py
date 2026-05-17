@@ -92,10 +92,16 @@ class InMemorySkillStore:
         )
 
     def bump_sessions_since_use(self, agent_id: UUID, exclude_skill_ids: set[UUID]) -> None:
+        # Increment the idleness counter for every active skill the session
+        # did NOT touch — not just pinned ones. Auto-downgraded skills used
+        # to freeze their counter at the downgrade point (a Devin Review
+        # finding), which made ``process_deep_skills`` archive thresholds
+        # unreachable. Disabled/draft skills are intentionally skipped:
+        # they aren't reachable anyway, so tracking their idleness is noise.
         for skill_id, s in list(self._skills.items()):
             if s.agent_id != agent_id:
                 continue
-            if not (s.user_pinned or s.auto_pinned):
+            if s.status != SkillStatus.active:
                 continue
             if skill_id in exclude_skill_ids:
                 continue

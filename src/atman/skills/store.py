@@ -60,7 +60,14 @@ class SkillStore(Protocol):
     ) -> None: ...
 
     def bump_sessions_since_use(self, agent_id: UUID, exclude_skill_ids: set[UUID]) -> None:
-        """Increment sessions_since_use for all pinned skills NOT in exclude set."""
+        """Increment ``sessions_since_use`` for every active skill NOT in
+        ``exclude_skill_ids``.
+
+        Applies to every ``status='active'`` skill (pinned or not) — the
+        counter must continue advancing after auto-downgrade so deep-
+        reflection archive thresholds remain reachable. Disabled / draft
+        skills are excluded.
+        """
         ...
 
     def set_revision_needed(self, skill_id: UUID, priority_bump: int = 1) -> None: ...

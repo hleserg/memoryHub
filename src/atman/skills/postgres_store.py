@@ -383,6 +383,12 @@ class PostgresSkillStore:
             )
 
     def bump_sessions_since_use(self, agent_id: UUID, exclude_skill_ids: set[UUID]) -> None:
+        # Increment idleness for every ACTIVE skill the session did not
+        # touch — not just pinned ones. Auto-downgraded skills used to
+        # freeze their counter at the downgrade point, which made
+        # ``process_deep_skills`` archive thresholds unreachable
+        # (Devin Review finding). Disabled/draft skills are skipped on
+        # purpose: they aren't reachable, tracking their idleness is noise.
         with self._conn(agent_id) as conn:
             if exclude_skill_ids:
                 conn.execute(
@@ -391,7 +397,7 @@ class PostgresSkillStore:
                         sessions_since_use = sessions_since_use + 1,
                         updated_at = %s
                     WHERE agent_id = %s
-                      AND (user_pinned = true OR auto_pinned = true)
+                      AND status = 'active'
                       AND id != ALL(%s)
                     """,
                     [_now(), agent_id, list(exclude_skill_ids)],
@@ -403,7 +409,7 @@ class PostgresSkillStore:
                         sessions_since_use = sessions_since_use + 1,
                         updated_at = %s
                     WHERE agent_id = %s
-                      AND (user_pinned = true OR auto_pinned = true)
+                      AND status = 'active'
                     """,
                     [_now(), agent_id],
                 )
