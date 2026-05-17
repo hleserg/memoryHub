@@ -22,6 +22,7 @@ class JobName(StrEnum):
     mrebel_extract = "mrebel_extract"
     lingvo_enrich = "lingvo_enrich"
     entity_merge = "entity_merge"
+    reflection_overload_check = "reflection_overload_check"
     other = "other"
 
 

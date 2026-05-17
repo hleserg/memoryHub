@@ -17,6 +17,7 @@ from atman.core.ports.maintenance_queue import MaintenanceQueue
 from atman.core.ports.memory_guardian import MemoryGuardian
 from atman.core.ports.salience_decay import SalienceDecayService
 from atman.core.ports.state_store import StateStore
+from atman.core.services.reflection_overload_monitor import ReflectionOverloadMonitor
 
 _LOG = logging.getLogger(__name__)
 
@@ -42,6 +43,7 @@ class MaintenanceWorker:
         entity_relation_store: EntityRelationStore | None = None,
         entity_registry: EntityRegistry | None = None,
         linguistic_analyzer: LinguisticAnalyzer | None = None,
+        reflection_overload_monitor: ReflectionOverloadMonitor | None = None,
     ) -> None:
         self._queue = queue
         self._decay = salience_decay
@@ -55,6 +57,9 @@ class MaintenanceWorker:
         self._relation_store = entity_relation_store
         self._entity_registry = entity_registry
         self._analyzer = linguistic_analyzer
+        # HLE-30: reflection cadence anomaly check. None ⇒ job skipped with
+        # reason (lean dev mode without reflection_event_store wiring).
+        self._overload_monitor = reflection_overload_monitor
 
     def run_once(self, batch_size: int = 20) -> int:
         """Claim and execute one batch of pending jobs. Returns number processed."""
@@ -85,6 +90,8 @@ class MaintenanceWorker:
             return self._run_mrebel(job)
         if job.job_name == JobName.lingvo_enrich:
             return self._run_lingvo(job)
+        if job.job_name == JobName.reflection_overload_check:
+            return self._run_overload_check(job)
         _LOG.warning("unknown job %s, skipping", job.job_name)
         self._queue.mark_skipped(job.id, reason="unknown job type")
         return _DispatchOutcome.SKIPPED, None
@@ -192,6 +199,20 @@ class MaintenanceWorker:
             "1.0",
         )
         return _DispatchOutcome.DONE, {"moment_id": str(moment_id)}
+
+    def _run_overload_check(self, job: MaintenanceJob) -> tuple[_DispatchOutcome, dict | None]:
+        """Periodic reflection-cadence anomaly check (HLE-30).
+
+        Delegates to :class:`ReflectionOverloadMonitor.check()`, which
+        inspects recent reflection events and emits alerts through the
+        wired sink when the windows exceed thresholds. The monitor swallows
+        sink failures internally, so this handler is a thin wrapper.
+        """
+        if self._overload_monitor is None:
+            self._queue.mark_skipped(job.id, reason="reflection overload monitor not configured")
+            return _DispatchOutcome.SKIPPED, None
+        self._overload_monitor.check()
+        return _DispatchOutcome.DONE, {"scanned": True}
 
     def _resolve_entity(self, agent_id: UUID, entity: DetectedEntity) -> UUID | None:
         """Look up entity by surface form; skip when nothing matches.

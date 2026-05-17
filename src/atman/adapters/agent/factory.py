@@ -253,11 +253,34 @@ def build_deps(
         embedding_adapter=_embedding_adapter,
     )
 
+    # HLE-30: share the reflection event store between the reflection service
+    # (writer) and the overload monitor (reader). The monitor is exposed on
+    # AtmanDeps so cli_maintenance / cron jobs can pick it up to drive the
+    # reflection_overload_check dispatch.
+    _reflection_event_store = InMemoryReflectionEventStore()
     micro_reflection = MicroReflectionService(
         session_repo=StateStoreSessionRepository(state_store, agent_id=agent_id),
         narrative_revision=narrative_revision,
-        event_store=InMemoryReflectionEventStore(),
+        event_store=_reflection_event_store,
         skill_manager=skill_manager,
+    )
+
+    from atman.adapters.observability.composite_overload_alert_sink import (
+        CompositeOverloadAlertSink,
+    )
+    from atman.adapters.observability.in_memory_overload_alert_sink import (
+        InMemoryOverloadAlertSink,
+    )
+    from atman.adapters.observability.logging_overload_alert_sink import (
+        LoggingOverloadAlertSink,
+    )
+    from atman.core.services.reflection_overload_monitor import ReflectionOverloadMonitor
+
+    _overload_sink_inmem = InMemoryOverloadAlertSink()
+    _overload_sink = CompositeOverloadAlertSink([_overload_sink_inmem, LoggingOverloadAlertSink()])
+    _overload_monitor = ReflectionOverloadMonitor(
+        event_store=_reflection_event_store,
+        alert_sink=_overload_sink,
     )
 
     deps = AtmanDeps.from_config(
@@ -274,6 +297,7 @@ def build_deps(
         passive_memory_injector=passive_memory_injector,
         skill_manager=skill_manager,
         divergence_event_store=_divergence_event_store,
+        reflection_overload_monitor=_overload_monitor,
     )
 
     return deps, session_manager, state_store

@@ -27,6 +27,7 @@ if TYPE_CHECKING:
     from atman.core.services.experience_service import ExperienceService
     from atman.core.services.identity_service import IdentityService
     from atman.core.services.passive_memory_injector import PassiveMemoryInjector
+    from atman.core.services.reflection_overload_monitor import ReflectionOverloadMonitor
     from atman.core.services.reflection_service import MicroReflectionService
     from atman.core.services.session_manager import SessionManager
     from atman.skills.port import SkillManagerPort
@@ -101,6 +102,12 @@ class AtmanDeps:
     can consume the populated stream without reaching into ``SessionManager``
     internals."""
 
+    reflection_overload_monitor: ReflectionOverloadMonitor | None = None
+    """Cadence anomaly check (HLE-30). When wired, the maintenance worker's
+    ``reflection_overload_check`` job dispatches to ``monitor.check()`` and
+    routes alerts through the wired sink (composite of in-memory + logging
+    in the default factory build)."""
+
     @classmethod
     def from_config(
         cls,
@@ -118,6 +125,7 @@ class AtmanDeps:
         passive_memory_injector: PassiveMemoryInjector | None = None,
         skill_manager: SkillManagerPort | None = None,
         divergence_event_store: DivergenceEventStore | None = None,
+        reflection_overload_monitor: ReflectionOverloadMonitor | None = None,
     ) -> AtmanDeps:
         """
         Build :class:`AtmanDeps` from a validated :class:`AgentConfig`.
@@ -145,4 +153,5 @@ class AtmanDeps:
             passive_memory_injector=passive_memory_injector,
             skill_manager=skill_manager,
             divergence_event_store=divergence_event_store,
+            reflection_overload_monitor=reflection_overload_monitor,
         )
