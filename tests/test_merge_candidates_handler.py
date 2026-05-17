@@ -347,8 +347,6 @@ def test_merge_decision_output_accepts_empty_reason_and_blank_canonical_name():
     out2 = MergeDecisionOutput(confirmed=True, canonical_name="Alice", reason="ok")
     assert out2.canonical_name == "Alice"
     assert out2.reason == "ok"
-
-
 def test_already_disambiguated_drop_entity_does_not_double_merge_mention_count():
     """Regression: if a previous pass merged but resolve_finding failed,
     the next pass sees the same `similar_entities` finding plus a source
