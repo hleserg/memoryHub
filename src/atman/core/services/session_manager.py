@@ -50,6 +50,7 @@ from atman.core.ports.state_store import StateStore
 
 if TYPE_CHECKING:
     from atman.affect.detector import AffectDetector, AffectDetectorConfig
+    from atman.core.services.post_write_scheduler import PostWriteScheduler
 
 # Cap for eigenstate list fields; order is insertion-derived until salience ranking exists.
 MAX_EIGENSTATE_ITEMS = 5
@@ -103,6 +104,7 @@ class SessionManager:
         affect_workspace: Path | None = None,
         affect_config: AffectDetectorConfig | None = None,
         workspace: Path | None = None,
+        post_write_scheduler: PostWriteScheduler | None = None,
     ) -> None:
         """
         Initialize Session Manager.
@@ -114,6 +116,11 @@ class SessionManager:
             affect_workspace: Optional workspace directory for affect baseline JSONL
             affect_config: Optional :class:`AffectDetectorConfig` (requires ``affect_workspace``)
             workspace: Optional workspace directory for session journals
+            post_write_scheduler: Optional :class:`PostWriteScheduler` — when
+                provided, every persisted ``KeyMoment`` enqueues the configured
+                async enrichment jobs (mREBEL relation extraction, deeper
+                linguistic analysis). Failures inside the scheduler are
+                logged but never propagated, so the hot path stays unblocked.
         """
         self._state_store = state_store
         self._max_active_sessions = max_active_sessions
@@ -122,6 +129,7 @@ class SessionManager:
         self._journal_locks: dict[UUID, IO[str]] = {}
         self._lock = threading.Lock()
         self._workspace = workspace
+        self._post_write_scheduler = post_write_scheduler
         self._affect_detector: AffectDetector | None = None
         if affect_workspace is not None and affect_config is not None:
             from atman.affect.detector import AffectDetector
@@ -524,6 +532,14 @@ class SessionManager:
                         len(loaded_moments),
                     )
 
+                    # HLE-27: orphan-recovered moments are now durable in
+                    # state_store too — schedule the same post-write enrichment
+                    # that finish_session would have fired, so recovered
+                    # sessions get the mREBEL / lingvo passes instead of
+                    # silently skipping them.
+                    for moment in loaded_moments:
+                        self._schedule_post_write(moment, agent_id)
+
                 # Delete journal after successful recovery (or if no key moments)
                 journal_file.unlink()
 
@@ -731,6 +747,13 @@ class SessionManager:
                     "fact_refs": [str(fid) for fid in moment.fact_refs],
                 },
             )
+            # NB: post-write enrichment is intentionally NOT scheduled here.
+            # Moments live only in `session_result.key_moments` until
+            # `finish_session` persists them to `state_store`. Scheduling now
+            # would race with the worker, which calls `state_store.get_key_moment`
+            # and would mark the job permanently `skipped` when the lookup
+            # returns None. See HLE-27 follow-up — the scheduler now fires
+            # from `finish_session` once the moments are durable.
 
     def append_key_moment_input(self, session_id: UUID, moment: KeyMomentInput) -> None:
         """
@@ -780,6 +803,23 @@ class SessionManager:
                     "fact_refs": [str(fid) for fid in key_moment.fact_refs],
                 },
             )
+            # NB: post-write enrichment scheduling deferred to finish_session;
+            # see comment in append_key_moment for the race-condition rationale.
+
+    def _schedule_post_write(self, moment: KeyMoment, agent_id: UUID) -> None:
+        """Fire-and-forget enqueue of post-write enrichment jobs.
+
+        Idempotent via the scheduler's deterministic run_key; safe to call
+        repeatedly with the same moment_id. Failures are swallowed and
+        logged so an enrichment-pipeline outage cannot break message
+        ingestion (HLE-27, plan §17 principle 12).
+        """
+        if self._post_write_scheduler is None:
+            return
+        try:
+            self._post_write_scheduler.schedule_for_key_moment(moment, agent_id)
+        except Exception:
+            _LOG.exception("post-write scheduler raised for moment %s — continuing", moment.id)
 
     def record_key_moment(self, session_id: UUID, moment: KeyMomentInput) -> None:
         """
@@ -967,6 +1007,21 @@ class SessionManager:
 
                 # Also store session association for backward compatibility
                 self._state_store.store_key_moments(session_id, session_result.key_moments)
+
+                # HLE-27 follow-up (Devin Review #590): defer post-write
+                # enrichment scheduling until the moments actually exist in
+                # state_store. Scheduling from append_key_moment races against
+                # finish_session: the worker's get_key_moment(moment_id) call
+                # returned None and the deterministic run_key prevented retry.
+                # By scheduling here — right after create_key_moment +
+                # store_key_moments persisted everything — the worker's
+                # lookup is guaranteed to succeed.
+                if (
+                    self._post_write_scheduler is not None
+                    and session_result.identity_id is not None
+                ):
+                    for moment in session_result.key_moments:
+                        self._schedule_post_write(moment, session_result.identity_id)
 
                 # Compute avg_emotional_intensity and has_profound_moment
                 avg_emotional_intensity = 0.5  # default
