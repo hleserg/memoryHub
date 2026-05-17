@@ -375,6 +375,8 @@ class StructuredOutputReflectionModel(MockReflectionModel):
         self,
         experiences: list[SessionExperience],
         context: dict[str, str],
+        *,
+        key_moments_by_session=None,
     ) -> PatternDetectionOutput:
         return PatternDetectionOutput(
             description=self.pattern_description,
@@ -387,6 +389,8 @@ class StructuredOutputReflectionModel(MockReflectionModel):
         self,
         experience: SessionExperience,
         context: dict[str, str],
+        *,
+        key_moments_by_session=None,
     ) -> ReframingNoteOutput:
         return ReframingNoteOutput(reflection=self.reframing_text, reflection_type="boundary")
 
@@ -395,6 +399,8 @@ class StructuredOutputReflectionModel(MockReflectionModel):
         current_narrative: NarrativeDocument,
         recent_experiences: list[SessionExperience],
         reflection_level: ReflectionLevel,
+        *,
+        key_moments_by_session=None,
     ) -> NarrativeUpdateOutput:
         return NarrativeUpdateOutput(body=self.narrative_body)
 
@@ -403,6 +409,8 @@ class StructuredOutputReflectionModel(MockReflectionModel):
         identity: Identity,
         experiences: list[SessionExperience],
         criterion: JahodaCriterion,
+        *,
+        key_moments_by_session=None,
     ) -> HealthCriterionOutput:
         return HealthCriterionOutput(
             score=self.health_score,

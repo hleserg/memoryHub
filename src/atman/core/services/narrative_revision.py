@@ -12,7 +12,7 @@ from uuid import UUID
 
 from atman.core.clock_impl import SystemClock
 from atman.core.exceptions import GovernanceRejectedError
-from atman.core.models.experience import SessionExperience
+from atman.core.models.experience import KeyMoment, SessionExperience
 from atman.core.models.governance import GovernanceDecision
 from atman.core.models.identity import Identity
 from atman.core.models.narrative import LayerType, NarrativeDocument, NarrativeThread
@@ -101,7 +101,11 @@ class NarrativeRevisionService:
                 )
 
     def update_recent_layer(
-        self, experiences: list[SessionExperience], reflection_level: ReflectionLevel
+        self,
+        experiences: list[SessionExperience],
+        reflection_level: ReflectionLevel,
+        *,
+        key_moments_by_session: dict[UUID, list[KeyMoment]] | None = None,
     ) -> str:
         """
         Update the recent narrative layer with new experiences.
@@ -109,6 +113,10 @@ class NarrativeRevisionService:
         Args:
             experiences: Recent experiences to incorporate
             reflection_level: Level of reflection performing the update
+            key_moments_by_session: Optional per-session :class:`KeyMoment` map
+                forwarded to the underlying :class:`ReflectionModel` so the
+                prompt renders the actual moment content, not just aggregate
+                counters (HLE-46).
 
         Returns:
             New content for recent layer
@@ -124,6 +132,7 @@ class NarrativeRevisionService:
             current_narrative=draft,
             recent_experiences=experiences,
             reflection_level=reflection_level,
+            key_moments_by_session=key_moments_by_session,
         )
         proposed_update = proposed.body
 

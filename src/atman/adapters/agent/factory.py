@@ -47,16 +47,25 @@ from atman.core.services.session_manager import SessionManager
 
 
 class _MockReflectionModel(ReflectionModel):
-    def detect_pattern(self, experiences, context):
+    def detect_pattern(self, experiences, context, *, key_moments_by_session=None):
         return PatternDetectionOutput()
 
-    def generate_reframing_note(self, experience, context):
+    def generate_reframing_note(self, experience, context, *, key_moments_by_session=None):
         return ReframingNoteOutput(reflection="", reflection_type="insight")
 
-    def propose_narrative_update(self, current_narrative, recent_experiences, reflection_level):
+    def propose_narrative_update(
+        self,
+        current_narrative,
+        recent_experiences,
+        reflection_level,
+        *,
+        key_moments_by_session=None,
+    ):
         return NarrativeUpdateOutput(body="")
 
-    def assess_health_criterion(self, identity, experiences, criterion):
+    def assess_health_criterion(
+        self, identity, experiences, criterion, *, key_moments_by_session=None
+    ):
         return HealthCriterionOutput(score=0.5, evidence=[], concerns=[])
 
 
