@@ -112,6 +112,21 @@ def test_similarity_dimension_mismatch_raises():
         adapter.similarity([0.1], [0.1, 0.2])
 
 
+def test_similarity_rejects_embed_vs_embed_with_corpus_mix():
+    """embed() and embed_with_corpus() produce vectors of different dimensions
+    (fixed hashing-trick vs vocabulary-derived). similarity() must refuse to
+    score them against each other instead of returning a garbage number."""
+    adapter = BM25EmbeddingAdapter()
+    fixed_vec = adapter.embed("the quick brown fox jumps over the lazy dog")
+    corpus_vec = adapter.embed_with_corpus(
+        "the quick brown fox",
+        ["the quick brown fox", "lazy dog jumps", "another corpus document"],
+    )
+    assert len(fixed_vec) != len(corpus_vec)
+    with pytest.raises(ValueError, match="dimension mismatch"):
+        adapter.similarity(fixed_vec, corpus_vec)
+
+
 def test_idf_returns_zero_for_unknown_term():
     adapter = BM25EmbeddingAdapter()
     adapter._build_corpus_stats([["alpha"], ["beta"]])

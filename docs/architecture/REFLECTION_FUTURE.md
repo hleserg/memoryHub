@@ -13,7 +13,9 @@
 > R6 (`DivergenceAggregator` + `DivergenceEventStore` порт), R8 (`FindingsTriage`),
 > R7 (`EntityStanceFormulator` — Daily формулирует, Deep пересматривает),
 > R9 (`EntityRelationsFormulator` + `EntityRelationStore` порт; Deep),
-> R15 (миграция `reflections.experience_refs` → `session_refs`).
+> R15 (миграция `reflections.experience_refs` → `session_refs`),
+> R11 (identity-level signals — R5/R7/R9/R10 outcomes в `_propose_identity_revision`; governance через R11.5),
+> R10 (`MergeCandidatesHandler` — Deep LLM-резолв `similar_entities`).
 >
 > Этот документ — единое место, куда собраны все изменения Reflection Engine,
 > которые понадобятся **после** того как память переедет на новую архитектуру
@@ -339,8 +341,8 @@ Reflection использует отдельную LLM (`gemma3:27b-it-qat` че
 | R7 | `EntityStanceFormulator` + промт | `core/services/entity_stance_formulator.py`, `adapters/reflection/prompts.py` (`SYSTEM_PROMPT_STANCE`); подключено в `DailyReflectionService.formulate_for_new_entities` и `DeepReflectionService.revise_stale` | ✅ done |
 | R8 | `FindingsTriage` | `core/services/findings_triage.py` | ✅ done |
 | R9 | `EntityRelationsFormulator` (для deep reflection) | `core/services/entity_relations_formulator.py` + порт `EntityRelationStore` + in-memory адаптер; промт `SYSTEM_PROMPT_ENTITY_RELATION` | ✅ done |
-| R10 | Merge handler (для deep reflection) | новый компонент | TODO |
-| R11 | Identity-level выводы из новых сигналов | расширение существующих сервисов | частично (R11.5 self-apply ✅ в #559) |
+| R10 | Merge handler (для deep reflection) | `core/services/merge_candidates_handler.py`, `adapters/reflection/prompts.py` (`SYSTEM_PROMPT_ENTITY_MERGE`) | ✅ done |
+| R11 | Identity-level выводы из новых сигналов | `core/services/reflection_service.py::DeepReflectionService._propose_identity_revision` принимает `stance_outcome` / `relation_outcome` / `merge_outcome` / `triage_outcome` и формирует обогащённую proposal-строку; governance/audit идут через R11.5 (`IdentityService.apply_self_change` + `SelfAppliedChangeStore`) | ✅ done |
 | R12 | Тулы `request_reflection` для agent-driven | `adapters/agent/tools.py`; `DailyReflectionService` / `DeepReflectionService` дрейнят очередь | ✅ done |
 | R13 | `reflection_overload` мониторинг | новый компонент | ✅ done (PR #559) |
 | R14 | Удаление `ExperienceViewRepository` compat-адаптера | удалён `src/atman/adapters/reflection_compat/` | ✅ done |

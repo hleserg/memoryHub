@@ -112,9 +112,29 @@ def build_deps(
     if state_store.load_narrative(identity.id) is None:
         narrative_service.create_narrative(identity)
 
+    # Maintenance queue + post-write scheduler (HLE-27): enqueue mREBEL +
+    # lingvo enrichment jobs after every KeyMoment write.
+    #
+    # The queue is the in-memory variant by default — sufficient for
+    # single-process dev runs. **Important:** nothing in build_deps spawns a
+    # MaintenanceWorker drain; the queue accumulates until an out-of-process
+    # consumer runs `python -m atman.cli_maintenance run --loop`. Production
+    # Postgres deploys swap the queue for `PostgresMaintenanceQueue` and run
+    # a long-lived worker pod against it. In CI / unit tests the queue is
+    # introspected directly — there's no orphan-worker requirement.
+    from atman.adapters.maintenance.in_memory_queue import InMemoryMaintenanceQueue
+    from atman.core.services.post_write_scheduler import PostWriteScheduler
+
+    maintenance_queue = InMemoryMaintenanceQueue()
+    post_write_scheduler = PostWriteScheduler(maintenance_queue)
+
     # HLE-52: build the affect adapter here (composition root) and inject via
     # AffectPort so SessionManager never imports the concrete implementation.
-    session_manager = SessionManager(state_store, workspace=workspace)
+    session_manager = SessionManager(
+        state_store,
+        workspace=workspace,
+        post_write_scheduler=post_write_scheduler,
+    )
     if _AFFECT_AVAILABLE:
         assert _AffectDetector is not None and _AffectDetectorConfig is not None
         session_manager.attach_affect(
@@ -141,7 +161,9 @@ def build_deps(
         from atman.core.services.passive_memory_injector import PassiveMemoryInjector
 
         try:
+            from atman.adapters.linguistic.noop_adapter import NoOpLinguisticAnalyzer
             from atman.adapters.memory.bm25_embedding import BM25EmbeddingAdapter
+            from atman.adapters.memory.noop_reranker import NoOpReranker
 
             _embedding_adapter = build_embedding_adapter()
             _factual_memory = _build_mem()
@@ -149,11 +171,27 @@ def build_deps(
             # fused with the dense embedding via Reciprocal Rank Fusion. It
             # rescues exact lexical matches that dense encoders can rank low.
             _bm25 = BM25EmbeddingAdapter()
+
+            # Ambient mode requires both a LinguisticAnalyzer and a
+            # MemoryReranker on the PMI. Try the BGE cross-encoder first
+            # (linguistic extra); fall back to NoOp when FlagEmbedding /
+            # model assets are unavailable so the ambient path stays
+            # reachable in lean deployments.
+            _linguistic: object = NoOpLinguisticAnalyzer()
+            try:
+                from atman.adapters.memory.bge_reranker import BgeReranker
+
+                _reranker: object = BgeReranker()
+            except Exception:
+                _reranker = NoOpReranker()
+
             passive_memory_injector = PassiveMemoryInjector(
                 embedding=_embedding_adapter,
                 factual_memory=_factual_memory,
                 state_store=state_store,
                 bm25=_bm25,
+                linguistic_analyzer=_linguistic,
+                memory_reranker=_reranker,
             )
         except Exception:
             import logging as _logging

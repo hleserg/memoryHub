@@ -29,6 +29,7 @@ from atman.core.models.reflection import (
     HealthAssessment,
     HealthCriterionOutput,
     JahodaCriterion,
+    MergeDecisionOutput,
     NarrativeUpdateOutput,
     PatternCandidate,
     PatternDetectionOutput,
@@ -503,3 +504,22 @@ class ReflectionModel(ABC):
         thin or contradictory, return an empty ``relation_type``.
         """
         return EntityRelationFormulationOutput()
+
+    # R10 — MergeCandidatesHandler (REFLECTION_FUTURE.md §5.4). Non-abstract
+    # default so existing subclasses don't break; service treats
+    # ``confirmed=False`` (the default) as "ignore" with the empty reason.
+    def decide_entity_merge(
+        self,
+        entity_a: Entity,
+        entity_b: Entity,
+        contexts_a: list[KeyMoment],
+        contexts_b: list[KeyMoment],
+    ) -> MergeDecisionOutput:
+        """
+        Decide whether two near-duplicate entities are actually the same
+        subject. Used by Deep reflection on ``similar_entities`` findings.
+
+        Implementations should not invent confirmations: when the contexts
+        disagree, return ``confirmed=False`` with a short ``reason``.
+        """
+        return MergeDecisionOutput()

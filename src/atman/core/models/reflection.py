@@ -254,6 +254,51 @@ class EntityRelationFormulationOutput(BaseModel):
         return v
 
 
+class MergeDecisionOutput(BaseModel):
+    """
+    Structured result from
+    :meth:`~atman.core.ports.reflection.ReflectionModel.decide_entity_merge`.
+
+    R10 (REFLECTION_FUTURE.md §5.4): Deep reflection inspects a pair of
+    near-duplicate entities flagged by ``MemoryGuardian`` as
+    ``similar_entities`` and decides whether to merge them.
+
+    Empty ``reason`` is treated as "no decision" and the finding is skipped.
+    """
+
+    confirmed: bool = Field(
+        default=False,
+        description="True iff the LLM believes the two entities are the same subject",
+    )
+    canonical_name: str | None = Field(
+        default=None,
+        description="The preferred canonical name; service maps it to the keep entity",
+    )
+    reason: str = Field(
+        default="",
+        description="Short justification — written to the finding's resolution note",
+    )
+
+    @field_validator("reason", mode="before")
+    @classmethod
+    def strip_reason(cls, v: Any) -> Any:
+        # ``reason`` is typed ``str`` — strip whitespace but never return None.
+        if isinstance(v, str):
+            return v.strip()
+        return v
+
+    @field_validator("canonical_name", mode="before")
+    @classmethod
+    def strip_canonical_name(cls, v: Any) -> Any:
+        # ``canonical_name`` is typed ``str | None`` — blank/whitespace-only
+        # strings become None so callers can distinguish "no preference" from
+        # "preference for the empty string".
+        if isinstance(v, str):
+            stripped = v.strip()
+            return stripped or None
+        return v
+
+
 class HealthCriterionOutput(BaseModel):
     """
     Structured result from :meth:`~atman.core.ports.reflection.ReflectionModel.assess_health_criterion`.

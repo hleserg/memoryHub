@@ -20,6 +20,7 @@ from atman.core.models.reflection import (
     EntityRelationFormulationOutput,
     HealthCriterionOutput,
     JahodaCriterion,
+    MergeDecisionOutput,
     NarrativeUpdateOutput,
     PatternDetectionOutput,
     ReflectionLevel,
@@ -438,6 +439,72 @@ def build_entity_relation_messages(
     ]
     for m in shared_moments:
         user_parts.append(_moment_summary_for_relation(m))
+
+    return [
+        OllamaMessage(role="system", content=system),
+        OllamaMessage(role="user", content="\n".join(user_parts)),
+    ]
+
+
+# ---------------------------------------------------------------------------
+# 6. decide_entity_merge (R10 — REFLECTION_FUTURE.md §5.4)
+# ---------------------------------------------------------------------------
+
+SYSTEM_PROMPT_ENTITY_MERGE = """\
+You are the introspective layer of an AI agent deciding whether two
+near-duplicate entities flagged by the memory guardian are actually the
+same subject.
+
+You will be given:
+  - the two entities' canonical names and types;
+  - up to N recent KeyMoments for each (separately, so you can compare
+    contexts).
+
+Rules:
+  - Default to **not** merging. Only confirm when the contexts clearly
+    describe the same subject.
+  - When confirming, pick the more canonical name for ``canonical_name``
+    (the one that's least abbreviated, least context-specific).
+  - Provide a short ``reason`` either way — it's written to the
+    validation finding's resolution note.
+  - Different `entity_type` between A and B is a strong "do not merge"
+    signal; mention that in ``reason``.
+
+Respond ONLY with valid JSON matching this schema (no preamble, no markdown):
+{schema}
+"""
+
+
+def _moment_summary_for_merge(m: KeyMoment) -> str:
+    """Compact textual summary of one KeyMoment for the merge prompt."""
+    return f"    - [{m.when.isoformat()}] {m.what_happened}"
+
+
+def build_entity_merge_messages(
+    entity_a: Entity,
+    entity_b: Entity,
+    contexts_a: list[KeyMoment],
+    contexts_b: list[KeyMoment],
+    output_model: type[MergeDecisionOutput] = MergeDecisionOutput,
+) -> OllamaMessages:
+    """Build Ollama messages for :meth:`decide_entity_merge`."""
+    system = SYSTEM_PROMPT_ENTITY_MERGE.format(schema=_schema_block(output_model))
+
+    user_parts = [
+        "## Entity A",
+        f"- canonical_name: {entity_a.canonical_name}",
+        f"- type: {entity_a.entity_type.value}",
+        f"  ### A moments ({len(contexts_a)})",
+    ]
+    for m in contexts_a:
+        user_parts.append(_moment_summary_for_merge(m))
+    user_parts.append("")
+    user_parts.append("## Entity B")
+    user_parts.append(f"- canonical_name: {entity_b.canonical_name}")
+    user_parts.append(f"- type: {entity_b.entity_type.value}")
+    user_parts.append(f"  ### B moments ({len(contexts_b)})")
+    for m in contexts_b:
+        user_parts.append(_moment_summary_for_merge(m))
 
     return [
         OllamaMessage(role="system", content=system),
