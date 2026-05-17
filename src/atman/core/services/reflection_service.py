@@ -11,8 +11,12 @@ from __future__ import annotations
 
 import contextlib
 from datetime import UTC, datetime, time
-from typing import Literal
+from typing import TYPE_CHECKING, Literal
 from uuid import UUID
+
+if TYPE_CHECKING:
+    from atman.skills.models import DailySkillSummary, DeepSkillSummary
+    from atman.skills.port import SkillManagerPort
 
 from atman.core.clock_impl import SystemClock, ensure_utc
 from atman.core.exceptions import NarrativePersistenceConflictError
@@ -433,7 +437,7 @@ class DailyReflectionService:
         divergence_aggregator: DivergenceAggregator | None = None,
         findings_triage: FindingsTriage | None = None,
         agent_id: UUID | None = None,
-        skill_manager=None,  # SkillManagerPort | None — HLE-36
+        skill_manager: SkillManagerPort | None = None,  # HLE-36
     ):
         """Initialize daily reflection service.
 
@@ -655,7 +659,7 @@ class DailyReflectionService:
         )
         return persisted
 
-    def _process_skills_for_daily(self):
+    def _process_skills_for_daily(self) -> DailySkillSummary | None:
         """Optional HLE-36 hook. Returns ``DailySkillSummary`` or ``None``."""
         if self._skill_manager is None or self._agent_id is None:
             return None
@@ -829,7 +833,7 @@ class DeepReflectionService:
         entity_relations_formulator: EntityRelationsFormulator | None = None,
         merge_candidates_handler: MergeCandidatesHandler | None = None,
         agent_id: UUID | None = None,
-        skill_manager=None,  # SkillManagerPort | None — HLE-36
+        skill_manager: SkillManagerPort | None = None,  # HLE-36
     ):
         """Initialize deep reflection service.
 
@@ -1098,7 +1102,7 @@ class DeepReflectionService:
         )
         return persisted
 
-    def _process_skills_for_deep(self):
+    def _process_skills_for_deep(self) -> DeepSkillSummary | None:
         """Optional HLE-36 hook. Returns ``DeepSkillSummary`` or ``None``."""
         if self._skill_manager is None or self._agent_id is None:
             return None

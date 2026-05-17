@@ -23,6 +23,7 @@ import logging
 import shutil
 import tempfile
 import zipfile
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -61,7 +62,7 @@ def install_external(
     agents_root: Path,
     name_override: str | None = None,
     dry_run: bool = False,
-    http_get=None,
+    http_get: Callable[[str], bytes] | None = None,
 ) -> InstallResult:
     """Install a skill from ``source`` for ``agent_id``.
 
@@ -200,7 +201,12 @@ def install_external(
 # ── source acquisition ────────────────────────────────────────────────────
 
 
-def _materialise_source(source: str, staging: Path, *, http_get) -> Path:
+def _materialise_source(
+    source: str,
+    staging: Path,
+    *,
+    http_get: Callable[[str], bytes] | None,
+) -> Path:
     """Bring ``source`` into ``staging`` and return the dir containing SKILL.md."""
     s = source.strip()
     if not s:
@@ -235,7 +241,12 @@ def _materialise_source(source: str, staging: Path, *, http_get) -> Path:
     raise SkillInstallError(f"Unsupported source: {path} (expected directory or .zip file)")
 
 
-def _fetch_zip_url(url: str, staging: Path, *, http_get) -> Path:
+def _fetch_zip_url(
+    url: str,
+    staging: Path,
+    *,
+    http_get: Callable[[str], bytes] | None,
+) -> Path:
     """Download ``url`` to ``staging/download.zip`` and extract."""
     if http_get is None:
         http_get = _default_http_get
