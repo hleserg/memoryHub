@@ -1,30 +1,22 @@
 """
-Persistence models for reflection storage.
+Persistence-layer model for reflection content stored in Postgres.
 
-These models map directly to the agent_{N}.reflections table schema
-and are separate from the domain models in atman.core.models.reflection.
+This maps directly to the per-agent ``agent_{N}.reflections`` table and is
+deliberately separate from the domain model in
+``atman.core.models.reflection.ReflectionEvent`` (which tracks reflection
+process metadata, not row layout). ``ReflectionLevel`` is re-used from the
+core domain model so the two layers stay in sync.
 """
 
 from datetime import UTC, datetime
-from enum import StrEnum
 from typing import Any
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from atman.core.models.reflection import ReflectionLevel
 
-class ReflectionLevel(StrEnum):
-    """
-    Depth of reflection process.
-
-    - micro: After-session reflection, updates recent narrative layer
-    - daily: End-of-day reflection, looks for patterns across sessions
-    - deep: Scheduled deep reflection; health assessment and narrative integration
-    """
-
-    MICRO = "micro"
-    DAILY = "daily"
-    DEEP = "deep"
+__all__ = ["ReflectionEvent", "ReflectionLevel"]
 
 
 class ReflectionEvent(BaseModel):
@@ -66,7 +58,10 @@ class ReflectionEvent(BaseModel):
     )
     session_refs: list[UUID] = Field(
         default_factory=list,
-        description="IDs of sessions analyzed in this reflection (R15 — was 'experience_refs'; one virtual SessionExperience per Session, so the ids match by construction)",
+        description=(
+            "IDs of sessions analyzed in this reflection (R15 — was 'experience_refs'; "
+            "one virtual SessionExperience per Session, so the ids match by construction)"
+        ),
     )
     reframing_note_ids: list[UUID] = Field(
         default_factory=list,

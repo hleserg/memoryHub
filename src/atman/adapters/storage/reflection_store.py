@@ -36,7 +36,10 @@ else:
         )
 
 from atman.adapters.storage.postgres_agent_schema import AgentSchemaResolver
-from atman.reflection.models import ReflectionEvent, ReflectionLevel
+from atman.adapters.storage.reflection_persistence_models import (
+    ReflectionEvent,
+    ReflectionLevel,
+)
 
 _REFLECTION_COLUMNS = """
     id, agent_id, level, created_at, session_id, period_start, period_end,

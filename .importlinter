@@ -33,7 +33,6 @@ source_modules =
     atman.affect
     atman.eval
     atman.config
-    atman.reflection
 forbidden_modules =
     atman.agent_cli
 unmatched_ignore_imports_alerting = warn
