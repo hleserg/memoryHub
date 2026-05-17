@@ -126,7 +126,9 @@ def build_deps(
         from atman.core.services.passive_memory_injector import PassiveMemoryInjector
 
         try:
+            from atman.adapters.linguistic.noop_adapter import NoOpLinguisticAnalyzer
             from atman.adapters.memory.bm25_embedding import BM25EmbeddingAdapter
+            from atman.adapters.memory.noop_reranker import NoOpReranker
 
             _embedding_adapter = build_embedding_adapter()
             _factual_memory = _build_mem()
@@ -134,11 +136,27 @@ def build_deps(
             # fused with the dense embedding via Reciprocal Rank Fusion. It
             # rescues exact lexical matches that dense encoders can rank low.
             _bm25 = BM25EmbeddingAdapter()
+
+            # Ambient mode requires both a LinguisticAnalyzer and a
+            # MemoryReranker on the PMI. Try the BGE cross-encoder first
+            # (linguistic extra); fall back to NoOp when FlagEmbedding /
+            # model assets are unavailable so the ambient path stays
+            # reachable in lean deployments.
+            _linguistic: object = NoOpLinguisticAnalyzer()
+            try:
+                from atman.adapters.memory.bge_reranker import BgeReranker
+
+                _reranker: object = BgeReranker()
+            except Exception:
+                _reranker = NoOpReranker()
+
             passive_memory_injector = PassiveMemoryInjector(
                 embedding=_embedding_adapter,
                 factual_memory=_factual_memory,
                 state_store=state_store,
                 bm25=_bm25,
+                linguistic_analyzer=_linguistic,
+                memory_reranker=_reranker,
             )
         except Exception:
             import logging as _logging
