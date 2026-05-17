@@ -8,7 +8,7 @@
 [![Python 3.12+](https://img.shields.io/badge/python-3.12%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
 
-**Тесты:** 568 проходят (`pytest tests/` на `main`; см. workflow CI выше).
+**Тесты:** 1764 проходят, 138 пропущены (`pytest tests/` на `main`; см. workflow CI выше).
 
 [[en](README.md)] — *English version*
 

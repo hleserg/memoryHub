@@ -65,7 +65,7 @@ Under the hood — seven components: store of lived experiences, reflection engi
   ├─ Identity Store     ✅ Implemented (WP03)
   ├─ Reflection Engine  ✅ Implemented (WP04)
   ├─ Session Manager    ✅ Implemented (WP05)
-  └─ CI & test coverage ✅ GitHub Actions on `main`/PRs (`make check`, pytest-cov ≥89%)
+  └─ CI & test coverage ✅ GitHub Actions on `main`/PRs (`make check`, pytest-cov ≥90%)
 ○ First implementation
 ○ Integration
 ○ Evolution

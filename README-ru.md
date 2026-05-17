@@ -65,7 +65,7 @@ Atman - это инфраструктура с открытым исходным
   ├─ Identity Store     ✅ Реализовано (WP03)
   ├─ Reflection Engine  ✅ Реализовано (WP04)
   ├─ Session Manager    ✅ Реализовано (WP05)
-  └─ CI и покрытие тестами ✅ GitHub Actions для `main`/PR (`make check`, pytest-cov ≥89%)
+  └─ CI и покрытие тестами ✅ GitHub Actions для `main`/PR (`make check`, pytest-cov ≥90%)
 ○ Первая реализация
 ○ Интеграция
 ○ Развитие
