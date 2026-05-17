@@ -550,8 +550,11 @@ def test_finding_type_values():
     assert FindingType.pending_structured_markers == "pending_structured_markers"
     assert FindingType.analysis_failed == "analysis_failed"
     assert FindingType.affect_detector_silent == "affect_detector_silent"
+    # HLE-31 — Level-C psychological quality metrics
+    assert FindingType.divergence_pattern == "divergence_pattern"
+    assert FindingType.stance_formation_too_fast == "stance_formation_too_fast"
     assert FindingType.other == "other"
-    assert len(list(FindingType)) == 9
+    assert len(list(FindingType)) == 11
 
 
 def test_resolution_status_values():

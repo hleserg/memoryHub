@@ -35,6 +35,43 @@ class MemoryGuardian(ABC):
     def scan_embedding_gaps(self, agent_id: UUID) -> list[ValidationFinding]:
         """Find entities and key_moments missing embeddings."""
 
+    def scan_quality_metrics(
+        self,
+        agent_id: UUID,
+        *,
+        window_days: int = 7,
+        incomplete_coloring_threshold: float = 0.3,
+        divergence_pattern_threshold: int = 5,
+        stance_too_fast_hours: int = 24,
+        stance_too_fast_min_count: int = 3,
+    ) -> list[ValidationFinding]:
+        """Level-C psychological quality-metric scans (HLE-31).
+
+        Inspects recent agent activity for systemic signals that the
+        memory pipeline (not the agent itself) is misbehaving:
+
+        * ``affect_detector_silent`` — too many moments arriving with
+          ``incomplete_coloring=True`` over ``window_days``.
+        * ``divergence_pattern`` — same divergence_type firing ≥ N times
+          over ``window_days``; a stable pattern that R6 should weigh.
+        * ``stance_formation_too_fast`` — stances formed within
+          ``stance_too_fast_hours`` of their backing moments occurring
+          ≥ ``stance_too_fast_min_count`` times: reflection is jumping
+          to conclusions before evidence has settled.
+
+        Default returns ``[]`` so existing implementations that have not
+        yet adopted the scan stay valid; concrete adapters override.
+        """
+        _ = (
+            agent_id,
+            window_days,
+            incomplete_coloring_threshold,
+            divergence_pattern_threshold,
+            stance_too_fast_hours,
+            stance_too_fast_min_count,
+        )
+        return []
+
     @abstractmethod
     def write_finding(self, finding: ValidationFinding) -> ValidationFinding:
         """Persist a finding to storage."""
