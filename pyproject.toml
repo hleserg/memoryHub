@@ -202,6 +202,10 @@ exclude_lines = [
     "pragma: no cover",
     "if __name__ == .__main__.",
     "pass",
+    # TYPE_CHECKING imports run only under type-checkers (pyright / mypy);
+    # coverage.py sees them as never-executed even though they are needed
+    # for static typing. Excluding the standard idiom keeps the bar honest.
+    "if TYPE_CHECKING:",
 ]
 
 [tool.bandit]

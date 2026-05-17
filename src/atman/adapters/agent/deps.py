@@ -28,6 +28,7 @@ if TYPE_CHECKING:
     from atman.core.ports.pending_human_review import PendingHumanReviewInbox
     from atman.core.ports.reflection_request_queue import ReflectionRequestQueue
     from atman.core.ports.state_store import StateStore
+    from atman.core.services.ambient_memory_service import AmbientMemoryService
     from atman.core.services.experience_service import ExperienceService
     from atman.core.services.identity_service import IdentityService
     from atman.core.services.passive_memory_injector import PassiveMemoryInjector
@@ -126,6 +127,14 @@ class AtmanDeps:
     admin endpoints can read findings (``get_unresolved``) and resolve them
     via the same instance the in-memory inline pipeline writes to."""
 
+    ambient_memory: AmbientMemoryService | None = None
+    """Entity-anchor parallel RAG (HLE-33). When wired, the runner can call
+    ``ambient_memory.compose_injection(user_text, agent_id=agent_id)`` before
+    each ``agent.run()`` to surface stance + moments + facts anchored on
+    entities named in the message. Independent of the dense
+    :class:`PassiveMemoryInjector` path — both can run side-by-side; the
+    composer picks one or merges based on configuration."""
+
     @classmethod
     def from_config(
         cls,
@@ -146,6 +155,7 @@ class AtmanDeps:
         reflection_overload_monitor: ReflectionOverloadMonitor | None = None,
         overload_alert_inspect: InMemoryOverloadAlertSink | None = None,
         memory_guardian: MemoryGuardian | None = None,
+        ambient_memory: AmbientMemoryService | None = None,
     ) -> AtmanDeps:
         """
         Build :class:`AtmanDeps` from a validated :class:`AgentConfig`.
@@ -176,4 +186,5 @@ class AtmanDeps:
             reflection_overload_monitor=reflection_overload_monitor,
             overload_alert_inspect=overload_alert_inspect,
             memory_guardian=memory_guardian,
+            ambient_memory=ambient_memory,
         )

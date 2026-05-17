@@ -189,6 +189,25 @@ def build_deps(
     )
     _inline_validator = InlineValidator(_memory_guardian)
 
+    # HLE-33: AmbientMemoryService — entity-anchor parallel RAG. Wired only
+    # when the entity registry / state_store support the anchor flow; we
+    # construct it unconditionally here because the in-memory adapter
+    # implements the required ports as no-ops (find_moments_by_entity returns
+    # [] when no link table exists), which keeps the service silent rather
+    # than crashing. Real usage requires the Postgres adapters (or the
+    # specialised in-memory test stub) and a populated EntityRegistry.
+    from atman.adapters.memory.in_memory_entity_registry import (
+        InMemoryEntityRegistry as _AmbientRegistry,
+    )
+    from atman.core.services.ambient_memory_service import AmbientMemoryService as _Ambient
+
+    _ambient_registry = _AmbientRegistry()
+    _ambient_memory = _Ambient(
+        linguistic_analyzer=_affect_linguistic,
+        entity_registry=_ambient_registry,
+        state_store=state_store,
+    )
+
     # HLE-52: build the affect adapter here (composition root) and inject via
     # AffectPort so SessionManager never imports the concrete implementation.
     session_manager = SessionManager(
@@ -331,6 +350,7 @@ def build_deps(
         reflection_overload_monitor=_overload_monitor,
         overload_alert_inspect=_overload_sink_inmem,
         memory_guardian=_memory_guardian,
+        ambient_memory=_ambient_memory,
     )
 
     return deps, session_manager, state_store
