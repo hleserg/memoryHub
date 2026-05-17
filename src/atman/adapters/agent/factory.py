@@ -128,6 +128,45 @@ def build_deps(
     maintenance_queue = InMemoryMaintenanceQueue()
     post_write_scheduler = PostWriteScheduler(maintenance_queue)
 
+    # HLE-29: divergence pipeline. The detector turns LinguisticAnalysis into
+    # DivergenceEvent rows; the store persists them so R6 DivergenceAggregator
+    # (Daily reflection) can read populated history later.
+    #
+    # Analyzer selection (Devin Review ANALYSIS_0002, PR #592):
+    # * When the `linguistic` extra is installed AND ATMAN_LINGUISTIC_ENABLED=true,
+    #   instantiate the real GLiNER+MiniLM analyzer. It lazy-loads models on
+    #   first call so import is cheap.
+    # * Otherwise the NoOp analyzer keeps the pipeline alive but emits no
+    #   divergence signals — that is the correct dev-mode behaviour.
+    from atman.adapters.linguistic.noop_adapter import NoOpLinguisticAnalyzer
+    from atman.adapters.memory.in_memory_divergence_events import (
+        InMemoryDivergenceEventStore,
+    )
+    from atman.core.ports.linguistic import LinguisticAnalyzer as _LinguisticAnalyzer
+    from atman.core.services.divergence_detector import DivergenceDetector
+
+    _linguistic_enabled = os.getenv("ATMAN_LINGUISTIC_ENABLED", "false").lower() == "true"
+    _affect_linguistic: _LinguisticAnalyzer = NoOpLinguisticAnalyzer()
+    if _linguistic_enabled:
+        try:
+            from atman.adapters.linguistic.gliner_minilm_adapter import (  # type: ignore[import-not-found]
+                _GLINER_AVAILABLE,
+                _TRANSFORMERS_AVAILABLE,
+                GLiNERPlusMiniLMAdapter,
+            )
+
+            if _GLINER_AVAILABLE and _TRANSFORMERS_AVAILABLE:
+                _affect_linguistic = GLiNERPlusMiniLMAdapter()
+        except Exception:
+            import logging as _logging
+
+            _logging.getLogger(__name__).warning(
+                "Falling back to NoOpLinguisticAnalyzer — GLiNER+MiniLM adapter unavailable",
+                exc_info=True,
+            )
+    _divergence_detector = DivergenceDetector(agent_id)
+    _divergence_event_store = InMemoryDivergenceEventStore()
+
     # HLE-52: build the affect adapter here (composition root) and inject via
     # AffectPort so SessionManager never imports the concrete implementation.
     session_manager = SessionManager(
@@ -142,6 +181,9 @@ def build_deps(
                 _AffectDetectorConfig(),
                 workspace=workspace,
                 append_moment=session_manager.append_key_moment,
+                linguistic_analyzer=_affect_linguistic,
+                divergence_detector=_divergence_detector,
+                divergence_event_store=_divergence_event_store,
             )
         )
 
@@ -231,6 +273,7 @@ def build_deps(
         reflection_request_queue=InMemoryReflectionRequestQueue(),
         passive_memory_injector=passive_memory_injector,
         skill_manager=skill_manager,
+        divergence_event_store=_divergence_event_store,
     )
 
     return deps, session_manager, state_store
