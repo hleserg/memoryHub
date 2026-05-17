@@ -377,6 +377,23 @@ def test_factory_exposes_ambient_memory_service_on_deps(tmp_path) -> None:
     assert out.items == []
 
 
+def test_factory_shares_entity_registry_with_ambient_service(tmp_path) -> None:
+    """Devin Review #600 ANALYSIS: the EntityRegistry constructed in
+    build_deps must be the *same instance* visible via
+    ``deps.entity_registry`` as the one fed into AmbientMemoryService.
+    Otherwise live write paths populate one registry while ambient memory
+    reads from another and never sees anything.
+
+    Direct attribute access proves identity without relying on a real
+    NER analyzer (NoOp returns no anchors)."""
+    from atman.adapters.agent.factory import build_deps
+
+    deps, _sm, _store = build_deps(tmp_path, uuid4())
+    assert deps.entity_registry is not None
+    # The ambient service was constructed with the same registry instance:
+    assert deps.ambient_memory._registry is deps.entity_registry  # type: ignore[attr-defined]
+
+
 def test_surface_item_dataclass_is_frozen() -> None:
     item = AmbientSurfaceItem(kind="fact", payload=None, score=0.5)
     import dataclasses

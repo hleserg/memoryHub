@@ -24,6 +24,7 @@ if TYPE_CHECKING:
         InMemoryOverloadAlertSink,
     )
     from atman.core.ports.divergence_events import DivergenceEventStore
+    from atman.core.ports.entity_registry import EntityRegistry
     from atman.core.ports.memory_guardian import MemoryGuardian
     from atman.core.ports.pending_human_review import PendingHumanReviewInbox
     from atman.core.ports.reflection_request_queue import ReflectionRequestQueue
@@ -135,6 +136,14 @@ class AtmanDeps:
     :class:`PassiveMemoryInjector` path — both can run side-by-side; the
     composer picks one or merges based on configuration."""
 
+    entity_registry: EntityRegistry | None = None
+    """Shared :class:`EntityRegistry` (HLE-33). Same instance as the one fed
+    into :class:`AmbientMemoryService`, so the live write paths
+    (`resolve_or_create` on user-message ingestion, mREBEL post-write
+    enrichment) populate exactly what the read side queries. Devin Review
+    #600 caught the previous wiring where ambient memory got an isolated
+    empty registry and never saw anything."""
+
     @classmethod
     def from_config(
         cls,
@@ -156,6 +165,7 @@ class AtmanDeps:
         overload_alert_inspect: InMemoryOverloadAlertSink | None = None,
         memory_guardian: MemoryGuardian | None = None,
         ambient_memory: AmbientMemoryService | None = None,
+        entity_registry: EntityRegistry | None = None,
     ) -> AtmanDeps:
         """
         Build :class:`AtmanDeps` from a validated :class:`AgentConfig`.
@@ -187,4 +197,5 @@ class AtmanDeps:
             overload_alert_inspect=overload_alert_inspect,
             memory_guardian=memory_guardian,
             ambient_memory=ambient_memory,
+            entity_registry=entity_registry,
         )
