@@ -112,17 +112,8 @@ class ConflictDetector:
         active_facts = [f for f in recent_facts if f.status == FactStatus.ACTIVE]
 
         conflicts: list[FactConflict] = []
-        checked: set[tuple[UUID, UUID]] = set()
-
         for i, fact1 in enumerate(active_facts):
             for fact2 in active_facts[i + 1 :]:
-                # Avoid duplicate checks (order doesn't matter)
-                a, b = sorted((fact1.id, fact2.id))
-                pair: tuple[UUID, UUID] = (a, b)
-                if pair in checked:
-                    continue
-                checked.add(pair)
-
                 conflict = self._detect_conflict(fact1, fact2)
                 if conflict:
                     conflicts.append(conflict)
