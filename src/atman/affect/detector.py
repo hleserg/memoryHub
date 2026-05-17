@@ -197,10 +197,13 @@ class AffectDetector:
         # enrichment once KeyMomentBuilder is integrated into the affect pipeline.
         _linguistic_analysis = None
         if self._linguistic_analyzer is not None:
-            _linguistic_analysis = self._linguistic_analyzer.analyze_agent_message(
-                message=clean_text,
-                thinking=thinking if thinking and thinking.strip() else None,
-            )
+            try:
+                _linguistic_analysis = self._linguistic_analyzer.analyze_agent_message(
+                    message=clean_text,
+                    thinking=thinking if thinking and thinking.strip() else None,
+                )
+            except Exception:
+                _LOG.warning("LinguisticAnalyzer failed; continuing without it", exc_info=True)
 
         if not cold:
             strong = sum(1 for k in METRIC_KEYS if abs(z.get(k, 0.0)) > self.config.sigma_threshold)
@@ -269,9 +272,11 @@ class AffectDetector:
         if session_id is not None:
             self._append_key_moment(session_id, excerpt, felt, record)
 
-        # LLM emotion classification (stub)
+        # LLM emotion classification (reserved — logs and continues so callers aren't broken)
         if self.config.use_llm_analysis:
-            raise NotImplementedError("LLM emotion classification for emphasis not yet implemented")
+            _LOG.warning(
+                "use_llm_analysis=True is reserved; LLM emotion classification not yet implemented"
+            )
 
     def _append_key_moment(
         self,
@@ -305,7 +310,9 @@ class AffectDetector:
     ) -> AffectRecord:
         """Agent-originated memory with optional objective enrichment."""
         if self.config.use_llm_analysis:
-            raise NotImplementedError("LLM sincerity path not yet implemented")
+            _LOG.warning(
+                "use_llm_analysis=True is reserved; LLM sincerity path not yet implemented"
+            )
 
         tags = list(dict.fromkeys([*report.tags, "affect:self-report"]))
         demonstrates: dict[str, Any] | None = None

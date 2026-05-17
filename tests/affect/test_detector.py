@@ -114,17 +114,18 @@ async def test_process_triggers_with_aggressive_config(tmp_path: Path) -> None:
 
 
 @pytest.mark.asyncio
-async def test_use_llm_analysis_raises(tmp_path: Path) -> None:
+async def test_use_llm_analysis_logs_and_continues(tmp_path: Path) -> None:
+    """use_llm_analysis=True is reserved; the path logs a warning and continues instead of raising."""
     det = AffectDetector(
         AffectDetectorConfig(use_llm_analysis=True),
         workspace=tmp_path,
         append_moment=lambda _a, _b: None,
     )
-    with pytest.raises(NotImplementedError, match="LLM"):
-        await det.submit_self_report(
-            AgentMemoryReport(content="x", emotional_valence=0.1, emotional_intensity=0.2),
-            session_id=uuid4(),
-        )
+    record = await det.submit_self_report(
+        AgentMemoryReport(content="x", emotional_valence=0.1, emotional_intensity=0.2),
+        session_id=uuid4(),
+    )
+    assert record is not None
 
 
 def test_demo_fixture_runs() -> None:

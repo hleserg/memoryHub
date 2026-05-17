@@ -48,7 +48,7 @@ def _normalize_value(value: object) -> str | None:
         return None
     if isinstance(value, bool):
         return "true" if value else "false"
-    if isinstance(value, (int, float, str)):
+    if isinstance(value, int | float | str):
         s = str(value).strip()
         return s or None
     # Skip nested dicts/lists — too noisy for fingerprint-based aggregation.
