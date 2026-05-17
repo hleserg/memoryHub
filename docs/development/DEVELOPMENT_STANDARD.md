@@ -55,6 +55,40 @@ Adapter - это перевод между Atman Core и внешней сист
 Запрещено: писать доменную логику Atman так, чтобы она напрямую знала детали
 OpenClaw или mem0 SDK.
 
+### Domain Subsystems (co-located adapters with their own port)
+
+Большие подсистемы со своей внутренней архитектурой (детектор + baseline +
+метрики + лексиконы; skill-loop + store + retriever; и т.д.) допускается
+держать в отдельном пакете на уровне `src/atman/<subsystem>/` вместо того,
+чтобы распылять их по `core/` и `adapters/`. Это «co-located adapter»: пакет
+сам по себе ведёт себя как adapter (содержит конкретные реализации,
+зависит от внешних библиотек), но имеет собственный порт для интеграции с
+Core.
+
+Контракт для такого пакета:
+
+1. **Порт живёт в `core/ports/<subsystem>.py`.** Core-сервисы зависят
+   только от порта, никогда от конкретных классов подсистемы.
+2. **Пакет может импортировать `core/models/*` и `core/ports/*`,** но **не**
+   `core/services/*` и **не** другие doman subsystems.
+3. **Core не импортирует подсистему статически.** Когда default-инстанс
+   нужен в Core-сервисе, его собирает composition root (`adapters/agent/factory.py`,
+   CLI, или тест) и инжектит через порт.
+4. **Internal layering внутри пакета** свободно: подсистема может иметь
+   собственные models / detector / store без подражания структуре `core/adapters/`.
+
+Текущие domain subsystems:
+
+| Пакет | Порт | Owner |
+| --- | --- | --- |
+| `atman.affect` | `core/ports/affect.py` (`AffectPort`) | детектор аффекта, baseline, NRC emolex, refusal-детектор |
+| `atman.skills` | `atman.skills.port` (TODO: переезд в `core/ports/skill_manager.py`) | skill-loop, SkillManagerPort, store, retriever |
+
+Если подсистема выросла из тривиального adapter'а и требует собственной
+under-the-hood-архитектуры (несколько файлов, отдельные unit-тесты,
+собственные модели) — добавляйте новую строку в таблицу выше и заводите
+порт в `core/ports/` тем же коммитом.
+
 ## 3. Минимальный runtime path
 
 Перед deep reflection, proactive engine, skill marketplace и сложной affective
