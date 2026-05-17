@@ -233,16 +233,36 @@ class FileStateStore(StateStore):
             self._write_json_atomically(moment_file, moment.model_dump_json(indent=2))
 
     def get_key_moment(self, moment_id: UUID) -> KeyMoment | None:
-        """Retrieve a key moment by ID from its per-moment ``{id}.json`` file.
+        """Retrieve a key moment by ID.
 
-        All write paths (``store_key_moments``, ``store_key_moment``,
-        ``create_key_moment``) persist a per-moment file, so a missing file
-        means the moment does not exist.
+        Fast path: per-moment ``{id}.json`` file written by all current write
+        paths (``store_key_moments``, ``store_key_moment``, ``create_key_moment``).
+        Falls back to a one-shot scan of ``key_moments.jsonl`` for moments
+        written by **old** code that only appended to the JSONL log without
+        materialising the per-moment file (e.g. legacy crash-recovery paths
+        pre-HLE-43). If the JSONL hit matches, the per-moment file is
+        backfilled so the next call hits the fast path.
         """
         moment_file = self.key_moments_dir / f"{moment_id}.json"
-        if not moment_file.exists():
+        if moment_file.exists():
+            return KeyMoment.model_validate(_read_json_file(moment_file))
+
+        if not self.key_moments_path.exists():
             return None
-        return KeyMoment.model_validate(_read_json_file(moment_file))
+        target = str(moment_id)
+        for line in self.key_moments_path.read_text(encoding="utf-8").splitlines():
+            if not line.strip():
+                continue
+            try:
+                data = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if data.get("id") == target:
+                moment = KeyMoment.model_validate(data)
+                # Backfill the per-moment index file so future reads are O(1).
+                self._write_json_atomically(moment_file, moment.model_dump_json(indent=2))
+                return moment
+        return None
 
     def get_key_moments_for_session(self, session_id: UUID) -> list[KeyMoment]:
         """Retrieve all key moments for a session."""
