@@ -236,10 +236,28 @@ def build_deps(
     return deps, session_manager, state_store
 
 
+def _skills_enabled() -> bool:
+    """Resolve the effective skill-loop enabled flag.
+
+    ``ATMAN_SKILLS_ENABLED`` takes precedence over ``settings.skills.enabled``
+    so operators can flip the loop off without editing config or pickling a
+    new Settings instance. Anything falsy (``false``/``0``/``no``/``off``,
+    case-insensitive) disables; anything else enables.
+    """
+    import os as _os
+
+    from atman.config import settings as _settings
+
+    raw = _os.getenv("ATMAN_SKILLS_ENABLED")
+    if raw is not None:
+        return raw.strip().lower() not in ("false", "0", "no", "off", "")
+    return _settings.skills.enabled
+
+
 def _build_skill_manager(agent_id: UUID, embedding_adapter):
     """Assemble SkillManager with graceful fallback.
 
-    Behaviour, in order of preference, when ``settings.skills.enabled`` is true:
+    Behaviour, in order of preference, when the skill loop is enabled:
 
     1. ``PostgresSkillStore`` if PostgreSQL is configured and reachable.
     2. ``InMemorySkillStore`` fallback so local/file-based development still
@@ -253,7 +271,7 @@ def _build_skill_manager(agent_id: UUID, embedding_adapter):
     """
     from atman.config import settings as _settings
 
-    if not _settings.skills.enabled:
+    if not _skills_enabled():
         return None
 
     import logging as _logging
