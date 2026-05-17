@@ -6,13 +6,12 @@ Suitable for local development and single-agent use cases.
 """
 
 import json
-import os
-import tempfile
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 from uuid import UUID
 
+from atman.adapters.storage._atomic_write import write_atomically
 from atman.core.models import (
     Eigenstate,
     ExperienceRecord,
@@ -92,30 +91,12 @@ class FileStateStore(StateStore):
         self.key_moments_path = self.workspace / "key_moments.jsonl"
 
     def _write_json_atomically(self, path: Path, content: str) -> None:
-        """Write JSON without exposing callers to partially rewritten files."""
-        path.parent.mkdir(parents=True, exist_ok=True)
-        file_mode = path.stat().st_mode & 0o777 if path.exists() else 0o600
-        temp_file = tempfile.NamedTemporaryFile(
-            mode="w",
-            encoding="utf-8",
-            dir=path.parent,
-            prefix=f".{path.name}.",
-            suffix=".tmp",
-            delete=False,
-        )
-        temp_path = Path(temp_file.name)
+        """Write JSON without exposing callers to partially rewritten files.
 
-        try:
-            with temp_file as f:
-                f.write(content)
-                f.flush()
-                os.fsync(f.fileno())
-
-            temp_path.chmod(file_mode)
-            os.replace(temp_path, path)
-        finally:
-            if temp_path.exists():
-                temp_path.unlink()
+        Thin wrapper over ``write_atomically``; preserved as a method since
+        internal call sites (and possibly subclasses) rely on it.
+        """
+        write_atomically(path, content)
 
     # Experience Store operations (minimal implementation)
 

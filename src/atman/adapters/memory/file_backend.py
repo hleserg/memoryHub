@@ -7,8 +7,6 @@ File-based адаптер для Factual Memory.
 
 import fcntl
 import json
-import os
-import tempfile
 import warnings
 from collections.abc import Iterator
 from contextlib import contextmanager
@@ -16,6 +14,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from uuid import UUID
 
+from atman.adapters.storage._atomic_write import write_atomically
 from atman.core.models import FactRecord, Relation
 from atman.core.models.fact import FactStatus
 from atman.core.ports import FactualMemory
@@ -86,31 +85,8 @@ class FileBackend(FactualMemory):
     def _save_facts(self, facts: dict[UUID, FactRecord] | None = None) -> None:
         """Сохраняет все факты в файл атомарной заменой."""
         facts_to_save = facts if facts is not None else self._facts
-        self.filepath.parent.mkdir(parents=True, exist_ok=True)
-        file_mode = self.filepath.stat().st_mode & 0o777 if self.filepath.exists() else 0o600
-        temp_file = tempfile.NamedTemporaryFile(
-            mode="w",
-            encoding="utf-8",
-            dir=self.filepath.parent,
-            prefix=f".{self.filepath.name}.",
-            suffix=".tmp",
-            delete=False,
-        )
-        temp_path = Path(temp_file.name)
-
-        try:
-            with temp_file as f:
-                for fact in facts_to_save.values():
-                    json_line = fact.model_dump_json()
-                    f.write(json_line + "\n")
-                f.flush()
-                os.fsync(f.fileno())
-
-            temp_path.chmod(file_mode)
-            temp_path.replace(self.filepath)
-        finally:
-            if temp_path.exists():
-                temp_path.unlink()
+        content = "".join(fact.model_dump_json() + "\n" for fact in facts_to_save.values())
+        write_atomically(self.filepath, content)
 
     def add_fact(self, record: FactRecord) -> FactRecord:
         """Добавляет факт и сохраняет в файл."""
