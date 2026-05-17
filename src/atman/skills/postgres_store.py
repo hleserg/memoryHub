@@ -313,6 +313,18 @@ class PostgresSkillStore:
             ).fetchall()
         return [_row_to_skill(r) for r in rows]
 
+    def list_by_revision_needed(self, agent_id: UUID) -> list[Skill]:
+        with self._conn(agent_id) as conn:
+            rows = conn.execute(
+                """
+                SELECT * FROM public.skills
+                WHERE agent_id = %s AND revision_needed = true
+                ORDER BY revision_priority DESC, name
+                """,
+                [agent_id],
+            ).fetchall()
+        return [_row_to_skill(r) for r in rows]
+
     def update_skill_status(self, skill_id: UUID, status: SkillStatus) -> None:
         agent_id = self._resolve_agent_for_skill(skill_id)
         with self._conn(agent_id) as conn:
@@ -371,6 +383,12 @@ class PostgresSkillStore:
             )
 
     def bump_sessions_since_use(self, agent_id: UUID, exclude_skill_ids: set[UUID]) -> None:
+        # Increment idleness for every ACTIVE skill the session did not
+        # touch — not just pinned ones. Auto-downgraded skills used to
+        # freeze their counter at the downgrade point, which made
+        # ``process_deep_skills`` archive thresholds unreachable
+        # (Devin Review finding). Disabled/draft skills are skipped on
+        # purpose: they aren't reachable, tracking their idleness is noise.
         with self._conn(agent_id) as conn:
             if exclude_skill_ids:
                 conn.execute(
@@ -379,7 +397,7 @@ class PostgresSkillStore:
                         sessions_since_use = sessions_since_use + 1,
                         updated_at = %s
                     WHERE agent_id = %s
-                      AND (user_pinned = true OR auto_pinned = true)
+                      AND status = 'active'
                       AND id != ALL(%s)
                     """,
                     [_now(), agent_id, list(exclude_skill_ids)],
@@ -391,7 +409,7 @@ class PostgresSkillStore:
                         sessions_since_use = sessions_since_use + 1,
                         updated_at = %s
                     WHERE agent_id = %s
-                      AND (user_pinned = true OR auto_pinned = true)
+                      AND status = 'active'
                     """,
                     [_now(), agent_id],
                 )

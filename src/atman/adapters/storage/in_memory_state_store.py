@@ -8,6 +8,7 @@ For integration tests, use FileStateStore.
 from datetime import UTC, datetime
 from uuid import UUID
 
+from atman.core.clock_impl import ensure_utc
 from atman.core.models import (
     Eigenstate,
     ExperienceRecord,
@@ -356,5 +357,5 @@ class InMemoryStateStore(StateStore):
     def list_recent_sessions(self, agent_id: UUID, *, limit: int = 10) -> list[Session]:
         """List most recent sessions for an agent, newest first."""
         sessions = [s for s in self._sessions.values() if s.agent_id == agent_id]
-        sessions.sort(key=lambda s: s.started_at, reverse=True)
+        sessions.sort(key=lambda s: ensure_utc(s.started_at), reverse=True)
         return [s.model_copy(deep=True) for s in sessions[:limit]]

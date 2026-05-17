@@ -117,6 +117,49 @@ def test_get_sessions_in_range_three_arg_explicit_agent_id() -> None:
     assert {s.id for s in only_a} == {s_a.id}
 
 
+def test_get_sessions_in_range_normalizes_legacy_naive_session_timestamps() -> None:
+    store = InMemoryStateStore()
+    agent = uuid4()
+    start = datetime(2026, 5, 1, 0, 0, 0, tzinfo=UTC)
+    end = datetime(2026, 5, 2, 0, 0, 0, tzinfo=UTC)
+    legacy_naive = Session(agent_id=agent, started_at=datetime(2026, 5, 1, 12, 0, 0))
+    current_aware = Session(
+        agent_id=agent,
+        started_at=datetime(2026, 5, 1, 18, 0, 0, tzinfo=UTC),
+    )
+    outside = Session(agent_id=agent, started_at=datetime(2026, 5, 3, 12, 0, 0))
+    store.create_session(legacy_naive)
+    store.create_session(current_aware)
+    store.create_session(outside)
+
+    repo = StateStoreSessionRepository(store, agent_id=agent)
+    result = repo.get_sessions_in_range(start, end)
+
+    assert {s.id for s in result} == {legacy_naive.id, current_aware.id}
+
+
+def test_get_sessions_in_range_warns_when_fetch_cap_saturates(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    store = InMemoryStateStore()
+    agent = uuid4()
+    session = Session(agent_id=agent, started_at=datetime(2026, 5, 1, 12, 0, 0, tzinfo=UTC))
+    store.create_session(session)
+    monkeypatch.setattr(
+        "atman.adapters.reflection.state_store_session_repository._SESSION_RANGE_FETCH_CAP",
+        1,
+    )
+
+    repo = StateStoreSessionRepository(store, agent_id=agent)
+    with pytest.warns(RuntimeWarning, match="client-side fetch cap"):
+        result = repo.get_sessions_in_range(
+            datetime(2026, 5, 1, 0, 0, 0, tzinfo=UTC),
+            datetime(2026, 5, 2, 0, 0, 0, tzinfo=UTC),
+        )
+
+    assert [s.id for s in result] == [session.id]
+
+
 def test_get_key_moments_for_session() -> None:
     store = InMemoryStateStore()
     sid = uuid4()
@@ -142,6 +185,30 @@ def test_get_key_moments_in_range_filters_by_when() -> None:
     repo = StateStoreSessionRepository(store)
     result = repo.get_key_moments_in_range(now - timedelta(days=5), now)
     assert {m.id for m in result} == {m_in.id}
+
+
+def test_get_key_moments_in_range_normalizes_legacy_naive_when() -> None:
+    store = InMemoryStateStore()
+    sid = uuid4()
+    start = datetime(2026, 5, 1, 0, 0, 0, tzinfo=UTC)
+    end = datetime(2026, 5, 2, 0, 0, 0, tzinfo=UTC)
+    legacy_naive = _make_moment(
+        sid,
+        what="legacy naive",
+        when=datetime(2026, 5, 1, 12, 0, 0),
+    )
+    outside = _make_moment(
+        sid,
+        what="outside",
+        when=datetime(2026, 5, 3, 12, 0, 0),
+    )
+    store.store_key_moment(legacy_naive)
+    store.store_key_moment(outside)
+
+    repo = StateStoreSessionRepository(store)
+    result = repo.get_key_moments_in_range(start, end)
+
+    assert {m.id for m in result} == {legacy_naive.id}
 
 
 def test_add_reframing_note_returns_experience_not_found_for_unknown_session() -> None:

@@ -46,12 +46,21 @@ def _get_store(agent_id: UUID | None = None):
 
 
 def _require_enabled() -> None:
-    from atman.config import settings
+    """Refuse to run write commands when the skill loop is disabled.
 
-    if not settings.skills.enabled:
+    Honors both ``ATMAN_SKILLS_ENABLED`` (env-level kill switch) and
+    ``settings.skills.enabled`` (config-level) so operators can flip the
+    loop off in a single place without the CLI bypassing it.
+    """
+    # Single source of truth for "is the loop on" — factory has the same
+    # helper; we route through it so env + config precedence stay aligned.
+    from atman.adapters.agent.factory import _skills_enabled
+
+    if not _skills_enabled():
         print_err(
-            "skill-loop is disabled (atman.skills.enabled = false). "
-            "Enable it in your config to make changes."
+            "skill-loop is disabled "
+            "(ATMAN_SKILLS_ENABLED or atman.skills.enabled = false). "
+            "Enable it in your env or config to make changes."
         )
         sys.exit(1)
 
@@ -336,6 +345,180 @@ def cmd_force_revise(args: list[str]) -> None:
     print_ok(f"Skill '{name}' flagged for revision (priority +5).")
 
 
+def cmd_revise(args: list[str]) -> None:
+    """atman-skills revise --agent <uuid> [--max N] [--dry-run]"""
+    _require_enabled()
+    max_skills = 3
+    dry_run = False
+    rest = list(args)
+    if "--max" in rest:
+        idx = rest.index("--max")
+        try:
+            max_skills = int(rest[idx + 1])
+        except (ValueError, IndexError) as exc:
+            print_err(f"--max expects an integer (got {exc!s})")
+            sys.exit(1)
+        rest = rest[:idx] + rest[idx + 2 :]
+    if "--dry-run" in rest:
+        rest.remove("--dry-run")
+        dry_run = True
+
+    agent_id, _ = _parse_agent_id(rest)
+    if agent_id == UUID(int=0):
+        print_err("--agent <uuid> is required for revise")
+        sys.exit(1)
+
+    store = _get_store(agent_id)
+
+    # By default the CLI wires the NoopSkillReviser — real LLM reviser is
+    # configured elsewhere (see SkillRevisionService docstring). The CLI is
+    # still useful with the noop: it lists candidates and applies dry-run
+    # bookkeeping without hitting any LLM.
+    from atman.skills.revision import NoopSkillReviser, SkillRevisionService
+
+    service = SkillRevisionService(store=store, reviser=NoopSkillReviser())
+    outcomes = service.revise_pending(agent_id, max_skills=max_skills, dry_run=dry_run)
+
+    if not outcomes:
+        print_info("No skills currently flagged for revision.")
+        return
+
+    for outcome in outcomes:
+        if outcome.revised:
+            print_ok(
+                f"Revised '{outcome.skill_name}' → version {outcome.new_version} "
+                f"(backup at {outcome.backup_path}) — {outcome.rationale}"
+            )
+        else:
+            print_info(
+                f"Skipped '{outcome.skill_name}' "
+                f"(new_version={outcome.new_version or 'n/a'}): {outcome.rationale}"
+            )
+
+
+def cmd_install_external(args: list[str]) -> None:
+    """atman-skills install-external <source> --agent <uuid> [--name N] [--dry-run] [--yes]
+
+    Sources:
+      /local/path/to/skill/        — directory containing SKILL.md
+      /local/path/to/skill.zip     — local zip archive
+      https://example.com/x.zip    — HTTPS zip archive
+    """
+    from pathlib import Path
+
+    _require_enabled()
+    if not args:
+        print_help_text(
+            "Usage: atman-skills install-external <source> --agent <uuid> "
+            "[--name <override>] [--dry-run] [--yes]"
+        )
+        sys.exit(1)
+
+    rest = list(args)
+    name_override: str | None = None
+    dry_run = False
+    assume_yes = False
+    if "--name" in rest:
+        idx = rest.index("--name")
+        try:
+            name_override = rest[idx + 1]
+        except IndexError:
+            print_err("--name requires a value")
+            sys.exit(1)
+        rest = rest[:idx] + rest[idx + 2 :]
+    if "--dry-run" in rest:
+        rest.remove("--dry-run")
+        dry_run = True
+    if "--yes" in rest or "-y" in rest:
+        rest = [a for a in rest if a not in ("--yes", "-y")]
+        assume_yes = True
+
+    if not rest:
+        print_err("Missing <source>")
+        sys.exit(1)
+    source = rest[0]
+    agent_id, _ = _parse_agent_id(rest[1:])
+    if agent_id == UUID(int=0):
+        print_err("--agent <uuid> is required for install-external")
+        sys.exit(1)
+
+    from atman.config import settings as _settings
+    from atman.skills.installer import (
+        InstallResult,
+        SkillInstallError,
+        install_external,
+    )
+
+    store = _get_store(agent_id)
+    agents_root = Path(_settings.skills.skills_root).expanduser()
+
+    # Confirmation when the manifest declares a runtime_entry — those skills
+    # execute code on invoke, so the operator must consent. The simplest path
+    # is to do a dry-run first so we can surface runtime_entry status before
+    # any disk/DB writes happen.
+    try:
+        preview = install_external(
+            source,
+            agent_id,
+            store=store,
+            agents_root=agents_root,
+            name_override=name_override,
+            dry_run=True,
+        )
+    except SkillInstallError as exc:
+        print_err(str(exc))
+        sys.exit(1)
+
+    _render_install_preview(preview)
+
+    if preview.runtime_warning and not assume_yes and not dry_run:
+        print_warn(
+            "This skill declares runtime_entry and will execute code when invoked. "
+            "Re-run with --yes to confirm installation, or --dry-run to inspect only."
+        )
+        sys.exit(2)
+
+    if dry_run:
+        print_info("(dry-run) no files written, no DB row created.")
+        return
+
+    try:
+        result: InstallResult = install_external(
+            source,
+            agent_id,
+            store=store,
+            agents_root=agents_root,
+            name_override=name_override,
+            dry_run=False,
+        )
+    except SkillInstallError as exc:
+        print_err(str(exc))
+        sys.exit(1)
+
+    print_ok(
+        f"Installed '{result.manifest.name}' (skill_id={result.skill_id}) at {result.target_path}"
+    )
+
+
+def _render_install_preview(preview) -> None:
+    """Render the parsed manifest before any side effects fire."""
+    from rich import box
+    from rich.table import Table
+
+    table = Table(show_header=False, box=box.SIMPLE, pad_edge=False, padding=(0, 1, 0, 0))
+    table.add_column(style="term.label", justify="right", min_width=14)
+    table.add_column(ratio=1)
+    table.add_row("Name", preview.manifest.name)
+    table.add_row("Version", preview.manifest.version)
+    table.add_row("Kind", preview.manifest.kind.value)
+    table.add_row("Origin", preview.manifest.origin.value)
+    table.add_row("Description", preview.manifest.description)
+    table.add_row("Runtime entry", preview.manifest.runtime_entry or "(none)")
+    table.add_row("Sandbox", preview.manifest.runtime_sandbox)
+    table.add_row("Target", str(preview.target_path))
+    console.print(table)
+
+
 _COMMANDS = {
     "list": cmd_list,
     "show": cmd_show,
@@ -346,6 +529,8 @@ _COMMANDS = {
     "archive": cmd_archive,
     "inspect-invocations": cmd_inspect_invocations,
     "force-revise": cmd_force_revise,
+    "install-external": cmd_install_external,
+    "revise": cmd_revise,
 }
 
 _HELP = """atman-skills — skill-loop management
@@ -360,6 +545,8 @@ Commands:
   archive <name> [--agent <uuid>]
   inspect-invocations <name> [--agent <uuid>] [--last N]
   force-revise <name> [--agent <uuid>]
+  install-external <source> --agent <uuid> [--name <override>] [--dry-run] [--yes]
+  revise --agent <uuid> [--max N] [--dry-run]
 
 Read-only commands (list, show, inspect-invocations) work even when
 atman.skills.enabled = false.

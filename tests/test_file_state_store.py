@@ -25,6 +25,7 @@ from atman.core.models import (
     ReframingNote,
     SessionExperience,
 )
+from atman.core.models.session import Session
 from atman.core.ports import DateRangeQuery, DepthQuery, SessionExperienceQuery, ValuesTouchedQuery
 
 
@@ -144,6 +145,137 @@ def test_search_experiences_filters_and_limit() -> None:
 
         limited = store.search_experiences(query=None, limit=1)
         assert len(limited) == 1
+
+
+def test_get_key_moment_loads_legacy_jsonl_and_backfills_index_file() -> None:
+    with TemporaryDirectory() as tmp:
+        store = FileStateStore(Path(tmp))
+        moment = KeyMoment(
+            what_happened="Legacy crash-recovery moment",
+            how_i_felt=FeltSense(
+                emotional_valence=0.1,
+                emotional_intensity=0.6,
+                depth=EmotionalDepth.MEANINGFUL,
+            ),
+            why_it_matters="It must survive migration from JSONL-only storage",
+            values_touched=["continuity"],
+        )
+        moment_file = store.key_moments_dir / f"{moment.id}.json"
+        assert not moment_file.exists()
+
+        store.key_moments_path.write_text(
+            "\n".join(
+                [
+                    "{not valid json",
+                    moment.model_dump_json(),
+                    "",
+                ]
+            ),
+            encoding="utf-8",
+        )
+
+        loaded = store.get_key_moment(moment.id)
+
+        assert loaded is not None
+        assert loaded.id == moment.id
+        assert loaded.what_happened == "Legacy crash-recovery moment"
+        assert moment_file.exists()
+
+
+def test_search_experiences_uses_legacy_jsonl_moment_fallback() -> None:
+    with TemporaryDirectory() as tmp:
+        store = FileStateStore(Path(tmp))
+        rec = _experience_record(values_touched=["continuity"])
+        moment = rec._test_moment  # type: ignore[attr-defined]
+        store.create_experience(rec)
+        store.key_moments_path.write_text(moment.model_dump_json() + "\n", encoding="utf-8")
+
+        matches = store.search_experiences(ValuesTouchedQuery(["continuity"]), limit=10)
+
+        assert [m.experience.id for m in matches] == [rec.experience.id]
+
+
+def test_store_key_moment_rewrites_indexes_without_dropping_legacy_lines() -> None:
+    with TemporaryDirectory() as tmp:
+        store = FileStateStore(Path(tmp))
+        sid = uuid4()
+        first = KeyMoment(
+            session_id=sid,
+            what_happened="Original moment",
+            how_i_felt=FeltSense(
+                emotional_valence=0.0,
+                emotional_intensity=0.4,
+                depth=EmotionalDepth.SURFACE,
+            ),
+            why_it_matters="Initial storage",
+            values_touched=["old"],
+        )
+        store.store_key_moments(sid, [first])
+        store.key_moments_path.write_text(
+            "\n".join(["{legacy broken json", first.model_dump_json()]) + "\n",
+            encoding="utf-8",
+        )
+
+        updated = first.model_copy(
+            update={
+                "what_happened": "Updated moment",
+                "values_touched": ["new"],
+            }
+        )
+        second = KeyMoment(
+            session_id=sid,
+            what_happened="Second moment",
+            how_i_felt=FeltSense(
+                emotional_valence=0.2,
+                emotional_intensity=0.5,
+                depth=EmotionalDepth.MEANINGFUL,
+            ),
+            why_it_matters="Append to existing session bundle",
+            values_touched=["new"],
+        )
+
+        store.store_key_moment(updated)
+        store.store_key_moment(second)
+
+        raw_lines = store.key_moments_path.read_text(encoding="utf-8").splitlines()
+        assert raw_lines[0] == "{legacy broken json"
+        valid_rows = [json.loads(line) for line in raw_lines[1:]]
+        assert [row["what_happened"] for row in valid_rows] == [
+            "Updated moment",
+            "Second moment",
+        ]
+        session_moments = store.get_key_moments_for_session(sid)
+        assert [m.what_happened for m in session_moments] == [
+            "Updated moment",
+            "Second moment",
+        ]
+
+
+def test_list_key_moments_warns_on_corrupted_jsonl_and_filters_by_session() -> None:
+    with TemporaryDirectory() as tmp:
+        store = FileStateStore(Path(tmp))
+        sid = uuid4()
+        other_sid = uuid4()
+        kept = KeyMoment(
+            session_id=sid,
+            what_happened="Keep this moment",
+            how_i_felt=FeltSense(
+                emotional_valence=0.0,
+                emotional_intensity=0.3,
+                depth=EmotionalDepth.SURFACE,
+            ),
+            why_it_matters="Valid row survives corrupted neighbors",
+        )
+        other = kept.model_copy(update={"id": uuid4(), "session_id": other_sid})
+        store.key_moments_path.write_text(
+            "\n".join(["{broken", kept.model_dump_json(), other.model_dump_json()]) + "\n",
+            encoding="utf-8",
+        )
+
+        with pytest.warns(UserWarning, match="Skipping corrupted line"):
+            moments = store.list_key_moments(session_id=sid)
+
+        assert [m.id for m in moments] == [kept.id]
 
 
 def test_list_recent_experiences_delegates() -> None:
@@ -286,6 +418,23 @@ def test_eigenstate_without_identity_not_visible_when_filtering_by_identity() ->
         es = Eigenstate(session_id=sid, emotional_tone=0.0, session_summary="Legacy.")
         store.save_eigenstate(es)
         assert store.load_latest_eigenstate(identity_id=uuid4()) is None
+
+
+def test_list_recent_sessions_sorts_mixed_legacy_naive_and_aware_timestamps() -> None:
+    with TemporaryDirectory() as tmp:
+        store = FileStateStore(Path(tmp))
+        agent = uuid4()
+        legacy_naive = Session(agent_id=agent, started_at=datetime(2026, 5, 1, 12, 0, 0))
+        current_aware = Session(
+            agent_id=agent,
+            started_at=datetime(2026, 5, 1, 18, 0, 0, tzinfo=UTC),
+        )
+        store.create_session(legacy_naive)
+        store.create_session(current_aware)
+
+        sessions = store.list_recent_sessions(agent, limit=10)
+
+        assert [s.id for s in sessions] == [current_aware.id, legacy_naive.id]
 
 
 def test_save_narrative_expected_updated_at_mismatch() -> None:

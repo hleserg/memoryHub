@@ -12,6 +12,7 @@ from typing import Any
 from uuid import UUID
 
 from atman.adapters.storage._atomic_write import write_atomically
+from atman.core.clock_impl import ensure_utc
 from atman.core.models import (
     Eigenstate,
     ExperienceRecord,
@@ -645,5 +646,5 @@ class FileStateStore(StateStore):
                 continue
             if s.agent_id == agent_id:
                 sessions.append(s)
-        sessions.sort(key=lambda s: s.started_at, reverse=True)
+        sessions.sort(key=lambda s: ensure_utc(s.started_at), reverse=True)
         return sessions[:limit]
