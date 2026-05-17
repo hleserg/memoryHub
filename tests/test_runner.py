@@ -1112,3 +1112,64 @@ def test_do_restart_persists_restart_reason(
     assert experiences[0].experience.restart_reason == restart_reason, (
         "restart_reason should be persisted to SessionExperience"
     )
+
+
+@pytest.mark.asyncio
+async def test_save_to_memory_does_not_increment_retry_count(
+    tmp_path: Path,
+    identity_with_narrative: Identity,
+) -> None:
+    """Regression test for HLE-20 fix: successful save_to_memory must not
+    increment retry_count. With max_retries=3 and the bug present, 3 successful
+    saves would prematurely force-close the session. With the fix, any number of
+    successful saves is allowed and only the final EOF drives the exit."""
+    from dataclasses import replace
+
+    from atman.adapters.agent.config import AgentConfig
+    from atman.adapters.agent.factory import build_deps
+    from atman.adapters.agent.runner import AtmanRunner
+    from atman.adapters.memory.in_memory_backend import InMemoryBackend
+    from atman.adapters.memory.mock_embedding import MockEmbeddingAdapter
+    from atman.adapters.storage.file_state_store import FileStateStore
+    from atman.core.services.passive_memory_injector import PassiveMemoryInjector
+
+    config = AgentConfig()
+    runner = AtmanRunner(tmp_path, identity_with_narrative.id, config)
+    deps, sm, _store = build_deps(tmp_path, identity_with_narrative.id, config)
+
+    # Build a real PassiveMemoryInjector backed by in-memory storage so that
+    # save_to_memory can actually persist facts and we can count them.
+    fake_memory = InMemoryBackend()
+    injector = PassiveMemoryInjector(
+        embedding=MockEmbeddingAdapter(),
+        factual_memory=fake_memory,
+        state_store=FileStateStore(workspace=tmp_path),
+    )
+    deps = replace(deps, passive_memory_injector=injector)
+
+    # Start a session so _handle_menu_mode can work.
+    ctx = sm.start_session(identity_with_narrative.id)
+    moment = KeyMomentInput(
+        what_happened="test",
+        emotional_valence=0.0,
+        emotional_intensity=0.1,
+        depth=EmotionalDepth.SURFACE,
+        why_it_matters="test",
+    )
+    sm.append_key_moment_input(ctx.session_id, moment)
+
+    # Feed 4 successful saves followed by EOF. With the bug, the loop exits
+    # after 3 saves (retry_count reaches max_retries=3). With the fix, all 4
+    # saves succeed and the function exits only when it reads None (EOF).
+    for i in range(4):
+        runner._input_queue.put_nowait(f"save_to_memory payload_{i}")
+    runner._input_queue.put_nowait(None)  # EOF → _handle_menu_mode returns "exit"
+
+    result = await runner._handle_menu_mode(deps, sm, ctx.session_id, False)
+
+    assert result == "exit"
+    all_facts = fake_memory.list_recent(limit=100)
+    assert len(all_facts) == 4, (
+        f"Expected 4 facts saved but got {len(all_facts)}; "
+        "this likely means retry_count was incremented on success"
+    )

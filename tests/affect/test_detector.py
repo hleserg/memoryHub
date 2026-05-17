@@ -114,18 +114,124 @@ async def test_process_triggers_with_aggressive_config(tmp_path: Path) -> None:
 
 
 @pytest.mark.asyncio
-async def test_use_llm_analysis_logs_and_continues(tmp_path: Path) -> None:
-    """use_llm_analysis=True is reserved; the path logs a warning and continues instead of raising."""
+async def test_linguistic_divergence_signals_merged_into_tags(tmp_path: Path) -> None:
+    """When a LinguisticAnalyzer surfaces divergence_signals, HLE-23 requires
+    them to land on the resulting AffectRecord tags so downstream consumers
+    (KeyMomentBuilder, divergence reasoners) can react to them."""
+    from atman.core.ports.linguistic import AgentMessageAnalysis, LinguisticAnalyzer
+
+    class _StubAnalyzer(LinguisticAnalyzer):
+        def analyze_user_message(self, text):  # type: ignore[override]
+            from atman.core.ports.linguistic import UserMessageAnalysis
+
+            return UserMessageAnalysis(text=text)
+
+        def analyze_agent_message(self, message, *, thinking=None):  # type: ignore[override]
+            return AgentMessageAnalysis(divergence_signals=["sarcasm", "hedging"])
+
+        def analyze_key_moment(self, what_happened, why_it_matters):  # type: ignore[override]
+            from atman.core.ports.linguistic import KeyMomentAnalysis
+
+            return KeyMomentAnalysis()
+
+    moments: list[KeyMoment] = []
+
+    def sink(_sid: UUID, km: KeyMoment) -> None:
+        moments.append(km)
+
+    cfg = AffectDetectorConfig(
+        cold_start_sessions=0,
+        random_sample_every_n=1,
+        strong_signal_threshold=1,
+        sigma_threshold=0.5,
+    )
+    det = AffectDetector(
+        cfg,
+        workspace=tmp_path,
+        append_moment=sink,
+        linguistic_analyzer=_StubAnalyzer(),
+    )
+    await det.process(
+        "Я очень рад и в восторге от того что мы получили хороший результат сегодня",
+        session_id=uuid4(),
+    )
+    tags_flat = [
+        t
+        for m in moments
+        for t in (m.context_halo.metadata.get("tags", []) if m.context_halo else [])
+    ]  # type: ignore[union-attr]
+    assert "linguistic:sarcasm" in tags_flat
+    assert "linguistic:hedging" in tags_flat
+
+
+@pytest.mark.asyncio
+async def test_linguistic_only_trigger_sets_trigger_reason_linguistic(tmp_path: Path) -> None:
+    """When only linguistic signals fire (cold session, anomaly disabled),
+    the resulting AffectRecord must carry trigger_reason=LINGUISTIC, not RANDOM_SAMPLE."""
+    from atman.affect.models import TriggerReason
+    from atman.core.ports.linguistic import AgentMessageAnalysis, LinguisticAnalyzer
+
+    class _StubAnalyzer(LinguisticAnalyzer):
+        def analyze_user_message(self, text):  # type: ignore[override]
+            from atman.core.ports.linguistic import UserMessageAnalysis
+
+            return UserMessageAnalysis(text=text)
+
+        def analyze_agent_message(self, message, *, thinking=None):  # type: ignore[override]
+            return AgentMessageAnalysis(divergence_signals=["hedging"])
+
+        def analyze_key_moment(self, what_happened, why_it_matters):  # type: ignore[override]
+            from atman.core.ports.linguistic import KeyMomentAnalysis
+
+            return KeyMomentAnalysis()
+
+    moments: list[KeyMoment] = []
+
+    def sink(_sid: UUID, km: KeyMoment) -> None:
+        moments.append(km)
+
+    # cold_start_sessions=999 forces cold=True on the first call, skipping
+    # anomaly and random-sample checks so linguistic is the sole trigger.
+    cfg = AffectDetectorConfig(
+        cold_start_sessions=999,
+        random_sample_every_n=1000,
+        strong_signal_threshold=100,
+        sigma_threshold=100.0,
+    )
+    det = AffectDetector(
+        cfg,
+        workspace=tmp_path,
+        append_moment=sink,
+        linguistic_analyzer=_StubAnalyzer(),
+    )
+    record = await det.process(
+        "Honestly I'm not sure but maybe this could perhaps work",
+        session_id=uuid4(),
+    )
+    assert record is not None
+    assert record.trigger_reason == TriggerReason.LINGUISTIC
+    assert any(t.startswith("linguistic:") for t in record.tags)
+
+
+@pytest.mark.asyncio
+async def test_use_llm_analysis_logs_warning_and_continues(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    """use_llm_analysis=True must not crash submit_self_report — the LLM
+    sincerity path is a documented stub; HLE-23 replaced the
+    NotImplementedError with a logged warning so callers stay alive."""
     det = AffectDetector(
         AffectDetectorConfig(use_llm_analysis=True),
         workspace=tmp_path,
         append_moment=lambda _a, _b: None,
     )
-    record = await det.submit_self_report(
-        AgentMemoryReport(content="x", emotional_valence=0.1, emotional_intensity=0.2),
-        session_id=uuid4(),
-    )
-    assert record is not None
+    with caplog.at_level("WARNING", logger="atman.affect.detector"):
+        rec = await det.submit_self_report(
+            AgentMemoryReport(content="x", emotional_valence=0.1, emotional_intensity=0.2),
+            session_id=uuid4(),
+        )
+    assert rec is not None
+    assert any("sincerity" in m.lower() for m in caplog.messages)
 
 
 def test_demo_fixture_runs() -> None:

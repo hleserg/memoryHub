@@ -1085,7 +1085,7 @@ class AtmanRunner:
             print_plain("  reflect - Run micro reflection on this session")
         print_plain("  wait <minutes> - Reset timer and continue")
         print_plain("  sleep - Close session and exit")
-        print_plain("  save_to_memory <content> - Save to factual memory (not yet implemented)")
+        print_plain("  save_to_memory <content> - Save to factual memory")
         if self._config.enable_free_time:
             print_plain("  free_time - Enter free time mode")
         print_plain("")
@@ -1158,15 +1158,24 @@ class AtmanRunner:
                 return "exit"
 
             elif cmd == "save_to_memory":
-                if not arg:
+                if not arg.strip():
                     print_warn("Usage: save_to_memory <content>")
                     retry_count += 1
                     continue
-                # Save to factual memory - placeholder for future implementation
-                # Full implementation would require FactualMemory port in AtmanDeps
-                print_warn(f"save_to_memory not yet implemented (content NOT saved): {arg[:50]}...")
-                print_info("Returning to menu. Use 'wait' to continue session.")
-                retry_count += 1
+                if deps.passive_memory_injector is None:
+                    print_warn("Memory not available (set ATMAN_LINGUISTIC_ENABLED=true to enable)")
+                    retry_count += 1
+                    continue
+                from atman.core.models.fact import FactRecord
+
+                fact = FactRecord(content=arg.strip(), source="user_command")
+                try:
+                    saved = deps.passive_memory_injector.factual_memory.add_fact(fact)
+                    print_info(f"Saved to memory: {saved.id}")
+                except Exception:
+                    _LOG.warning("save_to_memory failed; continuing menu", exc_info=True)
+                    print_warn("Failed to save to memory. See logs for details.")
+                    retry_count += 1
                 continue
 
             elif cmd == "free_time":

@@ -19,6 +19,7 @@ class TriggerReason(StrEnum):
     DIVERGENCE = "divergence"
     EMPHASIS = "emphasis"
     STRUCTURAL_MARKER = "structural_marker"
+    LINGUISTIC = "linguistic"
 
 
 class AffectMetrics(BaseModel):
