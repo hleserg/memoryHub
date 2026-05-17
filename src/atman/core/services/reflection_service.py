@@ -785,10 +785,6 @@ class DeepReflectionService:
             experiences, identity, patterns_detected
         )
 
-        identity_changes = self._propose_identity_revision(
-            identity, patterns_detected, health_assessment
-        )
-
         # R7 Deep — revise stale stances against new evidence.
         stance_outcome = None
         if self._entity_stance_formulator is not None and self._agent_id is not None:
@@ -804,6 +800,17 @@ class DeepReflectionService:
                 relation_outcome = self._entity_relations_formulator.run(self._agent_id)
             except Exception:  # pragma: no cover - defensive
                 relation_outcome = None
+
+        # R11 — feed all collected R5/R7/R9/R10 signals into the identity-
+        # revision proposal. Governance / audit still go through R11.5
+        # (``IdentityService.apply_self_change``); this is the proposal text.
+        identity_changes = self._propose_identity_revision(
+            identity,
+            patterns_detected,
+            health_assessment,
+            stance_outcome=stance_outcome,
+            relation_outcome=relation_outcome,
+        )
 
         notes = "outcome=deep_ok"
         if reframing_nf or reframing_sr:
@@ -1035,15 +1042,117 @@ class DeepReflectionService:
         identity: Identity,
         patterns: list[PatternCandidate],
         health: HealthAssessment,
+        *,
+        stance_outcome: object | None = None,
+        relation_outcome: object | None = None,
+        merge_outcome: object | None = None,
+        triage_outcome: object | None = None,
     ) -> str:
-        """Propose revisions to identity based on patterns and health."""
-        proposals = []
+        """
+        Propose revisions to identity from patterns, health, and (R11) the
+        v3 signals from R5/R6/R7/R8/R9/R10 hooks.
+
+        Existing pattern-driven proposals (``potential_habit`` / ``potential_principle``)
+        continue to work because aggregators (R5/R6) write through ``PatternStore``
+        like the LLM-driven detection. The R11 additions:
+
+        - ``growth_indicator`` / ``agency_level`` marker patterns surface as
+          explicit "growth observed" / "agency shift" proposals so the
+          downstream governance (R11.5 ``IdentityService.apply_self_change``)
+          can decide whether to lift them into ``core_values``.
+        - Persistent ``entity_stance`` formulations (R7) appearing repeatedly
+          across a period flag "candidate principle: hold this stance" — the
+          principle text is **not** invented here; the proposal points the
+          operator at the stance for human / advisor review.
+        - ``FindingsTriage`` (R8) outcomes are recorded for completeness so
+          the audit trail (R11.5) explains *why* a proposal landed.
+        - ``MergeCandidatesHandler`` (R10) outcomes likewise.
+        - ``EntityRelationsFormulator`` (R9) outcomes likewise.
+
+        Identity is **not** written here — this returns a free-form proposal
+        string that the existing governance path (R11.5
+        ``IdentityService.apply_self_change`` with audit via
+        ``SelfAppliedChangeStore``) consumes.
+        """
+        proposals: list[str] = []
 
         for pattern in patterns:
             if pattern.potential_habit:
                 proposals.append(f"New habit: {pattern.potential_habit}")
             if pattern.potential_principle:
                 proposals.append(f"New principle: {pattern.potential_principle}")
+
+        # R5/R11 — marker-driven growth signals surface as explicit proposals
+        # for identity governance to weigh.
+        for pattern in patterns:
+            desc = pattern.description or ""
+            if "'growth_indicator'='progress'" in desc or "growth_indicator=progress" in desc:
+                proposals.append(
+                    "Growth observed across the period — consider promoting "
+                    "the related principle to core."
+                )
+            elif "'growth_indicator'='regression'" in desc or "growth_indicator=regression" in desc:
+                proposals.append(
+                    "Regression on growth_indicator across the period — "
+                    "review what context produced the regression."
+                )
+            if "'agency_level'='high'" in desc:
+                proposals.append(
+                    "High agency level recurring — surface an explicit principle about ownership."
+                )
+            elif "'agency_level'='low'" in desc:
+                proposals.append(
+                    "Low agency level recurring — review whether external "
+                    "pressures eroded autonomy."
+                )
+
+        # R7 — recurring stance formulation across the window is a candidate
+        # for principle promotion. We don't invent the principle text; we
+        # point the operator at the stance count.
+        if stance_outcome is not None:
+            f = getattr(stance_outcome, "formulated", 0)
+            p = getattr(stance_outcome, "promoted", 0)
+            if p:
+                proposals.append(
+                    f"{p} stance(s) re-affirmed and promoted to non-provisional — "
+                    "consider lifting matching stances into core principles."
+                )
+            elif f >= 3:
+                proposals.append(
+                    f"{f} new entity stances formulated this period — review "
+                    "whether any belong in identity (governance / R11.5)."
+                )
+
+        # R9 — newly formulated relations are not identity-relevant per se,
+        # but a burst signals a structural shift worth noting in the audit.
+        if relation_outcome is not None:
+            f = getattr(relation_outcome, "formulated", 0)
+            if f >= 3:
+                proposals.append(
+                    f"{f} new entity relations formulated — verify they "
+                    "don't contradict existing principles."
+                )
+
+        # R10 — merges may have collapsed entity references that
+        # historically grounded principles; flag for review.
+        if merge_outcome is not None:
+            m = getattr(merge_outcome, "merged", 0)
+            if m:
+                proposals.append(
+                    f"{m} entity merge(s) this period — re-verify principles "
+                    "previously grounded in the merged entities."
+                )
+
+        # R8 — record what level-B findings the system has chosen not to fix.
+        # This is bookkeeping, not a proposal, but it belongs in the audit
+        # trail so identity revisions are explainable.
+        if triage_outcome is not None:
+            attn = getattr(triage_outcome, "requires_attention_count", 0)
+            if attn:
+                proposals.append(
+                    f"{attn} validation finding(s) need operator attention — "
+                    "deferring identity-level inferences that depend on them."
+                )
 
         if health.overall_score < 0.5:
             proposals.append("Consider reviewing principles in light of low health score")
