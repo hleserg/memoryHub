@@ -336,6 +336,57 @@ def cmd_force_revise(args: list[str]) -> None:
     print_ok(f"Skill '{name}' flagged for revision (priority +5).")
 
 
+def cmd_revise(args: list[str]) -> None:
+    """atman-skills revise --agent <uuid> [--max N] [--dry-run]"""
+    _require_enabled()
+    max_skills = 3
+    dry_run = False
+    rest = list(args)
+    if "--max" in rest:
+        idx = rest.index("--max")
+        try:
+            max_skills = int(rest[idx + 1])
+        except (ValueError, IndexError) as exc:
+            print_err(f"--max expects an integer (got {exc!s})")
+            sys.exit(1)
+        rest = rest[:idx] + rest[idx + 2 :]
+    if "--dry-run" in rest:
+        rest.remove("--dry-run")
+        dry_run = True
+
+    agent_id, _ = _parse_agent_id(rest)
+    if agent_id == UUID(int=0):
+        print_err("--agent <uuid> is required for revise")
+        sys.exit(1)
+
+    store = _get_store(agent_id)
+
+    # By default the CLI wires the NoopSkillReviser — real LLM reviser is
+    # configured elsewhere (see SkillRevisionService docstring). The CLI is
+    # still useful with the noop: it lists candidates and applies dry-run
+    # bookkeeping without hitting any LLM.
+    from atman.skills.revision import NoopSkillReviser, SkillRevisionService
+
+    service = SkillRevisionService(store=store, reviser=NoopSkillReviser())
+    outcomes = service.revise_pending(agent_id, max_skills=max_skills, dry_run=dry_run)
+
+    if not outcomes:
+        print_info("No skills currently flagged for revision.")
+        return
+
+    for outcome in outcomes:
+        if outcome.revised:
+            print_ok(
+                f"Revised '{outcome.skill_name}' → version {outcome.new_version} "
+                f"(backup at {outcome.backup_path}) — {outcome.rationale}"
+            )
+        else:
+            print_info(
+                f"Skipped '{outcome.skill_name}' "
+                f"(new_version={outcome.new_version or 'n/a'}): {outcome.rationale}"
+            )
+
+
 def cmd_install_external(args: list[str]) -> None:
     """atman-skills install-external <source> --agent <uuid> [--name N] [--dry-run] [--yes]
 
@@ -471,6 +522,7 @@ _COMMANDS = {
     "inspect-invocations": cmd_inspect_invocations,
     "force-revise": cmd_force_revise,
     "install-external": cmd_install_external,
+    "revise": cmd_revise,
 }
 
 _HELP = """atman-skills — skill-loop management
@@ -486,6 +538,7 @@ Commands:
   inspect-invocations <name> [--agent <uuid>] [--last N]
   force-revise <name> [--agent <uuid>]
   install-external <source> --agent <uuid> [--name <override>] [--dry-run] [--yes]
+  revise --agent <uuid> [--max N] [--dry-run]
 
 Read-only commands (list, show, inspect-invocations) work even when
 atman.skills.enabled = false.
