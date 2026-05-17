@@ -223,13 +223,44 @@ class InMemoryMemoryGuardian(MemoryGuardian):
 
     # ---- Level-C sub-scans (HLE-31) ------------------------------------------
 
+    def _belongs_to_agent(self, moment: object, agent_id: UUID) -> bool:
+        """True when ``moment.session_id`` resolves to a session owned by
+        ``agent_id``. Used by the Level-C scans to keep multi-agent in-memory
+        stores from cross-pollinating findings. Falls back to False when the
+        moment has no session or the session lookup fails — the alternative
+        (assume it belongs) would manufacture findings for the wrong agent."""
+        if self._store is None:
+            return False
+        sid = getattr(moment, "session_id", None)
+        if sid is None:
+            return False
+        get_session = getattr(self._store, "get_session", None)
+        if get_session is None:
+            return False
+        try:
+            session = get_session(sid)
+        except Exception:
+            return False
+        return session is not None and getattr(session, "agent_id", None) == agent_id
+
     def _scan_affect_detector_silent(
         self, agent_id: UUID, window_start: datetime, threshold: float
     ) -> list[ValidationFinding]:
-        """High incomplete_coloring rate over the window → pipeline silent."""
+        """High incomplete_coloring rate over the window → pipeline silent.
+
+        Filters by ``agent_id`` via the KeyMoment → Session link so multi-agent
+        in-memory stores compute the rate per agent (one mis-coloured stream
+        from agent A must not cause a finding for agent B). Moments whose
+        ``session_id`` is None or whose session is unknown are conservatively
+        excluded — they cannot be attributed to this agent.
+        """
         if self._store is None:
             return []
-        moments = [m for m in self._store.list_key_moments() if _aware(m.when) >= window_start]
+        moments = [
+            m
+            for m in self._store.list_key_moments()
+            if _aware(m.when) >= window_start and self._belongs_to_agent(m, agent_id)
+        ]
         if not moments:
             return []
         incomplete = sum(1 for m in moments if _is_incomplete_coloring(m))

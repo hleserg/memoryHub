@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 from atman.adapters.maintenance.in_memory_queue import InMemoryMaintenanceQueue
 from atman.adapters.memory.in_memory_divergence_events import (
@@ -15,6 +15,7 @@ from atman.adapters.storage.in_memory_state_store import InMemoryStateStore
 from atman.core.models.entity import EntityStance
 from atman.core.models.experience import EmotionalDepth, FeltSense, KeyMoment
 from atman.core.models.maintenance import JobName, JobStatus
+from atman.core.models.session import Session
 from atman.core.models.validation import (
     DivergenceEvent,
     DivergenceSeverity,
@@ -24,8 +25,13 @@ from atman.core.models.validation import (
 from atman.core.services.maintenance_worker import MaintenanceWorker
 
 
+def _session(agent_id: UUID) -> Session:
+    return Session(agent_id=agent_id)
+
+
 def _moment(
     *,
+    session_id: UUID,
     incomplete: bool = False,
     when: datetime | None = None,
 ) -> KeyMoment:
@@ -36,6 +42,7 @@ def _moment(
             emotional_valence=0.1, emotional_intensity=0.5, depth=EmotionalDepth.SURFACE
         ),
         why_it_matters="why",
+        session_id=session_id,
         incomplete_coloring=incomplete,
     )
 
@@ -47,10 +54,14 @@ def test_quality_metrics_finds_affect_detector_silent() -> None:
     """5 incomplete-coloring moments out of 10 (>30%) → finding."""
     agent = uuid4()
     store = InMemoryStateStore()
+    session = _session(agent)
+    store.create_session(session)
     now = datetime.now(UTC)
-    sid = uuid4()
-    moments = [_moment(incomplete=i < 5, when=now - timedelta(hours=i)) for i in range(10)]
-    store.store_key_moments(sid, moments)
+    moments = [
+        _moment(session_id=session.id, incomplete=i < 5, when=now - timedelta(hours=i))
+        for i in range(10)
+    ]
+    store.store_key_moments(session.id, moments)
 
     guardian = InMemoryMemoryGuardian(state_store=store)
     findings = guardian.scan_quality_metrics(agent)
@@ -64,13 +75,58 @@ def test_quality_metrics_finds_affect_detector_silent() -> None:
 def test_quality_metrics_silent_check_below_threshold_is_silent() -> None:
     agent = uuid4()
     store = InMemoryStateStore()
+    session = _session(agent)
+    store.create_session(session)
     now = datetime.now(UTC)
-    moments = [_moment(incomplete=False, when=now - timedelta(hours=i)) for i in range(10)]
-    store.store_key_moments(uuid4(), moments)
+    moments = [
+        _moment(session_id=session.id, incomplete=False, when=now - timedelta(hours=i))
+        for i in range(10)
+    ]
+    store.store_key_moments(session.id, moments)
 
     guardian = InMemoryMemoryGuardian(state_store=store)
     findings = guardian.scan_quality_metrics(agent)
     assert not any(f.finding_type == FindingType.affect_detector_silent for f in findings)
+
+
+def test_quality_metrics_silent_is_scoped_per_agent() -> None:
+    """Multi-agent store: high incomplete-coloring on agent A must not
+    fire the affect_detector_silent finding for agent B (Devin Review
+    ANALYSIS, #598)."""
+    agent_a = uuid4()
+    agent_b = uuid4()
+    store = InMemoryStateStore()
+    session_a = _session(agent_a)
+    session_b = _session(agent_b)
+    store.create_session(session_a)
+    store.create_session(session_b)
+    now = datetime.now(UTC)
+    # Agent A: 80% incomplete — would trip on its own.
+    store.store_key_moments(
+        session_a.id,
+        [
+            _moment(session_id=session_a.id, incomplete=i < 8, when=now - timedelta(hours=i))
+            for i in range(10)
+        ],
+    )
+    # Agent B: 0% incomplete — should be silent.
+    store.store_key_moments(
+        session_b.id,
+        [
+            _moment(session_id=session_b.id, incomplete=False, when=now - timedelta(hours=i))
+            for i in range(10)
+        ],
+    )
+
+    guardian = InMemoryMemoryGuardian(state_store=store)
+    a_findings = guardian.scan_quality_metrics(agent_a)
+    b_findings = guardian.scan_quality_metrics(agent_b)
+    assert any(f.finding_type == FindingType.affect_detector_silent for f in a_findings), (
+        "agent A should trip the threshold"
+    )
+    assert not any(f.finding_type == FindingType.affect_detector_silent for f in b_findings), (
+        "agent B should not be affected by agent A's moments"
+    )
 
 
 # ---- divergence_pattern --------------------------------------------------
@@ -114,12 +170,14 @@ def test_quality_metrics_finds_stance_formation_too_fast() -> None:
     agent = uuid4()
     state_store = InMemoryStateStore()
     stance_store = InMemoryEntityStanceStore()
+    session = _session(agent)
+    state_store.create_session(session)
 
     now = datetime.now(UTC)
-    moment_ids = []
+    moment_ids: list[UUID] = []
     for _ in range(3):
-        m = _moment(when=now - timedelta(hours=2))
-        state_store.store_key_moments(uuid4(), [m])
+        m = _moment(session_id=session.id, when=now - timedelta(hours=2))
+        state_store.store_key_moments(session.id, [m])
         moment_ids.append(m.id)
 
     # Bypass write_stance() so we can pin formed_at — it auto-sets to NOW(),
@@ -150,10 +208,15 @@ def test_maintenance_worker_includes_quality_metrics_in_guardian_scan() -> None:
     """MaintenanceWorker._run_guardian must now call scan_quality_metrics too."""
     agent = uuid4()
     state_store = InMemoryStateStore()
+    session = _session(agent)
+    state_store.create_session(session)
     now = datetime.now(UTC)
     state_store.store_key_moments(
-        uuid4(),
-        [_moment(incomplete=i < 4, when=now - timedelta(hours=i)) for i in range(5)],
+        session.id,
+        [
+            _moment(session_id=session.id, incomplete=i < 4, when=now - timedelta(hours=i))
+            for i in range(5)
+        ],
     )
 
     guardian = InMemoryMemoryGuardian(state_store=state_store)
