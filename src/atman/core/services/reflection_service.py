@@ -58,6 +58,7 @@ from atman.core.services.divergence_aggregator import DivergenceAggregator
 from atman.core.services.entity_relations_formulator import EntityRelationsFormulator
 from atman.core.services.entity_stance_formulator import EntityStanceFormulator
 from atman.core.services.findings_triage import FindingsTriage, TriageOutcome
+from atman.core.services.merge_candidates_handler import MergeCandidatesHandler
 from atman.core.services.narrative_revision import NarrativeRevisionService
 from atman.core.services.session_experience_view import build_session_experience
 from atman.core.services.structured_markers_aggregator import StructuredMarkersAggregator
@@ -694,6 +695,7 @@ class DeepReflectionService:
         entity_stance_formulator: EntityStanceFormulator | None = None,
         reflection_request_queue: ReflectionRequestQueue | None = None,
         entity_relations_formulator: EntityRelationsFormulator | None = None,
+        merge_candidates_handler: MergeCandidatesHandler | None = None,
         agent_id: UUID | None = None,
     ):
         """Initialize deep reflection service."""
@@ -711,6 +713,7 @@ class DeepReflectionService:
         self._entity_stance_formulator = entity_stance_formulator
         self._reflection_request_queue = reflection_request_queue
         self._entity_relations_formulator = entity_relations_formulator
+        self._merge_candidates_handler = merge_candidates_handler
         self._agent_id = agent_id
 
     def reflect(self, since: datetime, until: datetime) -> ReflectionEvent:
@@ -801,6 +804,14 @@ class DeepReflectionService:
             except Exception:  # pragma: no cover - defensive
                 relation_outcome = None
 
+        # R10 Deep — LLM-resolve similar_entities findings.
+        merge_outcome = None
+        if self._merge_candidates_handler is not None and self._agent_id is not None:
+            try:
+                merge_outcome = self._merge_candidates_handler.run(self._agent_id)
+            except Exception:  # pragma: no cover - defensive
+                merge_outcome = None
+
         # R11 — feed all collected R5/R7/R9/R10 signals into the identity-
         # revision proposal. Governance / audit still go through R11.5
         # (``IdentityService.apply_self_change``); this is the proposal text.
@@ -810,6 +821,7 @@ class DeepReflectionService:
             health_assessment,
             stance_outcome=stance_outcome,
             relation_outcome=relation_outcome,
+            merge_outcome=merge_outcome,
         )
 
         notes = "outcome=deep_ok"
@@ -824,6 +836,11 @@ class DeepReflectionService:
             notes += (
                 f" entity_stances_revised={stance_outcome.formulated}"
                 f" entity_stances_promoted={stance_outcome.promoted}"
+            )
+        if merge_outcome is not None and (merge_outcome.merged or merge_outcome.ignored):
+            notes += (
+                f" merge_candidates_merged={merge_outcome.merged}"
+                f" merge_candidates_ignored={merge_outcome.ignored}"
             )
         if pending_requests:
             notes += f" agent_driven_requests={len(pending_requests)}"

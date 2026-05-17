@@ -6,8 +6,10 @@ from datetime import UTC, datetime
 from uuid import uuid4
 
 from atman.adapters.reflection.prompts import (
+    SYSTEM_PROMPT_ENTITY_MERGE,
     SYSTEM_PROMPT_ENTITY_RELATION,
     SYSTEM_PROMPT_STANCE,
+    build_entity_merge_messages,
     build_entity_relation_messages,
     build_health_messages,
     build_narrative_messages,
@@ -188,3 +190,26 @@ def test_build_entity_relation_messages_includes_both_entities_and_moments() -> 
 def test_system_prompt_entity_relation_constant_exposed() -> None:
     assert "{schema}" in SYSTEM_PROMPT_ENTITY_RELATION
     assert "snake_case" in SYSTEM_PROMPT_ENTITY_RELATION
+
+
+# ---------------------------------------------------------------------------
+# R10 — entity merge decision prompt
+# ---------------------------------------------------------------------------
+
+
+def test_build_entity_merge_messages_separates_contexts() -> None:
+    a = Entity(agent_id=uuid4(), canonical_name="Alice", entity_type=EntityType.person)
+    b = Entity(agent_id=uuid4(), canonical_name="Alice S.", entity_type=EntityType.person)
+    msgs = build_entity_merge_messages(a, b, [_km(["x"])], [_km(["y"]), _km(["z"])])
+    assert msgs[0]["role"] == "system"
+    user = msgs[1]["content"]
+    assert "## Entity A" in user
+    assert "## Entity B" in user
+    assert "Alice S." in user
+    assert "A moments (1)" in user
+    assert "B moments (2)" in user
+
+
+def test_system_prompt_entity_merge_constant_exposed() -> None:
+    assert "{schema}" in SYSTEM_PROMPT_ENTITY_MERGE
+    assert "Default to **not** merging" in SYSTEM_PROMPT_ENTITY_MERGE
