@@ -23,10 +23,12 @@ from atman.adapters.storage.in_memory_reflection_request_queue import InMemoryRe
 from atman.adapters.storage.in_memory_reflection_store import InMemoryReflectionEventStore
 
 try:
+    from atman.affect.detector import AffectDetector as _AffectDetector
     from atman.affect.detector import AffectDetectorConfig as _AffectDetectorConfig
 
     _AFFECT_AVAILABLE = True
 except ImportError:
+    _AffectDetector = None  # type: ignore[assignment,misc]
     _AffectDetectorConfig = None  # type: ignore[assignment,misc]
     _AFFECT_AVAILABLE = False
 from atman.core.models import NarrativeDocument
@@ -110,14 +112,18 @@ def build_deps(
     if state_store.load_narrative(identity.id) is None:
         narrative_service.create_narrative(identity)
 
-    affect_kwargs: dict = {}
+    # HLE-52: build the affect adapter here (composition root) and inject via
+    # AffectPort so SessionManager never imports the concrete implementation.
+    session_manager = SessionManager(state_store, workspace=workspace)
     if _AFFECT_AVAILABLE:
-        assert _AffectDetectorConfig is not None
-        affect_kwargs = {
-            "affect_workspace": workspace,
-            "affect_config": _AffectDetectorConfig(),
-        }
-    session_manager = SessionManager(state_store, **affect_kwargs, workspace=workspace)
+        assert _AffectDetector is not None and _AffectDetectorConfig is not None
+        session_manager.attach_affect(
+            _AffectDetector(
+                _AffectDetectorConfig(),
+                workspace=workspace,
+                append_moment=session_manager.append_key_moment,
+            )
+        )
 
     narrative_revision = NarrativeRevisionService(
         narrative_repo=_NarrativeAdapter(state_store),
