@@ -138,12 +138,21 @@ def _apply_reframing_notes(
         if not (reframing_text and len(reframing_text) > 10):
             continue
 
+        # Devin #594 wave 3: ``StateStoreSessionRepository.add_reframing_note``
+        # treats its first arg as a session_id and applies
+        # ``deterministic_session_experience_id`` internally. After HLE-58
+        # ``exp.id`` is already that uuid5, so passing it would double-hash
+        # and miss the primary lookup, falling through to a fallback that
+        # was documented as a test-only compat shim. Pass ``exp.session_id``
+        # so the documented repository contract holds. ``triggered_by`` is
+        # likewise keyed off ``session_id`` so dedup keys stay stable
+        # regardless of how ``exp.id`` is derived in the future.
         note = ReframingNote(
             reflection=reframing_text,
             reflection_type=reframing_out.reflection_type,
-            triggered_by=reframing_trigger_key(run_key, exp.id),
+            triggered_by=reframing_trigger_key(run_key, exp.session_id),
         )
-        outcome = session_repo.add_reframing_note(exp.id, note)
+        outcome = session_repo.add_reframing_note(exp.session_id, note)
         if outcome == ReframingNoteAppendResult.STORED:
             stored += 1
         elif outcome == ReframingNoteAppendResult.EXPERIENCE_NOT_FOUND:

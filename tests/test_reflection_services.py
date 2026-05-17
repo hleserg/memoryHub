@@ -357,7 +357,28 @@ class RejectingReframeMockRepo(MockExperienceRepo):
     def add_reframing_note(
         self, experience_id: UUID, note: ReframingNote
     ) -> ReframingNoteAppendResult:
-        if experience_id not in self.experiences:
+        # Mirror MockExperienceRepo.add_reframing_note resolution: accept
+        # the stored exp.id (legacy fixtures), the raw session id, or the
+        # HLE-58 deterministic uuid5. Reflection now passes
+        # ``exp.session_id`` per Devin #594 wave 3, so only the
+        # by-session-id branch matters in practice — but keep all three to
+        # match the parent behaviour exactly.
+        from atman.core.services.session_manager import deterministic_session_experience_id
+
+        exp = self.experiences.get(experience_id) or next(
+            (e for e in self.experiences.values() if e.session_id == experience_id),
+            None,
+        )
+        if exp is None:
+            exp = next(
+                (
+                    e
+                    for e in self.experiences.values()
+                    if deterministic_session_experience_id(e.session_id) == experience_id
+                ),
+                None,
+            )
+        if exp is None:
             return ReframingNoteAppendResult.EXPERIENCE_NOT_FOUND
         return ReframingNoteAppendResult.STORAGE_REJECTED
 
