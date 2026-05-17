@@ -253,10 +253,18 @@ def build_deps(
         embedding_adapter=_embedding_adapter,
     )
 
-    # HLE-30: share the reflection event store between the reflection service
-    # (writer) and the overload monitor (reader). The monitor is exposed on
-    # AtmanDeps so cli_maintenance / cron jobs can pick it up to drive the
-    # reflection_overload_check dispatch.
+    # HLE-30: in-memory ReflectionEventStore shared with the overload monitor
+    # below. The factory only constructs MicroReflectionService — Daily and
+    # Deep services live in cli_reflection / cron and would need to point at
+    # the same event store for the monitor to actually see DAILY / DEEP rows
+    # (its only triggers). Production deploys use a single PostgreSQL-backed
+    # store shared by every reflection level; the in-memory store in
+    # build_deps is correct for unit tests and the Micro-only dev loop but
+    # will not fire DAILY / DEEP overload alerts on its own.
+    #
+    # The monitor is still exposed on AtmanDeps so cli_maintenance / cron
+    # entry points can swap the event store and reuse the same monitor /
+    # sinks / dispatch.
     _reflection_event_store = InMemoryReflectionEventStore()
     micro_reflection = MicroReflectionService(
         session_repo=StateStoreSessionRepository(state_store, agent_id=agent_id),
